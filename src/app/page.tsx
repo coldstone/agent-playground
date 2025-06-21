@@ -1842,7 +1842,6 @@ export default function HomePage() {
         {/* Header */}
         <div className="border-b border-border p-4 flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-semibold">Agent Playground</h1>
             <p className="text-sm text-muted-foreground">
               {currentSession?.name || 'No conversation selected'}
             </p>
