@@ -1,0 +1,126 @@
+'use client'
+
+import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react'
+import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
+import { Send, Square, Bot } from 'lucide-react'
+
+interface ChatInputProps {
+  onSendMessage: (content: string) => void
+  isLoading: boolean
+  onStop?: () => void
+  disabled?: boolean
+  currentAgent?: { name: string } | null
+}
+
+export interface ChatInputRef {
+  focus: () => void
+}
+
+export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(function ChatInput({
+  onSendMessage,
+  isLoading,
+  onStop,
+  disabled,
+  currentAgent
+}, ref) {
+  const [input, setInput] = useState('')
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (input.trim() && !isLoading && !disabled) {
+      onSendMessage(input.trim())
+      setInput('')
+    }
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSubmit(e)
+    }
+  }
+
+  const handleStop = () => {
+    if (onStop) {
+      onStop()
+    }
+  }
+
+  // Auto-resize textarea
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto'
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`
+    }
+  }, [input])
+
+  // Auto-focus on mount
+  useEffect(() => {
+    if (textareaRef.current && !disabled) {
+      textareaRef.current.focus()
+    }
+  }, [disabled])
+
+  // Expose focus method to parent
+  useImperativeHandle(ref, () => ({
+    focus: () => {
+      if (textareaRef.current && !disabled) {
+        textareaRef.current.focus()
+      }
+    }
+  }), [disabled])
+
+  return (
+    <div className="border-t border-border bg-background p-4">
+      <form onSubmit={handleSubmit} className="flex gap-2">
+        <div className="flex-1">
+          <Textarea
+            ref={textareaRef}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={disabled ? "Configure your LLM settings to start chatting..." : "Type your message..."}
+            disabled={disabled || isLoading}
+            className="min-h-[60px] max-h-[200px] resize-none"
+            rows={1}
+          />
+        </div>
+        <div className="flex flex-col gap-2">
+          {isLoading ? (
+            <Button
+              type="button"
+              onClick={handleStop}
+              variant="destructive"
+              size="icon"
+              className="h-[60px] w-12"
+            >
+              <Square className="w-4 h-4" />
+            </Button>
+          ) : (
+            <Button
+              type="submit"
+              disabled={!input.trim() || disabled}
+              size="icon"
+              className="h-[60px] w-12"
+            >
+              <Send className="w-4 h-4" />
+            </Button>
+          )}
+        </div>
+      </form>
+      <div className="mt-2 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {currentAgent && (
+            <span className="inline-flex items-center gap-1 px-2 py-1 bg-primary/10 text-primary rounded-full text-xs">
+              <Bot className="w-3 h-3" />
+              Agent Mode: {currentAgent.name}
+            </span>
+          )}
+          <span className='text-xs text-muted-foreground'>Press Enter to send, Shift+Enter for new line</span>
+        </div>
+      </div>
+    </div>
+  )
+})

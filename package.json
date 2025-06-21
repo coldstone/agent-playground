@@ -1,0 +1,59 @@
+{
+  "name": "agent-playground",
+  "version": "0.1.0",
+  "description": "A comprehensive playground for testing AI agents and models with support for multiple LLM providers",
+  "main": "dist/index.js",
+  "bin": {
+    "agent-playground": "./bin/agent-playground.js"
+  },
+  "scripts": {
+    "dev": "next dev -p 3001",
+    "build": "next build",
+    "start": "next start -p 3001",
+    "lint": "next lint",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "ai",
+    "agent",
+    "playground",
+    "llm",
+    "openai",
+    "deepseek",
+    "chatbot",
+    "tools",
+    "nextjs"
+  ],
+  "author": "Ryan Tian <tainray@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/coldstone/agent-playground.git"
+  },
+  "homepage": "https://github.com/coldstone/agent-playground#readme",
+  "bugs": {
+    "url": "https://github.com/coldstone/agent-playground/issues"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "react": "^18",
+    "react-dom": "^18",
+    "next": "14.0.4",
+    "lucide-react": "^0.294.0",
+    "clsx": "^2.0.0",
+    "class-variance-authority": "^0.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "typescript": "^5",
+    "tailwindcss": "^3.3.0",
+    "autoprefixer": "^10.0.1",
+    "postcss": "^8",
+    "eslint": "^8",
+    "eslint-config-next": "14.0.4"
+  }
+}
