@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { truncateText, formatTimestamp } from '@/lib/utils'
 import { Plus, MessageSquare, Trash2, Edit2, Check, X } from 'lucide-react'
-import Image from 'next/image'
+import { Title } from '@/components/layout'
 
 interface SessionManagerProps {
   sessions: ChatSession[]
@@ -63,20 +63,10 @@ export function SessionManager({
   return (
     <div className="w-64 bg-card border-r border-border flex flex-col">
       {/* Logo and Title Section */}
+      <Title />
+
+      {/* New Chat Button */}
       <div className="p-4 border-b border-border">
-        <div className="flex items-center gap-3 mb-4">
-          <Image
-            src="/logo.svg"
-            alt="Agent Playground Logo"
-            width={32}
-            height={32}
-            className="flex-shrink-0"
-          />
-          <div>
-            <h1 className="text-lg font-semibold text-foreground">Agent Playground</h1>
-            <p className="text-sm text-muted-foreground">Try and see how the AI Agent works</p>
-          </div>
-        </div>
         <Button
           onClick={() => {
             onSessionCreate()

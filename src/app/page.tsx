@@ -158,6 +158,17 @@ export default function HomePage() {
 
         // Load current session and agent from localStorage (UI state)
         const savedCurrentSession = localStorage.getItem('agent-playground-current-session')
+        const savedCurrentAgent = localStorage.getItem('agent-playground-current-agent')
+
+        // Set current session if it exists in loaded sessions
+        if (savedCurrentSession && loadedSessions.find(s => s.id === savedCurrentSession)) {
+          setCurrentSessionId(savedCurrentSession)
+        }
+
+        // Set current agent if it exists in loaded agents
+        if (savedCurrentAgent && loadedAgents.find(a => a.id === savedCurrentAgent)) {
+          setCurrentAgentId(savedCurrentAgent)
+        }
 
         if (savedCurrentSession && loadedSessions.find(s => s.id === savedCurrentSession)) {
           setCurrentSessionId(savedCurrentSession)
@@ -234,15 +245,14 @@ export default function HomePage() {
       agentId: undefined // New sessions start without an agent
     }
 
-    try {
-      await dbManager.saveSession(newSession)
-      setSessions(prev => [newSession, ...prev])
-      setCurrentSessionId(newSession.id)
-      // Clear agent selection for new session
-      setCurrentAgentId(null)
-    } catch (error) {
-      console.error('Failed to create session:', error)
-    }
+    // Don't save to IndexedDB yet - only save when user sends first message
+    // Just set the current session state
+    setCurrentSessionId(newSession.id)
+    // Clear agent selection for new session
+    setCurrentAgentId(null)
+
+    // Store the temporary session in state but not in sessions list
+    // This will be handled in handleSendMessage when user sends first message
   }
 
   const deleteSession = async (sessionId: string) => {
@@ -695,6 +705,11 @@ export default function HomePage() {
       setIsLoading(false)
       setStreamingContent('')
       setStreamingToolCalls([])
+
+      // Focus input after tool conversation response is complete
+      setTimeout(() => {
+        chatInputRef.current?.focus()
+      }, 100)
     }
   }
 
@@ -703,19 +718,20 @@ export default function HomePage() {
       return
     }
 
-    // Create a new session if none exists
+    // Create a new session if none exists or if current session is not in sessions list (temporary session)
     let sessionId = currentSessionId
     let currentSessionData = currentSessionId ? sessions.find(s => s.id === currentSessionId) : null
 
-    if (!sessionId) {
+    if (!sessionId || !currentSessionData) {
       const newSession: ChatSession = {
-        id: generateId(),
+        id: sessionId || generateId(), // Use existing sessionId if available (from New Chat button)
         name: 'New Conversation',
         messages: [],
         createdAt: Date.now(),
         updatedAt: Date.now()
       }
 
+      // Now save to IndexedDB and add to sessions list when user sends first message
       try {
         await dbManager.saveSession(newSession)
         setSessions(prev => [newSession, ...prev])
@@ -1002,6 +1018,11 @@ export default function HomePage() {
       setIsStreamingReasoningExpanded(false)
       setReasoningStartTime(null)
       setReasoningDuration(null)
+
+      // Focus input after AI response is complete and tokens are displayed
+      setTimeout(() => {
+        chatInputRef.current?.focus()
+      }, 100)
     }
   }
 
@@ -1308,6 +1329,11 @@ export default function HomePage() {
           setStreamingReasoningContent('')
           setStreamingToolCalls([])
           setIsStreamingReasoningExpanded(false)
+
+          // Focus input after retry response is complete
+          setTimeout(() => {
+            chatInputRef.current?.focus()
+          }, 100)
 
         } catch (error) {
           console.error('Failed to retry message:', error)
