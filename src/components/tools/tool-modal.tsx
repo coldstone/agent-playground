@@ -21,6 +21,7 @@ interface ToolModalProps {
   onToolCreate: (tool: Omit<Tool, 'id' | 'createdAt' | 'updatedAt'>) => void
   onToolUpdate: (toolId: string, tool: Partial<Tool>) => void
   onToolDelete: (toolId: string) => void
+  initialView?: 'list' | 'create' | 'edit'
 }
 
 const DEFAULT_TOOL_TEMPLATES = [
@@ -107,9 +108,10 @@ export function ToolModal({
   config,
   onToolCreate,
   onToolUpdate,
-  onToolDelete
+  onToolDelete,
+  initialView = 'list'
 }: ToolModalProps) {
-  const [view, setView] = useState<'list' | 'create' | 'edit'>('list')
+  const [view, setView] = useState<'list' | 'create' | 'edit'>(initialView)
   const [editingTool, setEditingTool] = useState<Tool | null>(null)
   const [formData, setFormData] = useState({
     name: '',
@@ -123,12 +125,17 @@ export function ToolModal({
   const [isGenerating, setIsGenerating] = useState(false)
 
   useEffect(() => {
-    if (!isOpen) {
-      setView('list')
+    if (isOpen) {
+      setView(initialView)
+      if (initialView === 'create') {
+        resetForm()
+      }
+    } else {
+      setView(initialView)
       setEditingTool(null)
       resetForm()
     }
-  }, [isOpen])
+  }, [isOpen, initialView])
 
   const resetForm = () => {
     setFormData({

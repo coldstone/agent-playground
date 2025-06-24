@@ -6,13 +6,14 @@ import { DEFAULT_CONFIG, MODEL_PROVIDERS, generateId } from '@/lib'
 import { OpenAIClient } from '@/lib/clients'
 import { TitleGenerator } from '@/lib/generators'
 import { IndexedDBManager } from '@/lib/storage'
-import { APIConfig as APIConfigPanel } from '@/components/config'
+import { AccordionPanel } from '@/components/config'
 import { ChatMessages, ChatInput, ChatInputRef, ChatControls, SessionManager } from '@/components/chat'
 import { AgentModal } from '@/components/agents'
-import { ToolModal } from '@/components/tools'
+
+
 import { ExportModal, ImportModal } from '@/components/modals'
 import { Button, Tooltip } from '@/components/ui'
-import { Download, Upload, Bot, Wrench, BrainCircuit } from 'lucide-react'
+import { Download, Upload, Bot, BrainCircuit } from 'lucide-react'
 
 export default function HomePage() {
   // Create initial config with empty provider to avoid triggering saves
@@ -37,8 +38,9 @@ export default function HomePage() {
   const [tools, setTools] = useState<Tool[]>([])
   const [dbManager] = useState(() => IndexedDBManager.getInstance())
   const [isDataLoaded, setIsDataLoaded] = useState(false)
+  const [isMounted, setIsMounted] = useState(false)
   const [showAgentModal, setShowAgentModal] = useState(false)
-  const [showToolModal, setShowToolModal] = useState(false)
+
   const [showExportModal, setShowExportModal] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
   const [expandedReasoningMessages, setExpandedReasoningMessages] = useState<Set<string>>(new Set())
@@ -74,8 +76,15 @@ export default function HomePage() {
     })
   }
 
+  // Set mounted state to avoid hydration issues
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
+
   // Load data from IndexedDB and localStorage on mount
   useEffect(() => {
+    if (!isMounted) return
+
     const loadData = async () => {
       try {
         // Initialize IndexedDB first
@@ -198,7 +207,7 @@ export default function HomePage() {
     }
 
     loadData()
-  }, [])
+  }, [isMounted])
 
   // Save provider selection when it changes (but not during initial load)
   useEffect(() => {
@@ -1850,6 +1859,11 @@ export default function HomePage() {
 
   // No automatic session creation - sessions are created when user sends first message
 
+  // Prevent hydration issues by not rendering until mounted
+  if (!isMounted) {
+    return null
+  }
+
   return (
     <div className="flex h-screen bg-background">
       {/* Session Manager */}
@@ -1882,15 +1896,7 @@ export default function HomePage() {
               <Bot className="w-4 h-4" />
               Agents ({agents.length})
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowToolModal(true)}
-              className="flex items-center gap-2"
-            >
-              <Wrench className="w-4 h-4" />
-              Tools ({tools.length})
-            </Button>
+
             <Tooltip content="Coming Soon" position="bottom">
               <Button
                 variant="outline"
@@ -1968,10 +1974,14 @@ export default function HomePage() {
         />
       </div>
 
-      {/* API Configuration Panel */}
-      <APIConfigPanel
+      {/* Accordion Panel */}
+      <AccordionPanel
         config={config}
+        tools={tools}
         onConfigChange={setConfig}
+        onToolCreate={createTool}
+        onToolUpdate={(tool: Tool) => updateTool(tool.id, tool)}
+        onToolDelete={deleteTool}
       />
 
       {/* Modals */}
@@ -1985,15 +1995,7 @@ export default function HomePage() {
         onAgentDelete={deleteAgent}
       />
 
-      <ToolModal
-        isOpen={showToolModal}
-        onClose={() => setShowToolModal(false)}
-        tools={tools}
-        config={config}
-        onToolCreate={createTool}
-        onToolUpdate={updateTool}
-        onToolDelete={deleteTool}
-      />
+
 
       <ExportModal
         isOpen={showExportModal}

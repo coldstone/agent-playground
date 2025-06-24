@@ -159,13 +159,7 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
   }
 
   return (
-    <div className="w-80 min-w-80 bg-card border-l border-border p-4 space-y-4 overflow-y-auto">
-      <div className="flex items-center justify-between">
-        <h2 className="text-base font-semibold flex items-center gap-2">
-          <Settings className="w-5 h-5" />
-          LLM Configuration
-        </h2>
-      </div>
+    <div className="space-y-4">{/* Remove wrapper div, will be handled by parent */}
 
       <div className="space-y-4">
         {/* Provider Selection */}
