@@ -13,7 +13,7 @@ import { AgentModal } from '@/components/agents'
 
 import { ExportModal, ImportModal } from '@/components/modals'
 import { Button, Tooltip } from '@/components/ui'
-import { Download, Upload, Bot, BrainCircuit } from 'lucide-react'
+import { Bot, BrainCircuit } from 'lucide-react'
 
 export default function HomePage() {
   // Create initial config with empty provider to avoid triggering saves
@@ -1908,22 +1908,7 @@ export default function HomePage() {
                 MCP (0)
               </Button>
             </Tooltip>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowExportModal(true)}
-            >
-              <Download className="w-4 h-4 mr-2" />
-              Export
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowImportModal(true)}
-            >
-              <Upload className="w-4 h-4 mr-2" />
-              Import
-            </Button>
+
           </div>
         </div>
 
@@ -1982,6 +1967,8 @@ export default function HomePage() {
         onToolCreate={createTool}
         onToolUpdate={(tool: Tool) => updateTool(tool.id, tool)}
         onToolDelete={deleteTool}
+        onExport={() => setShowExportModal(true)}
+        onImport={() => setShowImportModal(true)}
       />
 
       {/* Modals */}

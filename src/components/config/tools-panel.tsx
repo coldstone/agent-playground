@@ -265,7 +265,7 @@ export const ToolsPanel = forwardRef<ToolsPanelRef, ToolsPanelProps>(({
                 key={tool.id}
                 className="group p-4 rounded-lg border border-border hover:bg-muted/50 transition-colors"
               >
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-col gap-2">
                   <div className="flex-1">
                     <h5 className="font-medium text-sm">{tool.name}</h5>
                     <p className="text-xs text-muted-foreground mt-1">

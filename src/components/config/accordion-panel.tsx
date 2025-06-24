@@ -4,7 +4,7 @@ import React, { useState, useRef } from 'react'
 import { APIConfig, Tool } from '@/types'
 import { APIConfigPanel } from './api-config'
 import { ToolsPanel, ToolsPanelRef } from './tools-panel'
-import { Settings, Wrench, ChevronDown, ChevronUp, Sparkles, Plus } from 'lucide-react'
+import { Settings, Wrench, ChevronDown, ChevronUp, Sparkles, Plus, Download, Upload } from 'lucide-react'
 
 
 interface AccordionPanelProps {
@@ -14,9 +14,11 @@ interface AccordionPanelProps {
   onToolCreate: (tool: Tool) => void
   onToolUpdate: (tool: Tool) => void
   onToolDelete: (toolId: string) => void
+  onExport: () => void
+  onImport: () => void
 }
 
-type PanelType = 'tools' | 'llm' | null
+type PanelType = 'tools' | 'llm' | 'export' | null
 
 export function AccordionPanel({
   config,
@@ -24,7 +26,9 @@ export function AccordionPanel({
   onConfigChange,
   onToolCreate,
   onToolUpdate,
-  onToolDelete
+  onToolDelete,
+  onExport,
+  onImport
 }: AccordionPanelProps) {
   const [activePanel, setActivePanel] = useState<PanelType>('llm')
   const toolsPanelRef = useRef<ToolsPanelRef>(null)
@@ -130,6 +134,60 @@ export function AccordionPanel({
                   config={config}
                   onConfigChange={onConfigChange}
                 />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Export & Import Panel */}
+      <div className={`${activePanel === 'export' ? 'flex-1 flex flex-col min-h-0' : ''}`}>
+        <div
+          onClick={() => togglePanel('export')}
+          className="w-full p-4 flex items-center justify-between text-left hover:bg-muted/50 transition-colors cursor-pointer flex-shrink-0"
+        >
+          <div className="flex items-center gap-2">
+            <Download className="w-5 h-5" />
+            <span className="text-base font-semibold">Export & Import</span>
+          </div>
+          {activePanel === 'export' ? (
+            <ChevronUp className="w-4 h-4" />
+          ) : (
+            <ChevronDown className="w-4 h-4" />
+          )}
+        </div>
+
+        {activePanel === 'export' && (
+          <div className="border-t border-border flex-1 min-h-0 overflow-hidden">
+            <div className="h-full overflow-y-auto">
+              <div className="p-4 mt-5 flex flex-col items-center space-y-8">
+                {/* Export Section */}
+                <div className="w-full flex flex-col items-center">
+                  <button
+                    onClick={onExport}
+                    className="w-full max-w-48 p-3 text-sm bg-gray-100 hover:bg-blue-500 hover:text-white rounded-lg flex items-center justify-center gap-2 transition-colors"
+                  >
+                    <Download className="w-4 h-4" />
+                    Export Data
+                  </button>
+                  <p className="text-sm text-muted-foreground mt-2 text-center">
+                    Export all agents, tools to a JSON file
+                  </p>
+                </div>
+
+                {/* Import Section */}
+                <div className="w-full flex flex-col items-center">
+                  <button
+                    onClick={onImport}
+                    className="w-full max-w-48 p-3 text-sm bg-gray-100 hover:bg-green-500 hover:text-white rounded-lg flex items-center justify-center gap-2 transition-colors"
+                  >
+                    <Upload className="w-4 h-4" />
+                    Import Data
+                  </button>
+                  <p className="text-sm text-muted-foreground mt-2 text-center">
+                    Import agents, tools from a JSON file
+                  </p>
+                </div>
               </div>
             </div>
           </div>
