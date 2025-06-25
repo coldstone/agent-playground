@@ -3,9 +3,9 @@
 import React, { useState } from 'react'
 import { Agent, Tool, APIConfig } from '@/types'
 import { Button } from '@/components/ui/button'
-import { Select } from '@/components/ui/select'
+import { CustomSelect } from '@/components/ui/custom-select'
 import { Label } from '@/components/ui/label'
-import { Bot, Wrench as ToolIcon, Paintbrush, BookUser } from 'lucide-react'
+import { Bot, Wrench as ToolIcon, Plus, BookUser } from 'lucide-react'
 import { AgentInstructionModal, AgentToolsModal } from '@/components/agents'
 
 interface ChatControlsProps {
@@ -15,7 +15,7 @@ interface ChatControlsProps {
   hasMessages: boolean
   apiConfig: APIConfig
   onAgentSelect: (agentId: string | null) => void
-  onClearSession: () => void
+  onNewChat: () => void
   onAgentInstructionUpdate: (agentId: string, instruction: string) => void
   onAgentToolsUpdate: (agentId: string, toolIds: string[]) => void
 }
@@ -27,7 +27,7 @@ export function ChatControls({
   hasMessages,
   apiConfig,
   onAgentSelect,
-  onClearSession,
+  onNewChat,
   onAgentInstructionUpdate,
   onAgentToolsUpdate
 }: ChatControlsProps) {
@@ -52,18 +52,20 @@ export function ChatControls({
           <div className="flex items-center gap-2 min-w-0">
             <Bot className="w-4 h-4 text-muted-foreground flex-shrink-0" />
             <div className="flex items-center gap-2 min-w-0">
-              <Select
+              <CustomSelect
                 value={currentAgentId || 'none'}
-                onChange={(e) => onAgentSelect(e.target.value === 'none' ? null : e.target.value)}
-                className="min-w-[150px]"
-              >
-                <option value="none">No Agent</option>
-                {agents.map((agent) => (
-                  <option key={agent.id} value={agent.id}>
-                    {agent.name}
-                  </option>
-                ))}
-              </Select>
+                placeholder="Select Agent"
+                options={[
+                  { value: 'none', label: 'No Agent' },
+                  ...agents.map(agent => ({
+                    value: agent.id,
+                    label: agent.name
+                  }))
+                ]}
+                onChange={(value) => onAgentSelect(value === 'none' ? null : value)}
+                width="min-w-[150px]"
+                size="md"
+              />
             </div>
           </div>
 
@@ -94,16 +96,15 @@ export function ChatControls({
             </div>
           )}
 
-          {/* Clear Button */}
+          {/* New Chat Button */}
           <div className="flex items-center gap-2 ml-auto">
             <Button
               variant="outline"
               size="sm"
-              onClick={onClearSession}
-              disabled={!hasMessages}
+              onClick={onNewChat}
             >
-              <Paintbrush className="w-4 h-4 mr-2" />
-              Clear Messages
+              <Plus className="w-4 h-4 mr-2" />
+              New Chat
             </Button>
           </div>
         </div>

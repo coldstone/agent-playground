@@ -47,9 +47,9 @@ export function AccordionPanel({
           className="w-full p-4 flex items-center justify-between text-left hover:bg-muted/50 transition-colors cursor-pointer flex-shrink-0"
         >
           <div className="flex items-center gap-2">
-            <Wrench className="w-5 h-5" />
-            <span className="text-base font-semibold">Tools</span>
-            <span className="text-base text-muted-foreground">({tools.length})</span>
+            <Wrench className="w-4 h-4" />
+            <span className="text-sm font-semibold">Tools</span>
+            <span className="text-sm text-muted-foreground">({tools.length})</span>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -116,8 +116,8 @@ export function AccordionPanel({
           className="w-full p-4 flex items-center justify-between text-left hover:bg-muted/50 transition-colors cursor-pointer flex-shrink-0"
         >
           <div className="flex items-center gap-2">
-            <Settings className="w-5 h-5" />
-            <span className="text-base font-semibold">LLM Configuration</span>
+            <Settings className="w-4 h-4" />
+            <span className="text-sm font-semibold">LLM Configuration</span>
           </div>
           {activePanel === 'llm' ? (
             <ChevronUp className="w-4 h-4" />
@@ -147,8 +147,8 @@ export function AccordionPanel({
           className="w-full p-4 flex items-center justify-between text-left hover:bg-muted/50 transition-colors cursor-pointer flex-shrink-0"
         >
           <div className="flex items-center gap-2">
-            <Download className="w-5 h-5" />
-            <span className="text-base font-semibold">Export & Import</span>
+            <Download className="w-4 h-4" />
+            <span className="text-sm font-semibold">Export & Import</span>
           </div>
           {activePanel === 'export' ? (
             <ChevronUp className="w-4 h-4" />

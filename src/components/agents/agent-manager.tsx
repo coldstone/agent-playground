@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Select } from '@/components/ui/select'
+import { CustomSelect } from '@/components/ui/custom-select'
 import { generateId, truncateText, formatTimestamp } from '@/lib/utils'
 import { Plus, Bot, Edit2, Trash2, Check, X, Settings, Wrench as ToolIcon } from 'lucide-react'
 
@@ -90,17 +90,19 @@ export function AgentManager({
           Agent Mode
         </h3>
         <div className="flex items-center gap-2">
-          <Select
+          <CustomSelect
             value={currentAgentId || 'none'}
-            onChange={(e) => onAgentSelect(e.target.value === 'none' ? null : e.target.value)}
-          >
-            <option value="none">No Agent</option>
-            {agents?.map((agent) => (
-              <option key={agent.id} value={agent.id}>
-                {agent.name}
-              </option>
-            ))}
-          </Select>
+            placeholder="Select Agent"
+            options={[
+              { value: 'none', label: 'No Agent' },
+              ...(agents?.map(agent => ({
+                value: agent.id,
+                label: agent.name
+              })) || [])
+            ]}
+            onChange={(value) => onAgentSelect(value === 'none' ? null : value)}
+            size="md"
+          />
           <Button
             variant="outline"
             size="sm"

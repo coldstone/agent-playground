@@ -71,7 +71,13 @@ export function ChatMessages({
       {displayMessages.length === 0 ? (
         <div className="flex items-center justify-center h-full text-center">
           <div className="space-y-4">
-            <div className="text-4xl">🤖</div>
+            <div className="flex justify-center">
+              <img
+                src="/logo.svg"
+                alt="Agent Playground Logo"
+                className="w-32 h-32 opacity-40"
+              />
+            </div>
             <div>
               {currentAgent ? (
                 <>

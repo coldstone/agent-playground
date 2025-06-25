@@ -47,7 +47,7 @@ Important guidelines:
 3. Add enum constraints where applicable
 4. Mark required parameters in the "required" array
 5. The function name in the schema must match the top-level name field
-6. Keep descriptions clear and concise
+6. Keep descriptions clear and concise in English
 7. Consider edge cases and validation
 
 Respond ONLY with the JSON object, no additional text or formatting.`

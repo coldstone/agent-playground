@@ -6,7 +6,7 @@ import { MODEL_PROVIDERS, DEFAULT_CONFIG, Provider, ProviderCustomConfig } from 
 import { IndexedDBManager } from '@/lib/storage'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Select } from '@/components/ui/select'
+import { CustomSelect } from '@/components/ui/custom-select'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Slider } from '@/components/ui/slider'
@@ -21,7 +21,6 @@ interface APIConfigProps {
 export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
   const [selectedProvider, setSelectedProvider] = useState<Provider>(MODEL_PROVIDERS[0])
   const [showApiKey, setShowApiKey] = useState(false)
-  const [isExpanded, setIsExpanded] = useState(false)
   const [isClient, setIsClient] = useState(false)
   const [dbManager] = useState(() => IndexedDBManager.getInstance())
   const [providerConfigs, setProviderConfigs] = useState<ProviderCustomConfig[]>([])
@@ -142,6 +141,47 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
     return customConfig?.models || selectedProvider.models
   }
 
+  const getModelGroups = () => {
+    const models = getCurrentModels()
+
+    // Group models by type for better organization
+    const groups: { [key: string]: string[] } = {}
+
+    models.forEach(model => {
+      if (model.includes('gpt-4o')) {
+        groups['GPT-4o Series'] = groups['GPT-4o Series'] || []
+        groups['GPT-4o Series'].push(model)
+      } else if (model.includes('gpt-4')) {
+        groups['GPT-4 Series'] = groups['GPT-4 Series'] || []
+        groups['GPT-4 Series'].push(model)
+      } else if (model.includes('o1') || model.includes('o3') || model.includes('o4')) {
+        groups['Reasoning Models'] = groups['Reasoning Models'] || []
+        groups['Reasoning Models'].push(model)
+      } else if (model.includes('deepseek')) {
+        groups['DeepSeek Models'] = groups['DeepSeek Models'] || []
+        groups['DeepSeek Models'].push(model)
+      } else if (model.includes('qwen')) {
+        groups['Qwen Models'] = groups['Qwen Models'] || []
+        groups['Qwen Models'].push(model)
+      } else if (model.includes('doubao')) {
+        groups['Doubao Models'] = groups['Doubao Models'] || []
+        groups['Doubao Models'].push(model)
+      } else {
+        groups['Other Models'] = groups['Other Models'] || []
+        groups['Other Models'].push(model)
+      }
+    })
+
+    // Convert to the format expected by CustomSelect
+    return Object.entries(groups).map(([label, models]) => ({
+      label,
+      options: models.map(model => ({
+        value: model,
+        label: model
+      }))
+    }))
+  }
+
   const handleModelSettingsOpen = () => {
     const currentModels = getCurrentModels()
     setEditingModels(currentModels.join('\n'))
@@ -165,17 +205,16 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
         {/* Provider Selection */}
         <div className="space-y-2">
           <Label htmlFor="provider">Provider</Label>
-          <Select
-            id="provider"
+          <CustomSelect
             value={selectedProvider.name}
-            onChange={(e) => handleProviderChange(e.target.value)}
-          >
-            {MODEL_PROVIDERS.map((provider) => (
-              <option key={provider.name} value={provider.name}>
-                {provider.name}
-              </option>
-            ))}
-          </Select>
+            placeholder="Select Provider"
+            options={MODEL_PROVIDERS.map(provider => ({
+              value: provider.name,
+              label: provider.name
+            }))}
+            onChange={(value) => handleProviderChange(value)}
+            size="md"
+          />
         </div>
 
         {/* API Endpoint */}
@@ -248,17 +287,13 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
               <Settings className="w-3 h-3" />
             </Button>
           </div>
-          <Select
-            id="model"
+          <CustomSelect
             value={config.model}
-            onChange={(e) => handleConfigChange('model', e.target.value)}
-          >
-            {getCurrentModels().map((model) => (
-              <option key={model} value={model}>
-                {model}
-              </option>
-            ))}
-          </Select>
+            placeholder="Select Model"
+            groups={getModelGroups()}
+            onChange={(value) => handleConfigChange('model', value)}
+            size="md"
+          />
         </div>
 
         {/* System Prompt */}
@@ -278,15 +313,6 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
 
         {/* Advanced Parameters */}
         <div className="pt-4 border-t border-border">
-          <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="flex items-center justify-between w-full text-left font-medium hover:text-primary transition-colors"
-          >
-            <span>Advanced Parameters</span>
-            {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-          </button>
-
-          {isExpanded && (
             <div className="space-y-4 mt-4">
             
             <Slider
@@ -337,7 +363,6 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
               onChange={(e) => handleConfigChange('presencePenalty', parseFloat(e.target.value))}
             />
             </div>
-          )}
         </div>
       </div>
 

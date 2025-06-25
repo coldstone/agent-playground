@@ -12,8 +12,8 @@ import { AgentModal } from '@/components/agents'
 
 
 import { ExportModal, ImportModal } from '@/components/modals'
-import { Button, Tooltip } from '@/components/ui'
-import { Bot, BrainCircuit } from 'lucide-react'
+import { Button } from '@/components/ui'
+import { Bot } from 'lucide-react'
 
 export default function HomePage() {
   // Create initial config with empty provider to avoid triggering saves
@@ -1871,21 +1871,14 @@ export default function HomePage() {
         sessions={sessions}
         currentSessionId={currentSessionId}
         onSessionSelect={handleSessionSelect}
-        onSessionCreate={createNewSession}
         onSessionDelete={deleteSession}
         onSessionRename={renameSession}
-        onFocusInput={handleFocusInput}
       />
 
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col min-w-[800px]">
         {/* Header */}
         <div className="border-b border-border p-4 flex items-center justify-between">
-          <div>
-            <p className="text-sm text-muted-foreground">
-              {currentSession?.name || 'No conversation selected'}
-            </p>
-          </div>
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
@@ -1896,19 +1889,6 @@ export default function HomePage() {
               <Bot className="w-4 h-4" />
               Agents ({agents.length})
             </Button>
-
-            <Tooltip content="Coming Soon" position="bottom">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled
-                className="flex items-center gap-2 cursor-not-allowed"
-              >
-                <BrainCircuit className="w-4 h-4" />
-                MCP (0)
-              </Button>
-            </Tooltip>
-
           </div>
         </div>
 
@@ -1920,7 +1900,7 @@ export default function HomePage() {
           hasMessages={!!(currentSession?.messages.length)}
           apiConfig={config}
           onAgentSelect={handleAgentSelect}
-          onClearSession={clearCurrentSession}
+          onNewChat={createNewSession}
           onAgentInstructionUpdate={handleAgentInstructionUpdate}
           onAgentToolsUpdate={handleAgentToolsUpdate}
         />

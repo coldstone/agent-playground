@@ -5,27 +5,23 @@ import { ChatSession } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { truncateText, formatTimestamp } from '@/lib/utils'
-import { Plus, MessageSquare, Trash2, Edit2, Check, X } from 'lucide-react'
+import { MessageSquare, Trash2, Edit2, Check, X } from 'lucide-react'
 import { Title } from '@/components/layout'
 
 interface SessionManagerProps {
   sessions: ChatSession[]
   currentSessionId: string | null
   onSessionSelect: (sessionId: string) => void
-  onSessionCreate: () => void
   onSessionDelete: (sessionId: string) => void
   onSessionRename: (sessionId: string, newName: string) => void
-  onFocusInput?: () => void
 }
 
 export function SessionManager({
   sessions,
   currentSessionId,
   onSessionSelect,
-  onSessionCreate,
   onSessionDelete,
-  onSessionRename,
-  onFocusInput
+  onSessionRename
 }: SessionManagerProps) {
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
@@ -65,27 +61,11 @@ export function SessionManager({
       {/* Logo and Title Section */}
       <Title />
 
-      {/* New Chat Button */}
-      <div className="p-4 border-b border-border">
-        <Button
-          onClick={() => {
-            onSessionCreate()
-            // Focus input after creating new session
-            setTimeout(() => {
-              onFocusInput?.()
-            }, 100)
-          }}
-          className="w-full justify-start gap-2"
-          variant="outline"
-        >
-          <Plus className="w-4 h-4" />
-          New Chat
-        </Button>
-      </div>
+
 
       <div className="flex-1 overflow-y-auto">
         {sessions.length === 0 ? (
-          <div className="p-4 text-center text-muted-foreground">
+          <div className="p-4 mt-8 text-center text-muted-foreground">
             <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-50" />
             <p className="text-sm">No conversations yet</p>
           </div>
