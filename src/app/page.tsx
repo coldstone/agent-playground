@@ -6,9 +6,9 @@ import { DEFAULT_CONFIG, MODEL_PROVIDERS, generateId } from '@/lib'
 import { OpenAIClient } from '@/lib/clients'
 import { TitleGenerator } from '@/lib/generators'
 import { IndexedDBManager } from '@/lib/storage'
-import { AccordionPanel } from '@/components/config'
-import { ChatMessages, ChatInput, ChatInputRef, ChatControls, SessionManager } from '@/components/chat'
-import { AgentModal } from '@/components/agents'
+import { AccordionPanel, AgentsPanel } from '@/components/config'
+import { ChatMessages, ChatInput, ChatInputRef, ChatControls, SessionManager, NewChatOverlay } from '@/components/chat'
+import { AgentFormModal } from '@/components/agents'
 
 
 import { ExportModal, ImportModal } from '@/components/modals'
@@ -43,6 +43,7 @@ export default function HomePage() {
 
   const [showExportModal, setShowExportModal] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
+  const [showNewChatOverlay, setShowNewChatOverlay] = useState(true) // Start with overlay visible
   const [expandedReasoningMessages, setExpandedReasoningMessages] = useState<Set<string>>(new Set())
   const [isStreamingReasoningExpanded, setIsStreamingReasoningExpanded] = useState(false)
   const [isInActiveConversation, setIsInActiveConversation] = useState(false)
@@ -165,39 +166,12 @@ export default function HomePage() {
         setAgents(loadedAgents)
         setTools(loadedTools)
 
-        // Load current session and agent from localStorage (UI state)
-        const savedCurrentSession = localStorage.getItem('agent-playground-current-session')
-        const savedCurrentAgent = localStorage.getItem('agent-playground-current-agent')
+        // Don't auto-load previous session - always start with new chat overlay
+        // Clear any saved session state
+        localStorage.removeItem('agent-playground-current-session')
+        localStorage.removeItem('agent-playground-current-agent')
 
-        // Set current session if it exists in loaded sessions
-        if (savedCurrentSession && loadedSessions.find(s => s.id === savedCurrentSession)) {
-          setCurrentSessionId(savedCurrentSession)
-        }
 
-        // Set current agent if it exists in loaded agents
-        if (savedCurrentAgent && loadedAgents.find(a => a.id === savedCurrentAgent)) {
-          setCurrentAgentId(savedCurrentAgent)
-        }
-
-        if (savedCurrentSession && loadedSessions.find(s => s.id === savedCurrentSession)) {
-          setCurrentSessionId(savedCurrentSession)
-
-          // Auto-switch to the agent used in this session
-          const session = loadedSessions.find(s => s.id === savedCurrentSession)
-          if (session && session.agentId && loadedAgents.find(a => a.id === session.agentId)) {
-            setCurrentAgentId(session.agentId)
-          } else {
-            // Session has no agent or agent doesn't exist, clear agent selection
-            setCurrentAgentId(null)
-          }
-        } else {
-          // No saved session or session doesn't exist
-          // If there are no sessions at all, don't select any agent
-          if (loadedSessions.length === 0) {
-            setCurrentAgentId(null)
-          }
-          // Don't auto-select first session - let user create one when they send a message
-        }
 
         setIsDataLoaded(true)
       } catch (error) {
@@ -245,23 +219,24 @@ export default function HomePage() {
   } : null
 
   const createNewSession = async () => {
-    const newSession: ChatSession = {
-      id: generateId(),
-      name: 'New Conversation',
-      messages: [],
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      agentId: undefined // New sessions start without an agent
-    }
-
-    // Don't save to IndexedDB yet - only save when user sends first message
-    // Just set the current session state
-    setCurrentSessionId(newSession.id)
-    // Clear agent selection for new session
+    // Clear current session and show the new chat overlay
+    setCurrentSessionId(null)
     setCurrentAgentId(null)
+    setShowNewChatOverlay(true)
+  }
 
-    // Store the temporary session in state but not in sessions list
-    // This will be handled in handleSendMessage when user sends first message
+  const handleOverlaySendMessage = async (content: string, agentId: string | null) => {
+    // Set the current agent (but don't create session yet)
+    setCurrentAgentId(agentId)
+
+    // Clear current session so handleSendMessage will create a new one
+    setCurrentSessionId(null)
+
+    // Close the overlay immediately to show the chat interface
+    setShowNewChatOverlay(false)
+
+    // Send the message - this will create the session with the first message
+    await handleSendMessage(content)
   }
 
   const deleteSession = async (sessionId: string) => {
@@ -360,7 +335,13 @@ export default function HomePage() {
     try {
       await dbManager.saveAgent(newAgent)
       setAgents(prev => [...prev, newAgent])
-      return newAgent
+
+      // Auto-select the newly created agent if we're in new chat overlay
+      if (showNewChatOverlay) {
+        setCurrentAgentId(newAgent.id)
+      }
+
+      return newAgent.id
     } catch (error) {
       console.error('Failed to create agent:', error)
       throw error
@@ -737,7 +718,8 @@ export default function HomePage() {
         name: 'New Conversation',
         messages: [],
         createdAt: Date.now(),
-        updatedAt: Date.now()
+        updatedAt: Date.now(),
+        agentId: currentAgentId || undefined // Include the current agent ID
       }
 
       // Now save to IndexedDB and add to sessions list when user sends first message
@@ -829,6 +811,16 @@ export default function HomePage() {
       // Use agent system prompt if in agent mode, otherwise use config system prompt
       // When agent is selected, ONLY use agent's system prompt, ignore config system prompt
       const systemPrompt = currentAgent ? currentAgent.systemPrompt : config.systemPrompt
+
+      // Debug logging
+      console.log('=== System Prompt Debug ===')
+      console.log('currentAgentId:', currentAgentId)
+      console.log('currentAgent:', currentAgent)
+      console.log('currentAgent.systemPrompt:', currentAgent?.systemPrompt)
+      console.log('config.systemPrompt:', config.systemPrompt)
+      console.log('Final systemPrompt:', systemPrompt)
+      console.log('========================')
+
       const allMessages = systemPrompt.trim()
         ? [{ id: generateId(), role: 'system' as const, content: systemPrompt, timestamp: Date.now() }, ...messagesWithoutSystem]
         : messagesWithoutSystem
@@ -1465,6 +1457,9 @@ export default function HomePage() {
   const handleSessionSelect = (sessionId: string) => {
     setCurrentSessionId(sessionId)
 
+    // Hide the new chat overlay when selecting a session
+    setShowNewChatOverlay(false)
+
     // Auto-switch to the agent used in this session
     const session = sessions.find(s => s.id === sessionId)
     if (session) {
@@ -1870,80 +1865,85 @@ export default function HomePage() {
       <SessionManager
         sessions={sessions}
         currentSessionId={currentSessionId}
+        agents={agents}
+        isNewChatDisabled={showNewChatOverlay}
         onSessionSelect={handleSessionSelect}
         onSessionDelete={deleteSession}
         onSessionRename={renameSession}
+        onNewChat={createNewSession}
       />
 
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col min-w-[800px]">
-        {/* Header */}
-        <div className="border-b border-border p-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowAgentModal(true)}
-              className="flex items-center gap-2"
-            >
-              <Bot className="w-4 h-4" />
-              Agents ({agents.length})
-            </Button>
-          </div>
-        </div>
+        {showNewChatOverlay ? (
+          /* New Chat Overlay */
+          <NewChatOverlay
+            agents={agents}
+            currentAgentId={currentAgentId}
+            onSendMessage={handleOverlaySendMessage}
+            onCreateAgent={() => setShowAgentModal(true)}
+            onAgentSelect={setCurrentAgentId}
+          />
+        ) : (
+          <>
+            {/* Chat Controls */}
+            <ChatControls
+              agents={agents}
+              currentAgentId={currentAgentId}
+              tools={tools}
+              hasMessages={!!(currentSession?.messages.length)}
+              apiConfig={config}
+              onAgentSelect={handleAgentSelect}
+              onAgentInstructionUpdate={handleAgentInstructionUpdate}
+              onAgentToolsUpdate={handleAgentToolsUpdate}
+              onCreateAgent={() => setShowAgentModal(true)}
+            />
 
-        {/* Chat Controls */}
-        <ChatControls
-          agents={agents}
-          currentAgentId={currentAgentId}
-          tools={tools}
-          hasMessages={!!(currentSession?.messages.length)}
-          apiConfig={config}
-          onAgentSelect={handleAgentSelect}
-          onNewChat={createNewSession}
-          onAgentInstructionUpdate={handleAgentInstructionUpdate}
-          onAgentToolsUpdate={handleAgentToolsUpdate}
-        />
+            {/* Messages */}
+            <ChatMessages
+              messages={currentSession?.messages || []}
+              isLoading={isLoading}
+              streamingContent={streamingContent}
+              streamingReasoningContent={streamingReasoningContent}
+              isStreamingReasoningExpanded={isStreamingReasoningExpanded}
+              streamingToolCalls={streamingToolCalls}
+              expandedReasoningMessages={expandedReasoningMessages}
+              isInActiveConversation={isInActiveConversation}
+              reasoningDuration={reasoningDuration}
+              formatReasoningDuration={formatReasoningDuration}
+              currentAgent={currentAgentWithTools}
+              tools={tools}
+              onProvideToolResult={handleProvideToolResult}
+              onMarkToolFailed={handleMarkToolFailed}
+              onRetryMessage={handleRetryMessage}
+              onDeleteMessage={handleDeleteMessage}
+              onEditMessage={handleEditMessage}
+              onToggleReasoningExpansion={toggleReasoningExpansion}
+              onToggleStreamingReasoningExpansion={() => setIsStreamingReasoningExpanded(!isStreamingReasoningExpanded)}
+            />
 
-        {/* Messages */}
-        <ChatMessages
-          messages={currentSession?.messages || []}
-          isLoading={isLoading}
-          streamingContent={streamingContent}
-          streamingReasoningContent={streamingReasoningContent}
-          isStreamingReasoningExpanded={isStreamingReasoningExpanded}
-          streamingToolCalls={streamingToolCalls}
-          expandedReasoningMessages={expandedReasoningMessages}
-          isInActiveConversation={isInActiveConversation}
-          reasoningDuration={reasoningDuration}
-          formatReasoningDuration={formatReasoningDuration}
-          currentAgent={currentAgentWithTools}
-          tools={tools}
-          onProvideToolResult={handleProvideToolResult}
-          onMarkToolFailed={handleMarkToolFailed}
-          onRetryMessage={handleRetryMessage}
-          onDeleteMessage={handleDeleteMessage}
-          onEditMessage={handleEditMessage}
-          onToggleReasoningExpansion={toggleReasoningExpansion}
-          onToggleStreamingReasoningExpansion={() => setIsStreamingReasoningExpanded(!isStreamingReasoningExpanded)}
-        />
-
-        {/* Input */}
-        <ChatInput
-          ref={chatInputRef}
-          onSendMessage={handleSendMessage}
-          isLoading={isLoading}
-          onStop={handleStop}
-          disabled={!isConfigured}
-          currentAgent={currentAgentWithTools}
-        />
+            {/* Input */}
+            <ChatInput
+              ref={chatInputRef}
+              onSendMessage={handleSendMessage}
+              isLoading={isLoading}
+              onStop={handleStop}
+              disabled={!isConfigured}
+              currentAgent={currentAgentWithTools}
+            />
+          </>
+        )}
       </div>
 
       {/* Accordion Panel */}
       <AccordionPanel
         config={config}
+        agents={agents}
         tools={tools}
         onConfigChange={setConfig}
+        onAgentCreate={() => setShowAgentModal(true)}
+        onAgentUpdate={updateAgent}
+        onAgentDelete={deleteAgent}
         onToolCreate={createTool}
         onToolUpdate={(tool: Tool) => updateTool(tool.id, tool)}
         onToolDelete={deleteTool}
@@ -1952,14 +1952,11 @@ export default function HomePage() {
       />
 
       {/* Modals */}
-      <AgentModal
+      <AgentFormModal
         isOpen={showAgentModal}
         onClose={() => setShowAgentModal(false)}
-        agents={agents}
         tools={tools}
         onAgentCreate={createAgent}
-        onAgentUpdate={updateAgent}
-        onAgentDelete={deleteAgent}
       />
 
 

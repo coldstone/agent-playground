@@ -1,9 +1,10 @@
 'use client'
 
-import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react'
+import React, { useRef, useEffect, forwardRef, useImperativeHandle } from 'react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Send, Square, Bot } from 'lucide-react'
+import { useDraftMessage } from '@/hooks/use-draft-message'
 
 interface ChatInputProps {
   onSendMessage: (content: string) => void
@@ -24,14 +25,14 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(function ChatI
   disabled,
   currentAgent
 }, ref) {
-  const [input, setInput] = useState('')
+  const { message: input, setMessage: setInput, clearDraft } = useDraftMessage()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (input.trim() && !isLoading && !disabled) {
       onSendMessage(input.trim())
-      setInput('')
+      clearDraft()
     }
   }
 

@@ -1,16 +1,21 @@
 'use client'
 
 import React, { useState, useRef } from 'react'
-import { APIConfig, Tool } from '@/types'
+import { APIConfig, Tool, Agent } from '@/types'
 import { APIConfigPanel } from './api-config'
+import { AgentsPanel } from './agents-panel'
 import { ToolsPanel, ToolsPanelRef } from './tools-panel'
-import { Settings, Wrench, ChevronDown, ChevronUp, Sparkles, Plus, Download, Upload } from 'lucide-react'
+import { Settings, Wrench, ChevronDown, ChevronUp, Sparkles, Plus, Download, Upload, Bot } from 'lucide-react'
 
 
 interface AccordionPanelProps {
   config: APIConfig
+  agents: Agent[]
   tools: Tool[]
   onConfigChange: (config: APIConfig) => void
+  onAgentCreate: () => void
+  onAgentUpdate: (agentId: string, updates: Partial<Agent>) => void
+  onAgentDelete: (agentId: string) => void
   onToolCreate: (tool: Tool) => void
   onToolUpdate: (tool: Tool) => void
   onToolDelete: (toolId: string) => void
@@ -18,12 +23,16 @@ interface AccordionPanelProps {
   onImport: () => void
 }
 
-type PanelType = 'tools' | 'llm' | 'export' | null
+type PanelType = 'agents' | 'tools' | 'llm' | 'export' | null
 
 export function AccordionPanel({
   config,
+  agents,
   tools,
   onConfigChange,
+  onAgentCreate,
+  onAgentUpdate,
+  onAgentDelete,
   onToolCreate,
   onToolUpdate,
   onToolDelete,
@@ -40,6 +49,54 @@ export function AccordionPanel({
 
   return (
     <div className="w-80 min-w-80 bg-card border-l border-border flex flex-col h-full">
+      {/* Agents Panel */}
+      <div className={`border-b border-border ${activePanel === 'agents' ? 'flex-1 flex flex-col min-h-0' : ''}`}>
+        <div
+          onClick={() => togglePanel('agents')}
+          className="w-full p-4 flex items-center justify-between text-left hover:bg-muted/50 transition-colors cursor-pointer flex-shrink-0"
+        >
+          <div className="flex items-center gap-2">
+            <Bot className="w-4 h-4" />
+            <span className="text-sm font-semibold">Agents</span>
+            <span className="text-sm text-muted-foreground">({agents.length})</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                if (activePanel !== 'agents') {
+                  togglePanel('agents')
+                }
+                onAgentCreate()
+              }}
+              className="h-5 w-5 flex items-center justify-center hover:bg-muted rounded transition-colors"
+              title="Create New Agent"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+            {activePanel === 'agents' ? (
+              <ChevronUp className="w-4 h-4" />
+            ) : (
+              <ChevronDown className="w-4 h-4" />
+            )}
+          </div>
+        </div>
+        {activePanel === 'agents' && (
+          <div className="border-t border-border flex-1 min-h-0 overflow-hidden">
+            <div className="h-full overflow-y-auto">
+              <div className="p-4">
+                <AgentsPanel
+                  agents={agents}
+                  tools={tools}
+                  onAgentUpdate={onAgentUpdate}
+                  onAgentDelete={onAgentDelete}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Tools Panel */}
       <div className={`border-b border-border ${activePanel === 'tools' ? 'flex-1 flex flex-col min-h-0' : ''}`}>
         <div

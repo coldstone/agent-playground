@@ -20,7 +20,7 @@ export interface CustomSelectProps {
   onChange?: (value: string) => void
   disabled?: boolean
   className?: string
-  size?: 'sm' | 'md' | 'lg'
+  size?: 'xs' | 'sm' | 'md' | 'lg'
   width?: string
 }
 
@@ -50,12 +50,14 @@ export function CustomSelect({
 
   // Size classes
   const sizeClasses = {
+    xs: 'h-6 text-xs px-2',
     sm: 'h-8 text-sm px-2',
     md: 'h-10 text-sm px-3',
     lg: 'h-12 text-base px-4'
   }
 
   const dropdownSizeClasses = {
+    xs: 'text-xs py-1',
     sm: 'text-sm py-1',
     md: 'text-sm py-1.5',
     lg: 'text-base py-2'

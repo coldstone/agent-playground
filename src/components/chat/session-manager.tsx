@@ -1,27 +1,33 @@
 'use client'
 
 import React, { useState } from 'react'
-import { ChatSession } from '@/types'
+import { ChatSession, Agent } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { truncateText, formatTimestamp } from '@/lib/utils'
-import { MessageSquare, Trash2, Edit2, Check, X } from 'lucide-react'
+import { MessageSquare, Trash2, Edit2, Check, X, Plus, Bot } from 'lucide-react'
 import { Title } from '@/components/layout'
 
 interface SessionManagerProps {
   sessions: ChatSession[]
   currentSessionId: string | null
+  agents: Agent[]
+  isNewChatDisabled?: boolean
   onSessionSelect: (sessionId: string) => void
   onSessionDelete: (sessionId: string) => void
   onSessionRename: (sessionId: string, newName: string) => void
+  onNewChat: () => void
 }
 
 export function SessionManager({
   sessions,
   currentSessionId,
+  agents,
+  isNewChatDisabled = false,
   onSessionSelect,
   onSessionDelete,
-  onSessionRename
+  onSessionRename,
+  onNewChat
 }: SessionManagerProps) {
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
@@ -45,15 +51,17 @@ export function SessionManager({
   }
 
   const getSessionPreview = (session: ChatSession) => {
-    const lastUserMessage = session.messages
-      .filter(msg => msg.role === 'user')
-      .pop()
-    
-    if (lastUserMessage) {
-      return truncateText(lastUserMessage.content, 50)
+    // Show agent info if session has an agent
+    if (session.agentId) {
+      const agent = agents.find(a => a.id === session.agentId)
+      if (agent) {
+        return `🤖 ${agent.name}`
+      }
+      return '🤖 Agent (deleted)'
     }
-    
-    return 'No messages yet'
+
+    // No agent - don't show any preview
+    return ''
   }
 
   return (
@@ -61,7 +69,18 @@ export function SessionManager({
       {/* Logo and Title Section */}
       <Title />
 
-
+      {/* New Chat Button */}
+      <div className="p-4 border-b border-border">
+        <Button
+          onClick={onNewChat}
+          className="w-full"
+          size="sm"
+          disabled={isNewChatDisabled}
+        >
+          <Plus className="w-4 h-4 mr-2" />
+          New Chat
+        </Button>
+      </div>
 
       <div className="flex-1 overflow-y-auto">
         {sessions.length === 0 ? (
