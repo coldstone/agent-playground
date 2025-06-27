@@ -24,6 +24,7 @@ interface ChatMessagesProps {
   formatReasoningDuration?: (durationMs: number) => string
   currentAgent?: AgentWithTools | null
   tools?: Tool[]
+  scrollToBottomTrigger?: number // Add trigger to force scroll to bottom
   onProvideToolResult?: (toolCallId: string, result: string) => void
   onMarkToolFailed?: (toolCallId: string, error: string) => void
   onRetryMessage?: (messageId: string) => void
@@ -46,6 +47,7 @@ export function ChatMessages({
   formatReasoningDuration,
   currentAgent,
   tools = [],
+  scrollToBottomTrigger,
   onProvideToolResult,
   onMarkToolFailed,
   onRetryMessage,
@@ -62,7 +64,7 @@ export function ChatMessages({
 
   useEffect(() => {
     scrollToBottom()
-  }, [messages, streamingContent, streamingReasoningContent])
+  }, [messages, streamingContent, streamingReasoningContent, scrollToBottomTrigger])
 
   const displayMessages = messages.filter(msg => msg.role !== 'system')
 

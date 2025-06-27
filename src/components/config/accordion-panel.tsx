@@ -5,6 +5,7 @@ import { APIConfig, Tool, Agent } from '@/types'
 import { APIConfigPanel } from './api-config'
 import { AgentsPanel } from './agents-panel'
 import { ToolsPanel, ToolsPanelRef } from './tools-panel'
+import { useSystemModel } from '@/hooks/use-system-model'
 import { Settings, Wrench, ChevronDown, ChevronUp, Sparkles, Plus, Download, Upload, Bot } from 'lucide-react'
 
 
@@ -16,6 +17,7 @@ interface AccordionPanelProps {
   onAgentCreate: () => void
   onAgentUpdate: (agentId: string, updates: Partial<Agent>) => void
   onAgentDelete: (agentId: string) => void
+  onAgentReorder: (agents: Agent[]) => void
   onToolCreate: (tool: Tool) => void
   onToolUpdate: (tool: Tool) => void
   onToolDelete: (toolId: string) => void
@@ -33,6 +35,7 @@ export function AccordionPanel({
   onAgentCreate,
   onAgentUpdate,
   onAgentDelete,
+  onAgentReorder,
   onToolCreate,
   onToolUpdate,
   onToolDelete,
@@ -41,6 +44,7 @@ export function AccordionPanel({
 }: AccordionPanelProps) {
   const [activePanel, setActivePanel] = useState<PanelType>('llm')
   const toolsPanelRef = useRef<ToolsPanelRef>(null)
+  const { hasSystemModel } = useSystemModel()
 
   const togglePanel = (panel: PanelType) => {
     // 总是切换到点击的面板，实现互斥效果
@@ -90,6 +94,8 @@ export function AccordionPanel({
                   tools={tools}
                   onAgentUpdate={onAgentUpdate}
                   onAgentDelete={onAgentDelete}
+                  onAgentReorder={onAgentReorder}
+                  apiConfig={config}
                 />
               </div>
             </div>
@@ -135,7 +141,7 @@ export function AccordionPanel({
                 }, 0)
               }}
               className="h-5 w-5 flex items-center justify-center bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded disabled:opacity-50 transition-colors"
-              disabled={!config?.apiKey || !config?.endpoint}
+              disabled={!hasSystemModel}
               title="AI Generate Tool"
             >
               <Sparkles className="w-3 h-3" />

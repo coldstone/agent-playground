@@ -3,9 +3,11 @@
 import React, { useRef, useEffect } from 'react'
 import { Agent } from '@/types'
 import { Button } from '@/components/ui/button'
+import { ModelSelector } from '@/components/ui/model-selector'
 import { Plus, Send } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useDraftMessage } from '@/hooks/use-draft-message'
+import { useAvailableModels } from '@/hooks/use-available-models'
 
 interface NewChatOverlayProps {
   agents: Agent[]
@@ -23,6 +25,7 @@ export function NewChatOverlay({
   onAgentSelect
 }: NewChatOverlayProps) {
   const { message, setMessage, clearDraft } = useDraftMessage()
+  const { hasAvailableModels } = useAvailableModels()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   // Focus on textarea when component mounts or when agents change
@@ -33,7 +36,7 @@ export function NewChatOverlay({
   }, [agents.length]) // Re-focus when agents list changes (new agent added)
 
   const handleSend = () => {
-    if (!message.trim()) return
+    if (!message.trim() || !hasAvailableModels) return
 
     onSendMessage(message, currentAgentId)
 
@@ -83,7 +86,7 @@ export function NewChatOverlay({
       <div className="w-full max-w-4xl mb-8">
         <div className="flex flex-wrap gap-2 justify-center">
           {/* Agent Buttons */}
-          {agents.map((agent) => (
+          {agents.sort((a, b) => (a.order || 0) - (b.order || 0)).map((agent) => (
             <Button
               key={agent.id}
               variant={currentAgentId === agent.id ? "default" : "outline"}
@@ -118,8 +121,9 @@ export function NewChatOverlay({
             ref={textareaRef}
             value={message}
             onChange={(e) => setMessage(e.target.value)}
-            placeholder="Type your message..."
-            className="w-full min-h-[100px] p-3 border border-border rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-primary"
+            placeholder={!hasAvailableModels ? "Please configure LLM first..." : "Type your message..."}
+            disabled={!hasAvailableModels}
+            className="w-full min-h-[100px] p-3 border border-border rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault()
@@ -129,12 +133,15 @@ export function NewChatOverlay({
             autoFocus
           />
           <div className="flex justify-between items-center">
-            <div className="text-xs text-muted-foreground">
-              Press Enter to send, Shift+Enter for new line
+            <div className="flex items-center gap-4">
+              <ModelSelector />
+              <div className="text-xs text-muted-foreground">
+                Press Enter to send, Shift+Enter for new line
+              </div>
             </div>
             <Button
               onClick={handleSend}
-              disabled={!message.trim()}
+              disabled={!message.trim() || !hasAvailableModels}
               size="sm"
               className="h-8"
             >

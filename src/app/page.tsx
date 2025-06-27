@@ -9,6 +9,7 @@ import { IndexedDBManager } from '@/lib/storage'
 import { AccordionPanel, AgentsPanel } from '@/components/config'
 import { ChatMessages, ChatInput, ChatInputRef, ChatControls, SessionManager, NewChatOverlay } from '@/components/chat'
 import { AgentFormModal } from '@/components/agents'
+import { useSystemModel } from '@/hooks/use-system-model'
 
 
 import { ExportModal, ImportModal } from '@/components/modals'
@@ -44,11 +45,15 @@ export default function HomePage() {
   const [showExportModal, setShowExportModal] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
   const [showNewChatOverlay, setShowNewChatOverlay] = useState(true) // Start with overlay visible
+
+  // System Model hook for AI generation
+  const { getSystemModelConfig } = useSystemModel()
   const [expandedReasoningMessages, setExpandedReasoningMessages] = useState<Set<string>>(new Set())
   const [isStreamingReasoningExpanded, setIsStreamingReasoningExpanded] = useState(false)
   const [isInActiveConversation, setIsInActiveConversation] = useState(false)
   const [reasoningStartTime, setReasoningStartTime] = useState<number | null>(null)
   const [reasoningDuration, setReasoningDuration] = useState<number | null>(null)
+  const [scrollToBottomTrigger, setScrollToBottomTrigger] = useState(0)
   const abortControllerRef = useRef<AbortController | null>(null)
   const chatInputRef = useRef<ChatInputRef>(null)
 
@@ -82,6 +87,74 @@ export default function HomePage() {
     setIsMounted(true)
   }, [])
 
+  // Validate and cleanup models in IndexedDB against current providers
+  const validateAndCleanupModels = async () => {
+    try {
+      // Get all valid models from current providers
+      const validModelIds = new Set<string>()
+      MODEL_PROVIDERS.forEach(provider => {
+        if (provider.models) {
+          provider.models.forEach(model => {
+            validModelIds.add(`${provider.name}-${model}`)
+          })
+        }
+      })
+
+      // Get all available models from IndexedDB
+      const availableModels = await dbManager.getAllAvailableModels()
+
+      // Find models that are no longer valid
+      const modelsToRemove: string[] = []
+      availableModels.forEach(availableModel => {
+        if (!validModelIds.has(availableModel.id)) {
+          modelsToRemove.push(availableModel.id)
+        }
+      })
+
+      // Remove invalid models from IndexedDB
+      if (modelsToRemove.length > 0) {
+        console.log('Removing invalid models from IndexedDB:', modelsToRemove)
+        for (const modelId of modelsToRemove) {
+          await dbManager.deleteAvailableModel(modelId)
+        }
+      }
+
+      // Check if current model is still valid
+      const currentModelStr = localStorage.getItem('agent-playground-current-model')
+      if (currentModelStr) {
+        try {
+          const currentModel = JSON.parse(currentModelStr)
+          const currentModelKey = `${currentModel.provider}-${currentModel.model}`
+          if (!validModelIds.has(currentModelKey)) {
+            console.log('Current model is no longer valid, clearing:', currentModel)
+            localStorage.removeItem('agent-playground-current-model')
+          }
+        } catch (error) {
+          console.error('Failed to parse current model, clearing:', error)
+          localStorage.removeItem('agent-playground-current-model')
+        }
+      }
+
+      // Check if system model is still valid
+      const systemModelStr = localStorage.getItem('agent-playground-system-model')
+      if (systemModelStr) {
+        try {
+          const systemModel = JSON.parse(systemModelStr)
+          const systemModelKey = `${systemModel.provider}-${systemModel.model}`
+          if (!validModelIds.has(systemModelKey)) {
+            console.log('System model is no longer valid, clearing:', systemModel)
+            localStorage.removeItem('agent-playground-system-model')
+          }
+        } catch (error) {
+          console.error('Failed to parse system model, clearing:', error)
+          localStorage.removeItem('agent-playground-system-model')
+        }
+      }
+    } catch (error) {
+      console.error('Failed to validate and cleanup models:', error)
+    }
+  }
+
   // Load data from IndexedDB and localStorage on mount
   useEffect(() => {
     if (!isMounted) return
@@ -90,6 +163,9 @@ export default function HomePage() {
       try {
         // Initialize IndexedDB first
         await dbManager.init()
+
+        // Validate and clean up available models
+        await validateAndCleanupModels()
 
         // Load current provider from localStorage
         const savedProviderName = localStorage.getItem('agent-playground-current-provider')
@@ -396,6 +472,29 @@ export default function HomePage() {
     }
   }
 
+  const reorderAgents = async (reorderedAgents: Agent[]) => {
+    try {
+      // Update the order in state immediately for UI responsiveness
+      setAgents(reorderedAgents)
+
+      // Save the new order to IndexedDB
+      for (let i = 0; i < reorderedAgents.length; i++) {
+        const agent = reorderedAgents[i]
+        const updatedAgent = { ...agent, order: i, updatedAt: Date.now() }
+        await dbManager.saveAgent(updatedAgent)
+      }
+    } catch (error) {
+      console.error('Failed to reorder agents:', error)
+      // Reload agents from DB on error
+      try {
+        const loadedAgents = await dbManager.getAllAgents()
+        setAgents(loadedAgents)
+      } catch (reloadError) {
+        console.error('Failed to reload agents:', reloadError)
+      }
+    }
+  }
+
   // Tool management functions
   const createTool = async (toolData: Omit<Tool, 'id' | 'createdAt' | 'updatedAt'>) => {
     const newTool: Tool = {
@@ -501,7 +600,11 @@ export default function HomePage() {
     try {
       // Get tools for agent mode
       const agentTools = currentAgentWithTools ? currentAgentWithTools.tools : []
-      const client = new OpenAIClient(config, agentTools, config.provider)
+
+      // Get complete config for current model (includes correct endpoint and API key)
+      const currentConfig = getCurrentModelConfig()
+
+      const client = new OpenAIClient(currentConfig, agentTools, currentConfig.provider)
 
       // Filter out any existing system messages from history to avoid conflicts
       const messagesWithoutSystem = sessionData.messages.filter(m => m.role !== 'system')
@@ -704,7 +807,9 @@ export default function HomePage() {
   }
 
   const handleSendMessage = async (content: string) => {
-    if (!config.apiKey.trim() || !config.endpoint.trim()) {
+    // Get complete config for current model to check if it's properly configured
+    const currentConfig = getCurrentModelConfig()
+    if (!currentConfig.apiKey.trim() || !currentConfig.endpoint.trim()) {
       return
     }
 
@@ -765,23 +870,26 @@ export default function HomePage() {
       // Generate title from user's first message if session name is still "New Conversation"
       if (updatedSessionData.name === 'New Conversation' && content.trim()) {
         try {
-          const titleGenerator = new TitleGenerator(config)
-          const newTitle = await titleGenerator.generateTitle(content)
+          const systemModelConfig = getSystemModelConfig()
+          if (systemModelConfig) {
+            const titleGenerator = new TitleGenerator(systemModelConfig)
+            const newTitle = await titleGenerator.generateTitle(content)
 
-          if (newTitle && newTitle !== 'New Conversation') {
-            const sessionWithTitle = {
-              ...updatedSessionData,
-              name: newTitle,
-              updatedAt: Date.now()
+            if (newTitle && newTitle !== 'New Conversation') {
+              const sessionWithTitle = {
+                ...updatedSessionData,
+                name: newTitle,
+                updatedAt: Date.now()
+              }
+
+              await dbManager.saveSession(sessionWithTitle)
+              setSessions(prev => prev.map(s =>
+                s.id === sessionId ? sessionWithTitle : s
+              ))
+
+              // Update the current session data reference for the rest of the function
+              updatedSessionData = sessionWithTitle
             }
-
-            await dbManager.saveSession(sessionWithTitle)
-            setSessions(prev => prev.map(s =>
-              s.id === sessionId ? sessionWithTitle : s
-            ))
-
-            // Update the current session data reference for the rest of the function
-            updatedSessionData = sessionWithTitle
           }
         } catch (titleError) {
           console.error('Failed to generate title from user message:', titleError)
@@ -803,7 +911,11 @@ export default function HomePage() {
     try {
       // Get tools for agent mode
       const agentTools = currentAgentWithTools ? currentAgentWithTools.tools : []
-      const client = new OpenAIClient(config, agentTools, config.provider)
+
+      // Get complete config for current model (includes correct endpoint and API key)
+      const currentConfig = getCurrentModelConfig()
+
+      const client = new OpenAIClient(currentConfig, agentTools, currentConfig.provider)
 
       // Filter out any existing system messages from history to avoid conflicts
       const messagesWithoutSystem = updatedSessionData.messages.filter(m => m.role !== 'system')
@@ -1189,7 +1301,11 @@ export default function HomePage() {
 
           // Get tools for agent mode
           const agentTools = currentAgentWithTools ? currentAgentWithTools.tools : []
-          const client = new OpenAIClient(config, agentTools, config.provider)
+
+          // Get complete config for current model (includes correct endpoint and API key)
+          const currentConfig = getCurrentModelConfig()
+
+          const client = new OpenAIClient(currentConfig, agentTools, currentConfig.provider)
 
           // Filter out any existing system messages from history to avoid conflicts
           const messagesWithoutSystem = updatedSession.messages.filter(m => m.role !== 'system')
@@ -1467,6 +1583,11 @@ export default function HomePage() {
       // If session has no agentId (undefined), clear agent selection
       setCurrentAgentId(session.agentId || null)
     }
+
+    // Trigger scroll to bottom after session switch
+    setTimeout(() => {
+      setScrollToBottomTrigger(prev => prev + 1)
+    }, 100)
   }
 
   // Agent selection with session update
@@ -1492,6 +1613,71 @@ export default function HomePage() {
           console.error('Failed to update session agent:', error)
         }
       }
+    }
+  }
+
+  // Get current model from localStorage
+  const getCurrentModel = () => {
+    // Check if we're in browser environment
+    if (typeof window === 'undefined') {
+      return null
+    }
+
+    try {
+      const saved = localStorage.getItem('agent-playground-current-model')
+      if (saved) {
+        return JSON.parse(saved)
+      }
+    } catch (error) {
+      console.error('Failed to parse current model:', error)
+    }
+    return null
+  }
+
+  // Get complete config for current model
+  const getCurrentModelConfig = (): APIConfig => {
+    // Check if we're in browser environment
+    if (typeof window === 'undefined') {
+      // Server-side rendering, return default config
+      return config
+    }
+
+    const currentModel = getCurrentModel()
+
+    if (!currentModel) {
+      // No model selected, use default config
+      return config
+    }
+
+    // Find the provider for the selected model
+    const provider = MODEL_PROVIDERS.find(p => p.name === currentModel.provider)
+    if (!provider) {
+      console.warn(`Provider ${currentModel.provider} not found, using default config`)
+      return config
+    }
+
+    try {
+      // Get API keys from localStorage
+      const apiKeysStr = localStorage.getItem('agent-playground-api-keys')
+      const apiKeys = apiKeysStr ? JSON.parse(apiKeysStr) : {}
+      const apiKey = apiKeys[provider.name] || ''
+
+      // Get endpoints from localStorage (for custom endpoints)
+      const endpointsStr = localStorage.getItem('agent-playground-api-endpoints')
+      const endpoints = endpointsStr ? JSON.parse(endpointsStr) : {}
+      const endpoint = endpoints[provider.name] || provider.endpoint
+
+      // Create config with selected model's provider settings
+      return {
+        ...config,
+        provider: provider.name,
+        endpoint,
+        apiKey,
+        model: currentModel.model
+      }
+    } catch (error) {
+      console.error('Failed to get current model config:', error)
+      return config
     }
   }
 
@@ -1552,22 +1738,25 @@ export default function HomePage() {
       let finalSessionData = sessionWithNewMessage
       if (sessionWithNewMessage.name === 'New Conversation' && newContent.trim()) {
         try {
-          const titleGenerator = new TitleGenerator(config)
-          const newTitle = await titleGenerator.generateTitle(newContent)
+          const systemModelConfig = getSystemModelConfig()
+          if (systemModelConfig) {
+            const titleGenerator = new TitleGenerator(systemModelConfig)
+            const newTitle = await titleGenerator.generateTitle(newContent)
 
-          if (newTitle && newTitle !== 'New Conversation') {
-            const sessionWithTitle = {
-              ...sessionWithNewMessage,
-              name: newTitle,
-              updatedAt: Date.now()
+            if (newTitle && newTitle !== 'New Conversation') {
+              const sessionWithTitle = {
+                ...sessionWithNewMessage,
+                name: newTitle,
+                updatedAt: Date.now()
+              }
+
+              await dbManager.saveSession(sessionWithTitle)
+              setSessions(prev => prev.map(s =>
+                s.id === currentSessionId ? sessionWithTitle : s
+              ))
+
+              finalSessionData = sessionWithTitle
             }
-
-            await dbManager.saveSession(sessionWithTitle)
-            setSessions(prev => prev.map(s =>
-              s.id === currentSessionId ? sessionWithTitle : s
-            ))
-
-            finalSessionData = sessionWithTitle
           }
         } catch (titleError) {
           console.error('Failed to generate title from edited message:', titleError)
@@ -1584,7 +1773,11 @@ export default function HomePage() {
 
       // Get tools for agent mode
       const agentTools = currentAgentWithTools ? currentAgentWithTools.tools : []
-      const client = new OpenAIClient(config, agentTools, config.provider)
+
+      // Get complete config for current model (includes correct endpoint and API key)
+      const currentConfig = getCurrentModelConfig()
+
+      const client = new OpenAIClient(currentConfig, agentTools, currentConfig.provider)
 
       // For API call, use the messages before edit plus the new user message
       // Filter out any existing system messages from history to avoid conflicts
@@ -1850,7 +2043,9 @@ export default function HomePage() {
 
 
 
-  const isConfigured = config.endpoint.trim() && (config.apiKey.trim() || !config.endpoint.includes('openai.com'))
+  // Check if current model is properly configured
+  const currentModelConfig = getCurrentModelConfig()
+  const isConfigured = currentModelConfig.endpoint.trim() && (currentModelConfig.apiKey.trim() || !currentModelConfig.endpoint.includes('openai.com'))
 
   // No automatic session creation - sessions are created when user sends first message
 
@@ -1913,6 +2108,7 @@ export default function HomePage() {
               formatReasoningDuration={formatReasoningDuration}
               currentAgent={currentAgentWithTools}
               tools={tools}
+              scrollToBottomTrigger={scrollToBottomTrigger}
               onProvideToolResult={handleProvideToolResult}
               onMarkToolFailed={handleMarkToolFailed}
               onRetryMessage={handleRetryMessage}
@@ -1944,6 +2140,7 @@ export default function HomePage() {
         onAgentCreate={() => setShowAgentModal(true)}
         onAgentUpdate={updateAgent}
         onAgentDelete={deleteAgent}
+        onAgentReorder={reorderAgents}
         onToolCreate={createTool}
         onToolUpdate={(tool: Tool) => updateTool(tool.id, tool)}
         onToolDelete={deleteTool}

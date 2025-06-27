@@ -14,7 +14,7 @@ export function Title() {
         />
         <h1 className="text-lg font-semibold text-foreground">Agent Playground</h1>
       </div>
-      <p className="text-xs text-muted-foreground/70 mt-2 ml-1">Try and see how the AI agent works</p>
+      <p className="text-xs text-muted-foreground mt-2 ml-1">Try and see how the AI agent works</p>
     </div>
   )
 }

@@ -12,6 +12,7 @@ import { HttpRequestModal as HTTPRequestModal } from '@/components/modals'
 import { ToolGenerator } from '@/lib/generators'
 import { generateId, formatTimestamp } from '@/lib/utils'
 import { Plus, Wrench as ToolIcon, Edit2, Trash2, Code, Sparkles, Globe } from 'lucide-react'
+import { useSystemModel } from '@/hooks/use-system-model'
 
 interface ToolModalProps {
   isOpen: boolean
@@ -111,6 +112,7 @@ export function ToolModal({
   onToolDelete,
   initialView = 'list'
 }: ToolModalProps) {
+  const { hasSystemModel, getSystemModelConfig } = useSystemModel()
   const [view, setView] = useState<'list' | 'create' | 'edit'>(initialView)
   const [editingTool, setEditingTool] = useState<Tool | null>(null)
   const [formData, setFormData] = useState({
@@ -247,14 +249,20 @@ export function ToolModal({
   }
 
   const handleGenerateTool = async (prompt: string) => {
-    if (!config?.apiKey || !config?.endpoint) {
-      alert('Please configure your API settings first')
+    if (!hasSystemModel) {
+      alert('Please configure System Model first')
+      return
+    }
+
+    const systemModelConfig = getSystemModelConfig()
+    if (!systemModelConfig) {
+      alert('Please configure System Model first')
       return
     }
 
     setIsGenerating(true)
     try {
-      const generator = new ToolGenerator(config)
+      const generator = new ToolGenerator(systemModelConfig)
       const generatedTool = await generator.generateTool(prompt)
 
       // Fill the form with generated data
@@ -300,7 +308,7 @@ export function ToolModal({
               onClick={() => setShowGeneratorModal(true)}
               size="sm"
               className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white"
-              disabled={!config?.apiKey || !config?.endpoint}
+              disabled={!hasSystemModel}
             >
               <Sparkles className="w-4 h-4 mr-2" />
               AI Generate

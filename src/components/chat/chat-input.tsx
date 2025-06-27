@@ -3,8 +3,10 @@
 import React, { useRef, useEffect, forwardRef, useImperativeHandle } from 'react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { Send, Square, Bot } from 'lucide-react'
+import { ModelSelector } from '@/components/ui/model-selector'
+import { Send, Square } from 'lucide-react'
 import { useDraftMessage } from '@/hooks/use-draft-message'
+import { useAvailableModels } from '@/hooks/use-available-models'
 
 interface ChatInputProps {
   onSendMessage: (content: string) => void
@@ -26,6 +28,7 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(function ChatI
   currentAgent
 }, ref) {
   const { message: input, setMessage: setInput, clearDraft } = useDraftMessage()
+  const { hasAvailableModels } = useAvailableModels()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -82,8 +85,8 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(function ChatI
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={disabled ? "Configure your LLM settings to start chatting..." : "Type your message..."}
-            disabled={disabled || isLoading}
+            placeholder={!hasAvailableModels ? "Please configure LLM first..." : "Type your message..."}
+            disabled={disabled || isLoading || !hasAvailableModels}
             className="min-h-[60px] max-h-[200px] resize-none"
             rows={1}
           />
@@ -102,7 +105,7 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(function ChatI
           ) : (
             <Button
               type="submit"
-              disabled={!input.trim() || disabled}
+              disabled={!input.trim() || disabled || !hasAvailableModels}
               size="icon"
               className="h-[60px] w-12"
             >
@@ -112,13 +115,8 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(function ChatI
         </div>
       </form>
       <div className="mt-2 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          {currentAgent && (
-            <span className="inline-flex items-center gap-1 px-2 py-1 bg-primary/10 text-primary rounded-full text-xs">
-              <Bot className="w-3 h-3" />
-              Agent Mode: {currentAgent.name}
-            </span>
-          )}
+        <div className="flex items-center gap-4">
+          <ModelSelector />
           <span className='text-xs text-muted-foreground'>Press Enter to send, Shift+Enter for new line</span>
         </div>
       </div>

@@ -39,7 +39,7 @@ export const MODEL_PROVIDERS: Provider[] = [
   {
     name: 'Doubao',
     endpoint: 'https://ark.cn-beijing.volces.com/api/v3/chat/completions',
-    models: ['doubao-seed-1.6-250615', 'doubao-seed-1.6-flash-250615', 'doubao-seed-1.6-thinking-250615', 'deepseek-v3-250324', 'deepseek-r1-250120'],
+    models: ['doubao-seed-1.6-250615', 'doubao-seed-1.6-flash-250615', 'doubao-seed-1.6-thinking-250615', 'deepseek-v3-250324', 'deepseek-r1-250528'],
     defaultModel: 'doubao-seed-1.6-250615',
     requiresApiKey: true,
     docsLink: 'https://www.volcengine.com/docs/82379/1494384',

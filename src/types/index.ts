@@ -51,6 +51,18 @@ export interface ModelProvider {
   client: 'openai' | 'anthropic';
 }
 
+export interface AvailableModel {
+  id: string; // unique identifier: `${provider}-${model}`
+  provider: string;
+  model: string;
+  displayName: string; // for UI display
+}
+
+export interface CurrentModel {
+  provider: string;
+  model: string;
+}
+
 export interface ChatCompletionRequest {
   model: string;
   messages: Array<{
@@ -127,6 +139,7 @@ export interface Agent {
   description: string;
   systemPrompt: string;
   tools: string[]; // Store tool IDs instead of full Tool objects
+  order?: number; // For drag and drop ordering
   createdAt: number;
   updatedAt: number;
 }

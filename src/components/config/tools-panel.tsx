@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { HttpRequestModal as HTTPRequestModal } from '@/components/modals'
 import { ToolGeneratorModal } from '@/components/tools/tool-generator-modal'
 import { ToolGenerator } from '@/lib/generators'
+import { useSystemModel } from '@/hooks/use-system-model'
 import { formatTimestamp } from '@/lib/utils'
 import {
   Edit2,
@@ -37,6 +38,7 @@ export const ToolsPanel = forwardRef<ToolsPanelRef, ToolsPanelProps>(({
   onToolUpdate,
   onToolDelete
 }, ref) => {
+  const { hasSystemModel, getSystemModelConfig } = useSystemModel()
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showGeneratorModal, setShowGeneratorModal] = useState(false)
@@ -178,14 +180,20 @@ export const ToolsPanel = forwardRef<ToolsPanelRef, ToolsPanelProps>(({
   }
 
   const handleGenerateTool = async (prompt: string) => {
-    if (!config?.apiKey || !config?.endpoint) {
-      alert('Please configure your API settings first')
+    if (!hasSystemModel) {
+      alert('Please configure System Model first')
+      return
+    }
+
+    const systemModelConfig = getSystemModelConfig()
+    if (!systemModelConfig) {
+      alert('Please configure System Model first')
       return
     }
 
     setIsGenerating(true)
     try {
-      const generator = new ToolGenerator(config)
+      const generator = new ToolGenerator(systemModelConfig)
       const generatedTool = await generator.generateTool(prompt)
 
       // 填充到创建表单而不是直接创建
@@ -268,7 +276,7 @@ export const ToolsPanel = forwardRef<ToolsPanelRef, ToolsPanelProps>(({
                 <div className="flex flex-col gap-2">
                   <div className="flex-1">
                     <h5 className="font-medium text-sm">{tool.name}</h5>
-                    <p className="text-xs text-muted-foreground mt-1">
+                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
                       {tool.description}
                     </p>
                     {tool.httpRequest && (

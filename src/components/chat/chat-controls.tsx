@@ -56,8 +56,8 @@ export function ChatControls({
                     <Bot className="w-4 h-4 text-primary" />
                   </div>
                   <div className="min-w-0">
-                    <h3 className="font-medium text-sm">{currentAgent.name}</h3>
-                    <p className="text-xs text-muted-foreground">{currentAgent.description}</p>
+                    <h3 className="font-medium text-base">{currentAgent.name}</h3>
+                    <p className="text-xs mt-1 text-muted-foreground">{currentAgent.description}</p>
                   </div>
                 </div>
               ) : (
@@ -66,8 +66,8 @@ export function ChatControls({
                     <Bot className="w-4 h-4 text-muted-foreground" />
                   </div>
                   <div>
-                    <h3 className="font-medium text-sm">No Agent</h3>
-                    <p className="text-xs text-muted-foreground">Configure an agent to get started</p>
+                    <h3 className="font-medium text-base">No Agent</h3>
+                    <p className="text-xs mt-1 text-muted-foreground">Configure an agent to get started</p>
                   </div>
                 </div>
               )}

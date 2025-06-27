@@ -8,6 +8,8 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Sparkles } from 'lucide-react'
+import { useSystemModel } from '@/hooks/use-system-model'
+import { InstructionGenerator } from '@/lib/generators'
 
 interface EditAgentModalProps {
   isOpen: boolean
@@ -24,6 +26,7 @@ export function EditAgentModal({
   tools,
   onAgentUpdate
 }: EditAgentModalProps) {
+  const { hasSystemModel, getSystemModelConfig } = useSystemModel()
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -76,11 +79,20 @@ export function EditAgentModal({
   }
 
   const handleAIGenerate = async (prompt: string) => {
+    if (!hasSystemModel) {
+      alert('Please configure System Model first')
+      return
+    }
+
+    const systemModelConfig = getSystemModelConfig()
+    if (!systemModelConfig) {
+      alert('Please configure System Model first')
+      return
+    }
+
     setIsGenerating(true)
+
     try {
-      // Simulate AI generation with typing effect
-      const generatedInstruction = `You are a helpful AI assistant specialized in ${prompt}. You have access to various tools and can help users with tasks related to ${prompt}. Always be helpful, accurate, and provide clear explanations for your actions.`
-      
       // Check if current content is long and ask for confirmation
       if (formData.systemPrompt.length > 50) {
         const shouldOverwrite = window.confirm('This will overwrite the existing instruction. Continue?')
@@ -90,21 +102,29 @@ export function EditAgentModal({
           return
         }
       }
-      
+
       // Clear current content
       setFormData(prev => ({ ...prev, systemPrompt: '' }))
-      
-      // Typing effect
-      let currentText = ''
-      for (let i = 0; i < generatedInstruction.length; i++) {
-        currentText += generatedInstruction[i]
-        setFormData(prev => ({ ...prev, systemPrompt: currentText }))
-        await new Promise(resolve => setTimeout(resolve, 20))
+
+      const generator = new InstructionGenerator(systemModelConfig, systemModelConfig.provider)
+
+      let generatedContent = ''
+      for await (const chunk of generator.generateInstruction(prompt)) {
+        generatedContent += chunk
+        // Real-time update with typing effect
+        setFormData(prev => ({ ...prev, systemPrompt: generatedContent }))
       }
+
+      if (generatedContent.trim()) {
+        // Close AI generator after completion
+        setShowAIPrompt(false)
+        setAiPrompt('')
+      }
+    } catch (error) {
+      console.error('Failed to generate instruction:', error)
+      alert('Failed to generate instruction. Please try again.')
     } finally {
       setIsGenerating(false)
-      setShowAIPrompt(false)
-      setAiPrompt('')
     }
   }
 
@@ -155,7 +175,7 @@ export function EditAgentModal({
                   size="sm"
                   onClick={() => setShowAIPrompt(true)}
                   className="h-6 px-2 text-xs"
-                  disabled={isGenerating}
+                  disabled={isGenerating || !hasSystemModel}
                 >
                   <Sparkles className="w-3 h-3 mr-1" />
                   AI Generate
@@ -237,7 +257,7 @@ export function EditAgentModal({
                 </Button>
                 <Button
                   onClick={() => handleAIGenerate(aiPrompt)}
-                  disabled={!aiPrompt.trim() || isGenerating}
+                  disabled={!aiPrompt.trim() || isGenerating || !hasSystemModel}
                 >
                   {isGenerating ? 'Generating...' : 'Generate'}
                 </Button>
