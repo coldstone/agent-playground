@@ -51,7 +51,35 @@ export class TitleGenerator {
       return 'New conversation' // Fallback
     } catch (error) {
       console.error('Failed to generate title:', error)
-      return 'New conversation' // Fallback
+      // Generate a simple title from the user input as fallback
+      return this.generateSimpleTitle(aiResponse)
+    }
+  }
+
+  private generateSimpleTitle(text: string): string {
+    try {
+      // Clean and truncate the text
+      const cleanText = text.trim().replace(/[^\w\s]/g, '').slice(0, 100)
+
+      // Extract key words (longer than 2 characters)
+      const words = cleanText.split(/\s+/).filter(word => word.length > 2)
+
+      // Take first 2-4 meaningful words
+      const titleWords = words.slice(0, 4)
+
+      if (titleWords.length === 0) {
+        return 'New conversation'
+      }
+
+      // Capitalize first letter of each word
+      const title = titleWords
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(' ')
+
+      return title.slice(0, 50) // Limit length
+    } catch (error) {
+      console.error('Failed to generate simple title:', error)
+      return 'New conversation'
     }
   }
 }

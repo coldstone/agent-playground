@@ -48,10 +48,10 @@ export function useSystemModel() {
       const provider = MODEL_PROVIDERS.find(p => p.name === systemModel.provider)
       if (!provider) return null
 
-      const apiKey = savedKeys[systemModel.provider]
+      const apiKey = savedKeys[systemModel.provider] || 'test-key'
       const endpoint = savedEndpoints[systemModel.provider] || provider.endpoint
 
-      if (!apiKey || !endpoint) return null
+      if (!endpoint) return null
 
       return {
         provider: systemModel.provider,

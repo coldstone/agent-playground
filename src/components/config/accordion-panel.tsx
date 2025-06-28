@@ -42,7 +42,16 @@ export function AccordionPanel({
   onExport,
   onImport
 }: AccordionPanelProps) {
-  const [activePanel, setActivePanel] = useState<PanelType>('llm')
+  // Determine initial panel based on current model configuration
+  const getInitialPanel = (): PanelType => {
+    if (typeof window !== 'undefined') {
+      const currentModel = localStorage.getItem('agent-playground-current-model')
+      return currentModel ? 'tools' : 'llm'
+    }
+    return 'llm'
+  }
+
+  const [activePanel, setActivePanel] = useState<PanelType>(getInitialPanel())
   const toolsPanelRef = useRef<ToolsPanelRef>(null)
   const { hasSystemModel } = useSystemModel()
 

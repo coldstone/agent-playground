@@ -1,20 +1,18 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react'
-import { APIConfig, Message, ChatSession, Agent, Tool, AgentMessage, ToolCall, ToolCallExecution } from '@/types'
+import { APIConfig, Message, ChatSession, Agent, Tool, AgentMessage, ToolCall } from '@/types'
 import { DEFAULT_CONFIG, MODEL_PROVIDERS, generateId } from '@/lib'
 import { OpenAIClient } from '@/lib/clients'
 import { TitleGenerator } from '@/lib/generators'
 import { IndexedDBManager } from '@/lib/storage'
-import { AccordionPanel, AgentsPanel } from '@/components/config'
+import { AccordionPanel } from '@/components/config'
 import { ChatMessages, ChatInput, ChatInputRef, ChatControls, SessionManager, NewChatOverlay } from '@/components/chat'
 import { AgentFormModal } from '@/components/agents'
 import { useSystemModel } from '@/hooks/use-system-model'
 
 
 import { ExportModal, ImportModal } from '@/components/modals'
-import { Button } from '@/components/ui'
-import { Bot } from 'lucide-react'
 
 export default function HomePage() {
   // Create initial config with empty provider to avoid triggering saves
@@ -38,7 +36,7 @@ export default function HomePage() {
   const [currentAgentId, setCurrentAgentId] = useState<string | null>(null)
   const [tools, setTools] = useState<Tool[]>([])
   const [dbManager] = useState(() => IndexedDBManager.getInstance())
-  const [isDataLoaded, setIsDataLoaded] = useState(false)
+
   const [isMounted, setIsMounted] = useState(false)
   const [showAgentModal, setShowAgentModal] = useState(false)
 
@@ -51,7 +49,7 @@ export default function HomePage() {
   const [expandedReasoningMessages, setExpandedReasoningMessages] = useState<Set<string>>(new Set())
   const [isStreamingReasoningExpanded, setIsStreamingReasoningExpanded] = useState(false)
   const [isInActiveConversation, setIsInActiveConversation] = useState(false)
-  const [reasoningStartTime, setReasoningStartTime] = useState<number | null>(null)
+
   const [reasoningDuration, setReasoningDuration] = useState<number | null>(null)
   const [scrollToBottomTrigger, setScrollToBottomTrigger] = useState(0)
   const abortControllerRef = useRef<AbortController | null>(null)
@@ -249,10 +247,8 @@ export default function HomePage() {
 
 
 
-        setIsDataLoaded(true)
       } catch (error) {
         console.error('Failed to load data from IndexedDB:', error)
-        setIsDataLoaded(true) // Still mark as loaded to prevent infinite loading
       }
     }
 
@@ -345,59 +341,9 @@ export default function HomePage() {
     }
   }
 
-  const clearCurrentSession = async () => {
-    if (!currentSessionId) return
 
-    const session = sessions.find(s => s.id === currentSessionId)
-    if (!session) return
 
-    const updatedSession = { ...session, messages: [], updatedAt: Date.now() }
 
-    try {
-      await dbManager.saveSession(updatedSession)
-      setSessions(prev => prev.map(s =>
-        s.id === currentSessionId ? updatedSession : s
-      ))
-
-      // Focus the input after clearing messages
-      setTimeout(() => {
-        chatInputRef.current?.focus()
-      }, 100)
-    } catch (error) {
-      console.error('Failed to clear session:', error)
-    }
-  }
-
-  const addMessage = async (message: Omit<Message, 'id' | 'timestamp'>, sessionId?: string) => {
-    const targetSessionId = sessionId || currentSessionId
-    if (!targetSessionId) return null
-
-    const newMessage: Message = {
-      ...message,
-      id: generateId(),
-      timestamp: Date.now()
-    }
-
-    const session = sessions.find(s => s.id === targetSessionId)
-    if (!session) return null
-
-    const updatedSession = {
-      ...session,
-      messages: [...session.messages, newMessage],
-      updatedAt: Date.now()
-    }
-
-    try {
-      await dbManager.saveSession(updatedSession)
-      setSessions(prev => prev.map(s =>
-        s.id === targetSessionId ? updatedSession : s
-      ))
-      return newMessage
-    } catch (error) {
-      console.error('Failed to save message:', error)
-      return null
-    }
-  }
 
   // Agent management functions
   const createAgent = async (agentData: Omit<Agent, 'id' | 'createdAt' | 'updatedAt'>) => {
@@ -629,7 +575,6 @@ export default function HomePage() {
           // 记录推理开始时间
           if (!localReasoningStartTime) {
             localReasoningStartTime = Date.now()
-            setReasoningStartTime(localReasoningStartTime)
           }
           reasoningContent += chunk.reasoningContent
           setStreamingReasoningContent(reasoningContent)
@@ -737,7 +682,6 @@ export default function HomePage() {
         setStreamingReasoningContent('')
         setStreamingToolCalls([])
         setIsStreamingReasoningExpanded(false)
-        setReasoningStartTime(null)
         setReasoningDuration(null)
 
         // Save the assistant message to the session
@@ -950,7 +894,6 @@ export default function HomePage() {
           // 记录推理开始时间
           if (!localReasoningStartTime) {
             localReasoningStartTime = Date.now()
-            setReasoningStartTime(localReasoningStartTime)
           }
           reasoningContent += chunk.reasoningContent
           setStreamingReasoningContent(reasoningContent)
@@ -1058,7 +1001,7 @@ export default function HomePage() {
         setStreamingReasoningContent('')
         setStreamingToolCalls([])
         setIsStreamingReasoningExpanded(false)
-        setReasoningStartTime(null)
+
         setReasoningDuration(null)
 
         // Save the assistant message to the session
@@ -1084,7 +1027,7 @@ export default function HomePage() {
         setStreamingReasoningContent('')
         setStreamingToolCalls([])
         setIsStreamingReasoningExpanded(false)
-        setReasoningStartTime(null)
+
         setReasoningDuration(null)
       }
 
@@ -1129,7 +1072,7 @@ export default function HomePage() {
       setStreamingReasoningContent('')
       setStreamingToolCalls([])
       setIsStreamingReasoningExpanded(false)
-      setReasoningStartTime(null)
+
       setReasoningDuration(null)
 
       // Focus input after AI response is complete and tokens are displayed
@@ -1181,7 +1124,7 @@ export default function HomePage() {
     setStreamingReasoningContent('')
     setStreamingToolCalls([])
     setIsStreamingReasoningExpanded(false)
-    setReasoningStartTime(null)
+
     setReasoningDuration(null)
   }
 
@@ -1329,7 +1272,6 @@ export default function HomePage() {
               // 记录推理开始时间
               if (!localReasoningStartTime) {
                 localReasoningStartTime = Date.now()
-                setReasoningStartTime(localReasoningStartTime)
               }
               reasoningContent += chunk.reasoningContent
               setStreamingReasoningContent(reasoningContent)
@@ -1426,7 +1368,7 @@ export default function HomePage() {
             setStreamingReasoningContent('')
             setStreamingToolCalls([])
             setIsStreamingReasoningExpanded(false)
-            setReasoningStartTime(null)
+
             setReasoningDuration(null)
 
             const finalSession = {
@@ -1681,10 +1623,7 @@ export default function HomePage() {
     }
   }
 
-  // Focus input functionality
-  const handleFocusInput = () => {
-    chatInputRef.current?.focus()
-  }
+
 
   // Edit message functionality
   const handleEditMessage = async (messageId: string, newContent: string) => {
@@ -1802,7 +1741,6 @@ export default function HomePage() {
           // 记录推理开始时间
           if (!localReasoningStartTime) {
             localReasoningStartTime = Date.now()
-            setReasoningStartTime(localReasoningStartTime)
           }
           reasoningContent += chunk.reasoningContent
           setStreamingReasoningContent(reasoningContent)
@@ -1899,7 +1837,7 @@ export default function HomePage() {
         setStreamingReasoningContent('')
         setStreamingToolCalls([])
         setIsStreamingReasoningExpanded(false)
-        setReasoningStartTime(null)
+
         setReasoningDuration(null)
 
         const finalSession = {
@@ -2078,6 +2016,7 @@ export default function HomePage() {
             onSendMessage={handleOverlaySendMessage}
             onCreateAgent={() => setShowAgentModal(true)}
             onAgentSelect={setCurrentAgentId}
+            shouldFocus={showNewChatOverlay}
           />
         ) : (
           <>

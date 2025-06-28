@@ -5,8 +5,9 @@ import { HTTPRequestConfig } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Select } from '@/components/ui/select'
+
 import { Textarea } from '@/components/ui/textarea'
+import { CustomSelect } from '@/components/ui/custom-select'
 import { X, Plus, Trash2 } from 'lucide-react'
 
 interface HTTPRequestModalProps {
@@ -73,17 +74,18 @@ export function HTTPRequestModal({ isOpen, onClose, config, onSave }: HTTPReques
           {/* Request Method */}
           <div className="space-y-2">
             <Label htmlFor="method">Request Method</Label>
-            <select
-              id="method"
+            <CustomSelect
               value={method}
-              onChange={(e) => setMethod(e.target.value as any)}
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-            >
-              <option value="GET">GET</option>
-              <option value="POST">POST</option>
-              <option value="PUT">PUT</option>
-              <option value="DELETE">DELETE</option>
-            </select>
+              placeholder="Select Method"
+              options={[
+                { value: 'GET', label: 'GET' },
+                { value: 'POST', label: 'POST' },
+                { value: 'PUT', label: 'PUT' },
+                { value: 'DELETE', label: 'DELETE' }
+              ]}
+              onChange={(value) => setMethod(value as any)}
+              size="md"
+            />
           </div>
 
           {/* Request URL */}

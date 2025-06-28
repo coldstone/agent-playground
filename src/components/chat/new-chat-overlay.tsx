@@ -15,6 +15,7 @@ interface NewChatOverlayProps {
   onSendMessage: (content: string, agentId: string | null) => void
   onCreateAgent: () => void
   onAgentSelect: (agentId: string | null) => void
+  shouldFocus?: boolean
 }
 
 export function NewChatOverlay({
@@ -22,18 +23,25 @@ export function NewChatOverlay({
   currentAgentId,
   onSendMessage,
   onCreateAgent,
-  onAgentSelect
+  onAgentSelect,
+  shouldFocus = true
 }: NewChatOverlayProps) {
   const { message, setMessage, clearDraft } = useDraftMessage()
   const { hasAvailableModels } = useAvailableModels()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  // Focus on textarea when component mounts or when agents change
+  // Focus on textarea when component mounts, when agents change, or when shouldFocus changes
   useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.focus()
+    if (shouldFocus && textareaRef.current) {
+      // Use a small delay to ensure the component is fully rendered
+      const timer = setTimeout(() => {
+        if (textareaRef.current) {
+          textareaRef.current.focus()
+        }
+      }, 100)
+      return () => clearTimeout(timer)
     }
-  }, [agents.length]) // Re-focus when agents list changes (new agent added)
+  }, [agents.length, shouldFocus]) // Re-focus when agents list changes or shouldFocus changes
 
   const handleSend = () => {
     if (!message.trim() || !hasAvailableModels) return
