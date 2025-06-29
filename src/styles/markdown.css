@@ -1,0 +1,199 @@
+/* Markdown content styling */
+.markdown-content {
+  line-height: 1.6;
+  color: inherit;
+}
+
+/* Ensure code blocks don't overflow */
+.markdown-content pre {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+/* Ensure tables are responsive */
+.markdown-content table {
+  border-collapse: collapse;
+  table-layout: auto;
+  width: max-content;
+  min-width: 100%;
+}
+
+/* Table cell width constraints */
+.markdown-content th,
+.markdown-content td {
+  max-width: 200px;
+  min-width: 80px;
+  vertical-align: top;
+  width: auto;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  white-space: normal;
+}
+
+/* Remove last cell border */
+.markdown-content th:last-child,
+.markdown-content td:last-child {
+  border-right: none;
+}
+
+/* Remove bottom border for last row */
+.markdown-content tr:last-child td {
+  border-bottom: none;
+}
+
+/* Table container styling - 移除可能导致重新布局的样式 */
+.markdown-content .table-scroll-container {
+  /* 核心滚动样式 */
+  overflow-x: auto !important;
+  overflow-y: visible !important;
+
+  /* 尺寸控制 */
+  max-width: 100% !important;
+  width: 100% !important;
+
+  /* 滚动优化 */
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scroll-behavior: auto !important;
+
+  /* 布局稳定性 */
+  position: relative;
+  contain: layout style size !important;
+  will-change: scroll-position;
+
+  /* 防止意外的样式重置 */
+  box-sizing: border-box !important;
+  transform: translateZ(0); /* 创建新的层叠上下文 */
+}
+
+/* Custom scrollbar for webkit browsers */
+.markdown-content .table-scroll-container::-webkit-scrollbar {
+  height: 8px;
+}
+
+.markdown-content .table-scroll-container::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+
+.dark .markdown-content .table-scroll-container::-webkit-scrollbar-track {
+  background: #374151;
+}
+
+.markdown-content .table-scroll-container::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.dark .markdown-content .table-scroll-container::-webkit-scrollbar-thumb {
+  background: #6b7280;
+}
+
+.markdown-content .table-scroll-container::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+.dark .markdown-content .table-scroll-container::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* Additional fixes for scroll stability */
+.markdown-content .table-scroll-container {
+  /* Prevent layout shifts that cause scroll reset */
+  contain: layout style;
+  /* Ensure stable dimensions */
+  box-sizing: border-box;
+}
+
+/* Ensure parent containers don't interfere */
+.markdown-content {
+  /* Prevent min-width constraints from affecting table layout */
+  min-width: 0;
+  overflow: visible;
+}
+
+/* Fix for message containers */
+.group .markdown-content,
+.space-y-2 .markdown-content {
+  min-width: 0 !important;
+  width: 100% !important;
+}
+
+/* 强制防止表格容器被重置 - 使用类名选择器 */
+.markdown-content .stable-table-container {
+  /* 核心滚动样式 - 使用 !important 防止被覆盖 */
+  overflow-x: auto !important;
+  overflow-y: visible !important;
+
+  /* 布局稳定性 */
+  contain: layout style size !important;
+  transform: translateZ(0) !important;
+
+  /* 防止宽度重新计算 */
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+
+  /* 滚动优化 */
+  -webkit-overflow-scrolling: touch !important;
+  scrollbar-width: thin !important;
+}
+
+/* 确保在各种父容器中都能正常工作 */
+.flex .markdown-content .stable-table-container,
+.flex-1 .markdown-content .stable-table-container,
+.min-w-0 .markdown-content .stable-table-container,
+.space-y-2 .markdown-content .stable-table-container {
+  overflow-x: auto !important;
+  width: 100% !important;
+  contain: layout style size !important;
+  transform: translateZ(0) !important;
+}
+
+/* 表格本身的稳定性 */
+.markdown-content .stable-table-container table {
+  /* 防止表格宽度重新计算导致滚动重置 */
+  width: max-content !important;
+  min-width: 100% !important;
+  table-layout: auto !important;
+}
+
+/* 防止任何可能导致重新布局的样式 */
+.markdown-content .stable-table-container * {
+  box-sizing: border-box;
+}
+
+/* Math expressions styling */
+.markdown-content .katex {
+  font-size: 1em;
+}
+
+.markdown-content .katex-display {
+  margin: 1em 0;
+  text-align: center;
+}
+
+/* Inline code styling */
+.markdown-content code:not(pre code) {
+  background-color: rgba(175, 184, 193, 0.2);
+  padding: 0.15em 0.3em;
+  border-radius: 3px;
+  font-size: 0.75em;
+}
+
+/* Code block styling */
+.markdown-content pre {
+  font-size: 0.75em;
+  line-height: 1.4;
+}
+
+.markdown-content pre code {
+  font-size: inherit;
+}
+
+/* Dark mode adjustments */
+@media (prefers-color-scheme: dark) {
+  .markdown-content code:not(pre code) {
+    background-color: rgba(110, 118, 129, 0.4);
+  }
+}

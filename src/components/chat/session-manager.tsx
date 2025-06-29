@@ -50,18 +50,18 @@ export function SessionManager({
     setEditingName('')
   }
 
-  const getSessionPreview = (session: ChatSession) => {
+  const getSessionAgent = (session: ChatSession) => {
     // Show agent info if session has an agent
     if (session.agentId) {
       const agent = agents.find(a => a.id === session.agentId)
       if (agent) {
-        return `🤖 ${agent.name}`
+        return agent.name
       }
-      return '🤖 Agent (deleted)'
+      return 'Agent (deleted)'
     }
 
-    // No agent - don't show any preview
-    return ''
+    // No agent
+    return null
   }
 
   return (
@@ -82,7 +82,7 @@ export function SessionManager({
         </Button>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto mt-3">
         {sessions.length === 0 ? (
           <div className="p-4 mt-8 text-center text-muted-foreground">
             <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-50" />
@@ -100,7 +100,7 @@ export function SessionManager({
                 }`}
               >
                 {editingSessionId === session.id ? (
-                  <div className="p-3 space-y-2">
+                  <div className="px-3 space-y-2">
                     <Input
                       value={editingName}
                       onChange={(e) => setEditingName(e.target.value)}
@@ -131,24 +131,29 @@ export function SessionManager({
                   </div>
                 ) : (
                   <div
-                    className="p-3 cursor-pointer"
+                    className="p-2 cursor-pointer"
                     onClick={() => onSessionSelect(session.id)}
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <h4 className="font-medium text-sm truncate">
-                          {session.name}
-                        </h4>
-                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                          {getSessionPreview(session)}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {formatTimestamp(session.updatedAt)}
+                    <h4 className="font-medium text-sm truncate mb-1">
+                      {session.name}
+                    </h4>
+
+                    {getSessionAgent(session) && (
+                      <div className="flex items-center gap-1">
+                        <Bot className="w-3 h-3 text-blue-400 flex-shrink-0" />
+                        <p className="text-xs text-muted-foreground truncate">
+                          {getSessionAgent(session)}
                         </p>
                       </div>
+                    )}
+
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs text-gray-400">
+                        {formatTimestamp(session.updatedAt)}
+                      </p>
                       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <Button
-                          size="sm"
+                          size="xs"
                           variant="ghost"
                           onClick={(e) => {
                             e.stopPropagation()
@@ -159,7 +164,7 @@ export function SessionManager({
                           <Edit2 className="w-3 h-3 flex-shrink-0" />
                         </Button>
                         <Button
-                          size="sm"
+                          size="xs"
                           variant="ghost"
                           onClick={(e) => {
                             e.stopPropagation()

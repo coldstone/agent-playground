@@ -4,10 +4,11 @@ import React, { useState } from 'react'
 import { Message as MessageType, AgentMessage, Tool } from '@/types'
 import { formatTimestamp } from '@/lib/utils'
 import { ToolCallDisplay } from '@/components/tools'
+import { MessageContent } from '@/components/markdown'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Tooltip } from '@/components/ui/tooltip'
-import { User, Bot, Settings, Wrench, RotateCcw, Trash2, Edit2, Check, X, Atom, Brain, Cpu, Zap } from 'lucide-react'
+import { User, Bot, Settings, Wrench, RotateCcw, Trash2, Edit2, Check, X, Atom, Brain, Cpu, Zap, GanttChartSquare, SquareCode } from 'lucide-react'
 
 interface MessageProps {
   message: MessageType | AgentMessage
@@ -40,6 +41,7 @@ export function Message({
 }: MessageProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [editContent, setEditContent] = useState(message.content)
+  const [showMarkdown, setShowMarkdown] = useState(true)
 
   const isUser = message.role === 'user'
   const isSystem = message.role === 'system'
@@ -136,6 +138,21 @@ export function Message({
 
           {/* Action buttons */}
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            {/* Markdown toggle button */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowMarkdown(!showMarkdown)}
+              className="h-6 w-6 p-0 flex items-center justify-center flex-shrink-0"
+              title={showMarkdown ? 'Show raw text' : 'Show markdown'}
+            >
+              {showMarkdown ? (
+                <SquareCode className="w-3 h-3 flex-shrink-0" />
+              ) : (
+                <GanttChartSquare className="w-3 h-3 flex-shrink-0" />
+              )}
+            </Button>
+
             {/* Edit button for user messages */}
             {message.role === 'user' && onEditMessage && (
               <Button
@@ -250,20 +267,28 @@ export function Message({
                 {(isInActiveConversation || isReasoningExpanded) && (
                   <div className="p-3">
                     <div className="text-sm text-gray-500 leading-snug">
-                      <pre className="whitespace-pre-wrap font-sans break-all overflow-wrap-anywhere min-w-0 overflow-x-auto">
-                        {agentMessage.reasoningContent}
-                      </pre>
+                      <MessageContent
+                        content={agentMessage.reasoningContent}
+                        className="min-w-0"
+                        showToggle={false}
+                      />
                     </div>
                   </div>
                 )}
               </div>
             )}
 
-            <div className="prose prose-sm max-w-none min-w-0">
-              <pre className="whitespace-pre-wrap font-sans text-base leading-relaxed break-all overflow-wrap-anywhere min-w-0 overflow-x-auto">
+            {showMarkdown ? (
+              <MessageContent
+                content={message.content}
+                className="min-w-0"
+                showToggle={false}
+              />
+            ) : (
+              <pre className="whitespace-pre-wrap text-gray-700 dark:text-gray-300 font-mono text-sm leading-relaxed min-w-0 overflow-x-auto">
                 {message.content}
               </pre>
-            </div>
+            )}
           </>
         )}
 

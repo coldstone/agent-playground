@@ -4,6 +4,7 @@ import React, { useEffect, useRef } from 'react'
 import { Message as MessageType, AgentMessage, ToolCall, Agent, Tool } from '@/types'
 import { Message } from './message'
 import { ToolCallDisplay } from '@/components/tools'
+import { StreamingContent } from '@/components/markdown'
 import { Atom } from 'lucide-react'
 
 // Agent with resolved tools for display purposes
@@ -167,10 +168,14 @@ export function ChatMessages({
                     {(isInActiveConversation || isStreamingReasoningExpanded) && (
                       <div className="p-3">
                         <div className="text-sm text-gray-500 leading-snug">
-                          <pre className="whitespace-pre-wrap font-sans break-all overflow-wrap-anywhere">
-                            {streamingReasoningContent}
-                            <span className="inline-block w-1 h-3 bg-gray-400 animate-pulse ml-1" />
-                          </pre>
+                          <div className="relative">
+                            <StreamingContent
+                              content={streamingReasoningContent}
+                              isStreaming={true}
+                              showToggle={false}
+                              className="min-w-0"
+                            />
+                          </div>
                         </div>
                       </div>
                     )}
@@ -179,12 +184,12 @@ export function ChatMessages({
 
                 {/* Streaming content */}
                 {streamingContent && (
-                  <div className="prose prose-sm max-w-none">
-                    <pre className="whitespace-pre-wrap font-sans text-base leading-relaxed break-all overflow-wrap-anywhere">
-                      {streamingContent}
-                      <span className="inline-block w-2 h-4 bg-green-600 animate-pulse ml-1" />
-                    </pre>
-                  </div>
+                  <StreamingContent
+                    content={streamingContent}
+                    isStreaming={true}
+                    showToggle={true}
+                    className="min-w-0"
+                  />
                 )}
 
                 {/* Streaming tool calls */}
