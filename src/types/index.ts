@@ -116,6 +116,7 @@ export interface Tool {
   description: string;
   schema: ToolSchema;
   httpRequest?: HTTPRequestConfig;
+  tag?: string; // 工具分类标签
   createdAt: number;
   updatedAt: number;
 }

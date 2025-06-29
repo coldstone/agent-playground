@@ -50,21 +50,19 @@ export function StreamingContent({
       <div className="relative">
         {showMarkdown ? (
           <div className="relative">
-            <MarkdownContent content={displayContent} />
-            {/* Streaming cursor */}
-            {isStreaming && (
-              <span className="inline-block w-2 h-5 bg-blue-500 animate-pulse ml-1" />
-            )}
+            <MarkdownContent
+              content={isStreaming ? displayContent + '█' : displayContent}
+            />
           </div>
         ) : (
           <div className="relative">
             <pre className="whitespace-pre-wrap text-gray-700 dark:text-gray-300 font-mono text-sm leading-relaxed">
               {displayContent}
+              {/* Streaming cursor for raw text */}
+              {isStreaming && (
+                <span className="inline-block w-2 h-5 bg-blue-500 animate-pulse" />
+              )}
             </pre>
-            {/* Streaming cursor for raw text */}
-            {isStreaming && (
-              <span className="inline-block w-2 h-5 bg-blue-500 animate-pulse ml-1" />
-            )}
           </div>
         )}
       </div>

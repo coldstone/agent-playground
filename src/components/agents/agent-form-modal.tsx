@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
-import { Sparkles } from 'lucide-react'
+import { Sparkles, Tag, Check } from 'lucide-react'
 import { useSystemModel } from '@/hooks/use-system-model'
 import { InstructionGenerator } from '@/lib/generators'
 
@@ -38,6 +38,7 @@ export function AgentFormModal({
   const [showAIPrompt, setShowAIPrompt] = useState(false)
   const [aiPrompt, setAiPrompt] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
+  const [selectedTag, setSelectedTag] = useState<string>('all')
 
   const isEditMode = !!agent
   const modalTitle = isEditMode ? 'Edit Agent' : 'Create New Agent'
@@ -215,27 +216,114 @@ export function AgentFormModal({
             {/* Tools */}
             <div>
               <Label>Tools</Label>
-              <div className="mt-2 space-y-2 max-h-40 overflow-y-auto border border-border rounded-md p-3">
-                {tools.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No tools available</p>
-                ) : (
-                  tools.map((tool) => (
-                    <label key={tool.id} className="flex items-center space-x-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={formData.selectedTools.includes(tool.id)}
-                        onChange={() => handleToolToggle(tool.id)}
-                        className="rounded border-border"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <span className="text-sm font-medium">{tool.name}</span>
-                        {tool.description && (
-                          <p className="text-xs text-muted-foreground truncate">{tool.description}</p>
-                        )}
-                      </div>
-                    </label>
-                  ))
-                )}
+              <div className="mt-2 border border-border rounded-md overflow-hidden">
+                <div className="flex h-64">
+                  {/* 左侧：标签分类 */}
+                  <div className="w-40 border-r bg-muted/30 p-3 overflow-y-auto">
+                    <div className="space-y-1">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedTag('all')}
+                        className={`w-full text-left px-2 py-1.5 rounded text-xs transition-colors ${
+                          selectedTag === 'all'
+                            ? 'bg-primary text-primary-foreground'
+                            : 'text-muted-foreground hover:bg-muted'
+                        }`}
+                      >
+                        All ({tools.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedTag('untagged')}
+                        className={`w-full text-left px-2 py-1.5 rounded text-xs transition-colors ${
+                          selectedTag === 'untagged'
+                            ? 'bg-primary text-primary-foreground'
+                            : 'text-muted-foreground hover:bg-muted'
+                        }`}
+                      >
+                        Untagged ({tools.filter(t => !t.tag).length})
+                      </button>
+                      {(() => {
+                        // 获取所有工具的标签并去重
+                        const allTags = Array.from(new Set(
+                          tools.map(t => t.tag).filter(Boolean)
+                        )).sort()
+
+                        return allTags.map(tag => {
+                          const count = tools.filter(t => t.tag === tag).length
+                          return (
+                            <button
+                              key={tag}
+                              type="button"
+                              onClick={() => setSelectedTag(tag)}
+                              className={`w-full text-left px-2 py-1.5 rounded text-xs transition-colors ${
+                                selectedTag === tag
+                                  ? 'bg-primary text-primary-foreground'
+                                  : 'text-muted-foreground hover:bg-muted'
+                              }`}
+                            >
+                              <div className="flex items-center gap-1">
+                                <Tag className="w-2.5 h-2.5" />
+                                <span className="truncate">{tag} ({count})</span>
+                              </div>
+                            </button>
+                          )
+                        })
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* 右侧：工具列表 */}
+                  <div className="flex-1 p-3 overflow-y-auto">
+                    {(() => {
+                      const filteredTools = tools.filter(tool => {
+                        if (selectedTag === 'all') return true
+                        if (selectedTag === 'untagged') return !tool.tag
+                        return tool.tag === selectedTag
+                      })
+
+                      if (filteredTools.length === 0) {
+                        return (
+                          <p className="text-sm text-muted-foreground text-center py-8">
+                            No tools in this category
+                          </p>
+                        )
+                      }
+
+                      return (
+                        <div className="space-y-2">
+                          {filteredTools.map((tool) => (
+                            <label key={tool.id} className="flex items-start space-x-2 cursor-pointer p-2 rounded hover:bg-muted/50 transition-colors">
+                              <input
+                                type="checkbox"
+                                checked={formData.selectedTools.includes(tool.id)}
+                                onChange={() => handleToolToggle(tool.id)}
+                                className="rounded border-border mt-0.5"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-medium">{tool.name}</span>
+                                  {tool.tag && (
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs bg-muted text-muted-foreground">
+                                      <Tag className="w-2.5 h-2.5" />
+                                      {tool.tag}
+                                    </span>
+                                  )}
+                                  {formData.selectedTools.includes(tool.id) && (
+                                    <Check className="w-3 h-3 text-green-600" />
+                                  )}
+                                </div>
+                                {tool.description && (
+                                  <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{tool.description}</p>
+                                )}
+                              </div>
+                            </label>
+                          ))}
+                        </div>
+                      )
+                    })()}
+                  </div>
+                </div>
               </div>
             </div>
           </div>

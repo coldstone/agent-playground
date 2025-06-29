@@ -1087,14 +1087,16 @@ export default function HomePage() {
       abortControllerRef.current.abort()
     }
 
-    // Save the partial assistant message if there's any content
-    if (streamingContent.trim() && currentSessionId) {
+    // Save the partial assistant message if there's any content (reasoning or regular content)
+    if ((streamingContent.trim() || streamingReasoningContent.trim()) && currentSessionId) {
       const session = sessions.find(s => s.id === currentSessionId)
       if (session) {
         const partialMessage: AgentMessage = {
           id: generateId(),
           role: 'assistant',
           content: streamingContent,
+          reasoningContent: streamingReasoningContent || undefined,
+          reasoningDuration: reasoningDuration || undefined,
           timestamp: Date.now(),
           // Mark as incomplete/stopped
           incomplete: true,

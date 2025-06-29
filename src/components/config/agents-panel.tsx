@@ -1,11 +1,17 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useCallback } from 'react'
+import { DndProvider, useDrag, useDrop } from 'react-dnd'
+import { HTML5Backend } from 'react-dnd-html5-backend'
 import { Agent, Tool } from '@/types'
 import { AgentFormModal } from '@/components/agents/agent-form-modal'
 import { AgentInstructionModal, AgentToolsModal } from '@/components/agents'
 import { Trash2, Edit2, Bot, BookUser, Wrench as ToolIcon, GripVertical } from 'lucide-react'
 import { formatTimestamp } from '@/lib/utils'
+
+const ItemTypes = {
+  AGENT: 'agent'
+}
 
 interface AgentsPanelProps {
   agents: Agent[]
@@ -14,6 +20,149 @@ interface AgentsPanelProps {
   onAgentDelete: (agentId: string) => void
   onAgentReorder: (agents: Agent[]) => void
   apiConfig: any
+}
+
+interface DraggableAgentCardProps {
+  agent: Agent
+  index: number
+  moveAgent: (dragIndex: number, hoverIndex: number) => void
+  onEdit: (agent: Agent) => void
+  onDelete: (agent: Agent) => void
+  onEditInstruction: (agent: Agent) => void
+  onManageTools: (agent: Agent) => void
+}
+
+function DraggableAgentCard({
+  agent,
+  index,
+  moveAgent,
+  onEdit,
+  onDelete,
+  onEditInstruction,
+  onManageTools
+}: DraggableAgentCardProps) {
+  const ref = React.useRef<HTMLDivElement>(null)
+
+  const [{ isDragging }, drag] = useDrag({
+    type: ItemTypes.AGENT,
+    item: { index },
+    collect: (monitor) => ({
+      isDragging: monitor.isDragging()
+    })
+  })
+
+  const [, drop] = useDrop({
+    accept: ItemTypes.AGENT,
+    hover: (item: { index: number }, monitor) => {
+      if (!ref.current) return
+
+      const dragIndex = item.index
+      const hoverIndex = index
+
+      // Don't replace items with themselves
+      if (dragIndex === hoverIndex) return
+
+      // Get the hovered element's bounding rectangle
+      const hoverBoundingRect = ref.current.getBoundingClientRect()
+
+      // Get vertical middle
+      const hoverMiddleY = (hoverBoundingRect.bottom - hoverBoundingRect.top) / 2
+
+      // Determine mouse position
+      const clientOffset = monitor.getClientOffset()
+      if (!clientOffset) return
+
+      // Get pixels to the top
+      const hoverClientY = clientOffset.y - hoverBoundingRect.top
+
+      // Only perform the move when the mouse has crossed half of the items height
+      // When dragging downwards, only move when the cursor is below 50%
+      // When dragging upwards, only move when the cursor is above 50%
+      if (dragIndex < hoverIndex && hoverClientY < hoverMiddleY) return
+      if (dragIndex > hoverIndex && hoverClientY > hoverMiddleY) return
+
+      // Time to actually perform the action
+      moveAgent(dragIndex, hoverIndex)
+
+      // Note: we're mutating the monitor item here!
+      // Generally it's better to avoid mutations,
+      // but it's good here for the sake of performance
+      // to avoid expensive index searches.
+      item.index = hoverIndex
+    }
+  })
+
+  // Connect drag and drop to the same element
+  React.useEffect(() => {
+    if (ref.current) {
+      drag(drop(ref.current))
+    }
+  }, [drag, drop])
+
+  return (
+    <div
+      ref={ref}
+      className={`group p-4 pl-1 rounded-lg border border-border hover:bg-muted/50 transition-colors ${
+        isDragging ? 'opacity-50 shadow-lg' : ''
+      }`}
+      style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
+    >
+      <div className="flex gap-2">
+        <div className="flex items-center justify-center w-4 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing">
+          <GripVertical className="w-3 h-3 text-muted-foreground" />
+        </div>
+
+        <div className="flex-1 flex flex-col gap-2">
+          <div className="flex-1">
+            <h5 className="font-medium text-sm">{agent.name}</h5>
+            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+              {agent.description}
+            </p>
+            {agent.tools && agent.tools.length > 0 && (
+              <div className="text-xs text-blue-600 mt-1">
+                Uses {agent.tools.length} tool{agent.tools.length !== 1 ? 's' : ''}
+              </div>
+            )}
+          </div>
+          <div className="flex items-center justify-between">
+            <div className="text-xs text-muted-foreground">
+              {formatTimestamp(agent.updatedAt || agent.createdAt)}
+            </div>
+            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button
+                onClick={() => onEditInstruction(agent)}
+                className="h-5 w-5 flex items-center justify-center hover:bg-muted rounded transition-colors"
+                title="Edit Instruction"
+              >
+                <BookUser className="w-3 h-3" />
+              </button>
+              <button
+                onClick={() => onManageTools(agent)}
+                className="h-5 w-5 flex items-center justify-center hover:bg-muted rounded transition-colors"
+                title="Manage Tools"
+              >
+                <ToolIcon className="w-3 h-3" />
+              </button>
+              <button
+                onClick={() => onEdit(agent)}
+                className="h-5 w-5 flex items-center justify-center hover:bg-muted rounded transition-colors"
+                title="Edit Agent"
+              >
+                <Edit2 className="w-3 h-3" />
+              </button>
+              <button
+                onClick={() => onDelete(agent)}
+                className="h-5 w-5 flex items-center justify-center hover:bg-red-100 text-red-600 hover:text-red-700 rounded transition-colors"
+                title="Delete Agent"
+              >
+                <Trash2 className="w-3 h-3" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export function AgentsPanel({
@@ -30,13 +179,23 @@ export function AgentsPanel({
   const [showInstructionModal, setShowInstructionModal] = useState(false)
   const [showToolsModal, setShowToolsModal] = useState(false)
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null)
+  const [localAgents, setLocalAgents] = useState<Agent[]>([])
 
-  // Drag state
-  const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
+  // 同步本地agents状态
+  React.useEffect(() => {
+    const sortedAgents = [...agents].sort((a, b) => (a.order || 0) - (b.order || 0))
+    setLocalAgents(sortedAgents)
+  }, [agents])
 
-  // Sort agents by order field
-  const sortedAgents = [...agents].sort((a, b) => (a.order || 0) - (b.order || 0))
+  const handleInstructionClick = (agent: Agent) => {
+    setSelectedAgent(agent)
+    setShowInstructionModal(true)
+  }
+
+  const handleToolsClick = (agent: Agent) => {
+    setSelectedAgent(agent)
+    setShowToolsModal(true)
+  }
 
   const handleEdit = (agent: Agent) => {
     setEditingAgent(agent)
@@ -55,65 +214,28 @@ export function AgentsPanel({
     setAgentToDelete(null)
   }
 
-  // Drag handlers
-  const handleDragStart = (e: React.DragEvent, index: number) => {
-    setDraggedIndex(index)
-    e.dataTransfer.effectAllowed = 'move'
-    e.dataTransfer.setData('text/html', '')
-  }
+  const moveAgent = useCallback((dragIndex: number, hoverIndex: number) => {
+    const newAgents = [...localAgents]
+    const draggedAgent = newAgents[dragIndex]
+    newAgents.splice(dragIndex, 1)
+    newAgents.splice(hoverIndex, 0, draggedAgent)
+    setLocalAgents(newAgents)
 
-  const handleDragOver = (e: React.DragEvent, index: number) => {
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
-    
-    if (draggedIndex !== null && draggedIndex !== index) {
-      setDragOverIndex(index)
-    }
-  }
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-      setDragOverIndex(null)
-    }
-  }
-
-  const handleDrop = (e: React.DragEvent, dropIndex: number) => {
-    e.preventDefault()
-    
-    if (draggedIndex === null || draggedIndex === dropIndex) {
-      setDraggedIndex(null)
-      setDragOverIndex(null)
-      return
-    }
-
-    const reorderedAgents = Array.from(sortedAgents)
-    const [removed] = reorderedAgents.splice(draggedIndex, 1)
-    reorderedAgents.splice(dropIndex, 0, removed)
-
-    const updatedAgents = reorderedAgents.map((agent, index) => ({
+    // 立即更新排序，确保覆盖层按钮顺序实时更新
+    const updatedAgents = newAgents.map((agent, index) => ({
       ...agent,
       order: index
     }))
-
     onAgentReorder(updatedAgents)
-    
-    setDraggedIndex(null)
-    setDragOverIndex(null)
-  }
+  }, [localAgents, onAgentReorder])
 
   const handleDragEnd = () => {
-    setDraggedIndex(null)
-    setDragOverIndex(null)
-  }
-
-  const handleInstructionClick = (agent: Agent) => {
-    setSelectedAgent(agent)
-    setShowInstructionModal(true)
-  }
-
-  const handleToolsClick = (agent: Agent) => {
-    setSelectedAgent(agent)
-    setShowToolsModal(true)
+    // 立即保存排序结果，确保覆盖层按钮顺序实时更新
+    const updatedAgents = localAgents.map((agent, index) => ({
+      ...agent,
+      order: index
+    }))
+    onAgentReorder(updatedAgents)
   }
 
   const handleInstructionUpdate = (agentId: string, instruction: string) => {
@@ -129,9 +251,9 @@ export function AgentsPanel({
   }
 
   return (
-    <div>
+    <DndProvider backend={HTML5Backend}>
       <div className="space-y-3">
-        {agents.length === 0 ? (
+        {localAgents.length === 0 ? (
           <div className="flex items-center justify-center text-center text-muted-foreground py-8">
             <div>
               <Bot className="w-8 h-8 mx-auto mb-2 opacity-50" />
@@ -141,76 +263,17 @@ export function AgentsPanel({
           </div>
         ) : (
           <div className="space-y-3">
-            {sortedAgents.map((agent, index) => (
-              <div
+            {localAgents.map((agent, index) => (
+              <DraggableAgentCard
                 key={agent.id}
-                draggable
-                onDragStart={(e) => handleDragStart(e, index)}
-                onDragOver={(e) => handleDragOver(e, index)}
-                onDragLeave={handleDragLeave}
-                onDrop={(e) => handleDrop(e, index)}
-                onDragEnd={handleDragEnd}
-                className={`group p-4 pl-1 rounded-lg border border-border hover:bg-muted/50 transition-colors ${
-                  draggedIndex === index ? 'opacity-50 shadow-lg' : ''
-                } ${
-                  dragOverIndex === index ? 'border-blue-500 bg-blue-50' : ''
-                }`}
-              >
-                <div className="flex gap-2">
-                  <div className="flex items-center justify-center w-4 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing">
-                    <GripVertical className="w-3 h-3 text-muted-foreground" />
-                  </div>
-
-                  <div className="flex-1 flex flex-col gap-2">
-                    <div className="flex-1">
-                      <h5 className="font-medium text-sm">{agent.name}</h5>
-                      <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                        {agent.description}
-                      </p>
-                      {agent.tools && agent.tools.length > 0 && (
-                        <div className="text-xs text-blue-600 mt-1">
-                          Uses {agent.tools.length} tool{agent.tools.length !== 1 ? 's' : ''}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div className="text-xs text-muted-foreground">
-                        {formatTimestamp(agent.updatedAt)}
-                      </div>
-                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          onClick={() => handleInstructionClick(agent)}
-                          className="h-5 w-5 flex items-center justify-center hover:bg-muted rounded transition-colors"
-                          title="Edit Instruction"
-                        >
-                          <BookUser className="w-3 h-3" />
-                        </button>
-                        <button
-                          onClick={() => handleToolsClick(agent)}
-                          className="h-5 w-5 flex items-center justify-center hover:bg-muted rounded transition-colors"
-                          title="Manage Tools"
-                        >
-                          <ToolIcon className="w-3 h-3" />
-                        </button>
-                        <button
-                          onClick={() => handleEdit(agent)}
-                          className="h-5 w-5 flex items-center justify-center hover:bg-muted rounded transition-colors"
-                          title="Edit Agent"
-                        >
-                          <Edit2 className="w-3 h-3" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteClick(agent)}
-                          className="h-5 w-5 flex items-center justify-center hover:bg-red-100 text-red-600 hover:text-red-700 rounded transition-colors"
-                          title="Delete Agent"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+                agent={agent}
+                index={index}
+                moveAgent={moveAgent}
+                onEdit={handleEdit}
+                onDelete={handleDeleteClick}
+                onEditInstruction={handleInstructionClick}
+                onManageTools={handleToolsClick}
+              />
             ))}
           </div>
         )}
@@ -278,6 +341,6 @@ export function AgentsPanel({
           onSave={handleToolsUpdate}
         />
       )}
-    </div>
+    </DndProvider>
   )
 }

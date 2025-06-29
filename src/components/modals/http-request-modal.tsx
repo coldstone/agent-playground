@@ -62,15 +62,17 @@ export function HTTPRequestModal({ isOpen, onClose, config, onSave }: HTTPReques
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-4">
+      <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] flex flex-col">
+        {/* Fixed Header */}
+        <div className="flex items-center justify-between p-6 border-b flex-shrink-0">
           <h2 className="text-xl font-semibold">Configure HTTP Request</h2>
           <Button variant="ghost" size="sm" onClick={onClose}>
             <X className="w-4 h-4" />
           </Button>
         </div>
 
-        <div className="space-y-4">
+        {/* Scrollable Content */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-4">
           {/* Request Method */}
           <div className="space-y-2">
             <Label htmlFor="method">Request Method</Label>
@@ -145,13 +147,16 @@ export function HTTPRequestModal({ isOpen, onClose, config, onSave }: HTTPReques
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 mt-6">
-          <Button variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button onClick={handleSave} disabled={!url.trim()}>
-            Save Configuration
-          </Button>
+        {/* Fixed Footer */}
+        <div className="border-t p-6 flex-shrink-0">
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button onClick={handleSave} disabled={!url.trim()}>
+              Save Configuration
+            </Button>
+          </div>
         </div>
       </div>
     </div>
