@@ -126,7 +126,7 @@ export function ChatMessages({
               <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-green-600 bg-white border">
                 <div className="w-4 h-4 border-2 border-green-600 border-t-transparent rounded-full animate-spin" />
               </div>
-              <div className="flex-1 space-y-2">
+              <div className="flex-1 min-w-0 space-y-2">
                 <div className="flex items-center gap-2">
                   <span className="font-medium text-sm text-green-600">Assistant</span>
                   <span className="text-xs text-muted-foreground">
@@ -184,12 +184,14 @@ export function ChatMessages({
 
                 {/* Streaming content */}
                 {streamingContent && (
-                  <StreamingContent
-                    content={streamingContent}
-                    isStreaming={true}
-                    showToggle={true}
-                    className="min-w-0"
-                  />
+                  <div className="min-w-0 overflow-hidden">
+                    <StreamingContent
+                      content={streamingContent}
+                      isStreaming={true}
+                      showToggle={true}
+                      className="min-w-0"
+                    />
+                  </div>
                 )}
 
                 {/* Streaming tool calls */}

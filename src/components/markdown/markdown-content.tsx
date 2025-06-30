@@ -132,7 +132,7 @@ const MarkdownContentComponent = function MarkdownContent({ content, className =
           // Tables with proper styling
           table: ({ children }: any) => (
             <div className="my-4 overflow-x-auto border border-gray-300 dark:border-gray-600 rounded-lg">
-              <table className="border-collapse text-xs w-full">
+              <table className="border-collapse text-xs">
                 {children}
               </table>
             </div>
@@ -149,6 +149,28 @@ const MarkdownContentComponent = function MarkdownContent({ content, className =
               {children}
             </th>
           ),
+
+          tbody: ({ children }: any) => (
+            <tbody>
+              {children}
+            </tbody>
+          ),
+
+          tr: ({ children, ...props }: any) => {
+            // 检查是否是表头行
+            const isHeaderRow = props.node?.tagName === 'tr' && props.node?.parent?.tagName === 'thead'
+
+            if (isHeaderRow) {
+              return <tr>{children}</tr>
+            }
+
+            // 为表体行添加斑马线效果
+            return (
+              <tr className="even:bg-gray-50 dark:even:bg-gray-800/50 odd:bg-white dark:odd:bg-transparent">
+                {children}
+              </tr>
+            )
+          },
 
           td: ({ children }: any) => (
             <td className="border-r border-b border-gray-300 dark:border-gray-600 px-3 py-2 text-gray-700 dark:text-gray-300">

@@ -30,7 +30,7 @@ export function StreamingContent({
   }, [content, isStreaming])
 
   return (
-    <div className={`relative ${className}`}>
+    <div className={`relative min-w-0 overflow-hidden ${className}`}>
       {/* Toggle Button */}
       {showToggle && (
         <button
@@ -47,16 +47,17 @@ export function StreamingContent({
       )}
 
       {/* Content */}
-      <div className="relative">
+      <div className="relative min-w-0 overflow-hidden">
         {showMarkdown ? (
-          <div className="relative">
+          <div className="relative min-w-0 overflow-hidden">
             <MarkdownContent
               content={isStreaming ? displayContent + '█' : displayContent}
+              className="min-w-0"
             />
           </div>
         ) : (
-          <div className="relative">
-            <pre className="whitespace-pre-wrap text-gray-700 dark:text-gray-300 font-mono text-sm leading-relaxed">
+          <div className="relative min-w-0 overflow-hidden">
+            <pre className="whitespace-pre-wrap text-gray-700 dark:text-gray-300 font-mono text-sm leading-relaxed overflow-x-auto">
               {displayContent}
               {/* Streaming cursor for raw text */}
               {isStreaming && (

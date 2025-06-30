@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Sparkles, Tag, Check, ChevronLeft, ChevronRight, Plus } from 'lucide-react'
 import { useSystemModel } from '@/hooks/use-system-model'
 import { InstructionGenerator, ToolGenerator } from '@/lib/generators'
-import { ToolCreateModal } from '@/components/tools/tool-create-modal'
+import { ToolFormModal } from '@/components/tools/tool-form-modal'
 import { ToolGeneratorModal } from '@/components/tools/tool-generator-modal'
 
 interface AgentFormModalProps {
@@ -115,20 +115,22 @@ export function AgentFormModal({
         actualTool = result as Tool
       }
     }
-    // Auto-select the newly created tool using the actual ID
+    return actualTool
+  }
+
+  const handleToolSuccess = (tool: Tool) => {
+    // Auto-select the newly created tool
     setFormData(prev => {
       // Check if tool is already selected to avoid duplicates
-      if (prev.selectedTools.includes(actualTool.id)) {
+      if (prev.selectedTools.includes(tool.id)) {
         return prev
       }
-      const newSelectedTools = [...prev.selectedTools, actualTool.id]
+      const newSelectedTools = [...prev.selectedTools, tool.id]
       return {
         ...prev,
         selectedTools: newSelectedTools
       }
     })
-    setShowCreateToolModal(false)
-    return actualTool
   }
 
   const handleGenerateTool = async (prompt: string) => {
@@ -531,8 +533,9 @@ export function AgentFormModal({
                   id="ai-prompt"
                   value={aiPrompt}
                   onChange={(e) => setAiPrompt(e.target.value)}
+                  className="mt-2"
                   placeholder="e.g., customer support, data analysis, content writing..."
-                  rows={3}
+                  rows={6}
                 />
               </div>
               <div className="flex gap-2 justify-end">
@@ -558,13 +561,15 @@ export function AgentFormModal({
       )}
 
       {/* Create Tool Modal */}
-      <ToolCreateModal
+      <ToolFormModal
         isOpen={showCreateToolModal}
         onClose={() => {
           setShowCreateToolModal(false)
           setGeneratedToolData(null)
         }}
+        mode="create"
         onToolCreate={handleToolCreated}
+        onSuccess={handleToolSuccess}
         initialData={generatedToolData || undefined}
       />
 

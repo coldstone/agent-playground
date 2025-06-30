@@ -2,7 +2,12 @@
 
 import React, { useState, useEffect } from 'react'
 import { Agent, Tool } from '@/types'
-import { X, Wrench, Save, Check, Tag } from 'lucide-react'
+import { X, Wrench, Save, Check, Tag, Plus, Sparkles } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { ToolFormModal } from '@/components/tools/tool-form-modal'
+import { ToolGeneratorModal } from '@/components/tools/tool-generator-modal'
+import { useSystemModel } from '@/hooks/use-system-model'
+import { ToolGenerator } from '@/lib/generators'
 
 interface AgentToolsModalProps {
   isOpen: boolean
@@ -10,13 +15,24 @@ interface AgentToolsModalProps {
   agent: Agent | null
   allTools: Tool[]
   onSave: (agentId: string, toolIds: string[]) => void
+  onToolCreate?: (tool: Tool) => Promise<Tool> | Tool | void
 }
 
-export function AgentToolsModal({ isOpen, onClose, agent, allTools, onSave }: AgentToolsModalProps) {
+export function AgentToolsModal({ isOpen, onClose, agent, allTools, onSave, onToolCreate }: AgentToolsModalProps) {
+  const { hasSystemModel, getSystemModelConfig } = useSystemModel()
   const [selectedToolIds, setSelectedToolIds] = useState<Set<string>>(new Set())
   const [initialSelectedToolIds, setInitialSelectedToolIds] = useState<Set<string>>(new Set())
   const [isSaving, setIsSaving] = useState(false)
   const [selectedTag, setSelectedTag] = useState<string>('all')
+  const [showCreateToolModal, setShowCreateToolModal] = useState(false)
+  const [showGeneratorModal, setShowGeneratorModal] = useState(false)
+  const [isGeneratingTool, setIsGeneratingTool] = useState(false)
+  const [generatedToolData, setGeneratedToolData] = useState<{
+    name: string
+    description: string
+    schema: string
+    tag: string
+  } | null>(null)
 
   // Reset selected tools when modal opens or agent changes
   useEffect(() => {
@@ -58,6 +74,59 @@ export function AgentToolsModal({ isOpen, onClose, agent, allTools, onSave }: Ag
     onClose()
   }
 
+  const handleToolCreate = async (tool: Tool): Promise<Tool> => {
+    if (onToolCreate) {
+      const result = await onToolCreate(tool)
+      if (result && typeof result === 'object' && 'id' in result) {
+        setShowCreateToolModal(false)
+        return result as Tool
+      }
+    }
+    setShowCreateToolModal(false)
+    return tool
+  }
+
+  const handleToolSuccess = (tool: Tool) => {
+    // Auto-select the newly created tool
+    setSelectedToolIds(prev => new Set([...Array.from(prev), tool.id]))
+  }
+
+  const handleGenerateTool = async (prompt: string) => {
+    if (!hasSystemModel) {
+      alert('Please configure System Model first')
+      return
+    }
+
+    const systemModelConfig = getSystemModelConfig()
+    if (!systemModelConfig) {
+      alert('Please configure System Model first')
+      return
+    }
+
+    setIsGeneratingTool(true)
+    try {
+      const generator = new ToolGenerator(systemModelConfig)
+      const generatedTool = await generator.generateTool(prompt)
+
+      // 填充到创建表单而不是直接创建
+      setGeneratedToolData({
+        name: generatedTool.name,
+        description: generatedTool.description,
+        schema: JSON.stringify(generatedTool.schema, null, 2),
+        tag: ''
+      })
+
+      // 关闭生成器模态框，打开创建模态框
+      setShowGeneratorModal(false)
+      setShowCreateToolModal(true)
+    } catch (error) {
+      console.error('Tool generation failed:', error)
+      alert(`Failed to generate tool: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    } finally {
+      setIsGeneratingTool(false)
+    }
+  }
+
 
 
   if (!isOpen || !agent) return null
@@ -92,12 +161,33 @@ export function AgentToolsModal({ isOpen, onClose, agent, allTools, onSave }: Ag
             <Wrench className="w-5 h-5" />
             Manage Tools - {agent.name}
           </h2>
-          <button
-            onClick={handleCancel}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowCreateToolModal(true)}
+              className="flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              Create Tool
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowGeneratorModal(true)}
+              disabled={!hasSystemModel}
+              className="flex items-center gap-2 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white hover:text-white border-none disabled:opacity-50"
+            >
+              <Sparkles className="w-4 h-4" />
+              AI Generate
+            </Button>
+            <button
+              onClick={handleCancel}
+              className="text-gray-400 hover:text-gray-600 transition-colors ml-2"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         <div className="flex h-[60vh]">
@@ -183,23 +273,26 @@ export function AgentToolsModal({ isOpen, onClose, agent, allTools, onSave }: Ag
                         className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                       />
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-medium text-gray-900">{tool.name}</h3>
+                    <div className="flex-1 min-w-0 overflow-hidden">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <h3 className="font-medium text-gray-900 truncate">{tool.name}</h3>
                         {tool.tag && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-600">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-600 flex-shrink-0">
                             <Tag className="w-3 h-3" />
                             {tool.tag}
                           </span>
                         )}
                         {selectedToolIds.has(tool.id) && (
-                          <Check className="w-4 h-4 text-green-600" />
+                          <Check className="w-4 h-4 text-green-600 flex-shrink-0" />
                         )}
                       </div>
-                      <p className="text-sm text-gray-600 mt-1">{tool.description}</p>
+                      <p className="text-sm text-gray-600 mt-1 line-clamp-2">{tool.description}</p>
                       {tool.httpRequest && (
-                        <div className="text-xs text-blue-600 mt-1">
-                          HTTP: {tool.httpRequest.method} {tool.httpRequest.url}
+                        <div className="text-xs text-blue-600 mt-1 flex items-center gap-1 min-w-0">
+                          <span className="font-medium flex-shrink-0">{tool.httpRequest.method}</span>
+                          <span className="truncate min-w-0" title={tool.httpRequest.url}>
+                            {tool.httpRequest.url}
+                          </span>
                         </div>
                       )}
                     </div>
@@ -234,7 +327,26 @@ export function AgentToolsModal({ isOpen, onClose, agent, allTools, onSave }: Ag
         </div>
       </div>
 
+      {/* Create Tool Modal */}
+      <ToolFormModal
+        isOpen={showCreateToolModal}
+        onClose={() => {
+          setShowCreateToolModal(false)
+          setGeneratedToolData(null)
+        }}
+        mode="create"
+        onToolCreate={handleToolCreate}
+        onSuccess={handleToolSuccess}
+        initialData={generatedToolData || undefined}
+      />
 
+      {/* Tool Generator Modal */}
+      <ToolGeneratorModal
+        isOpen={showGeneratorModal}
+        onClose={() => setShowGeneratorModal(false)}
+        onGenerate={handleGenerateTool}
+        isGenerating={isGeneratingTool}
+      />
     </div>
   )
 }

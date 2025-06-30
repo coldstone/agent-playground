@@ -1,17 +1,15 @@
 'use client'
 
 import React, { useState, forwardRef, useImperativeHandle, useMemo } from 'react'
-import { APIConfig, Tool, ToolSchema } from '@/types'
+import { APIConfig, Tool } from '@/types'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { HttpRequestModal as HTTPRequestModal } from '@/components/modals'
 import { ToolGeneratorModal } from '@/components/tools/tool-generator-modal'
+import { ToolFormModal } from '@/components/tools/tool-form-modal'
 import { ToolGenerator } from '@/lib/generators'
 import { useSystemModel } from '@/hooks/use-system-model'
-import { useRecentTags } from '@/hooks/use-recent-tags'
+
 import { formatTimestamp } from '@/lib/utils'
 import {
   Edit2,
@@ -19,46 +17,7 @@ import {
   Globe,
   Wrench as ToolIcon,
   Tag,
-  X,
 } from 'lucide-react'
-
-// 最近使用的标签胶囊组件
-interface RecentTagsPillsProps {
-  recentTags: string[]
-  onTagClick: (tag: string) => void
-  onTagRemove: (tag: string) => void
-}
-
-function RecentTagsPills({ recentTags, onTagClick, onTagRemove }: RecentTagsPillsProps) {
-  if (recentTags.length === 0) return null
-
-  return (
-    <div className="mt-2">
-      <div className="flex flex-wrap gap-1">
-        {recentTags.map((tag) => (
-          <div
-            key={tag}
-            className="inline-flex items-center gap-1 px-2 py-1 bg-muted hover:bg-muted/80 rounded-full text-xs cursor-pointer transition-colors"
-          >
-            <span onClick={() => onTagClick(tag)} className="hover:text-primary">
-              {tag}
-            </span>
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                onTagRemove(tag)
-              }}
-              className="hover:text-red-500 transition-colors"
-              title="Remove tag"
-            >
-              <X className="w-3 h-3" />
-            </button>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
 
 interface ToolsPanelProps {
   tools: Tool[]
@@ -81,7 +40,6 @@ export const ToolsPanel = forwardRef<ToolsPanelRef, ToolsPanelProps>(({
   onToolDelete
 }, ref) => {
   const { hasSystemModel, getSystemModelConfig } = useSystemModel()
-  const { recentTags, addRecentTag, removeRecentTag } = useRecentTags()
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showGeneratorModal, setShowGeneratorModal] = useState(false)
@@ -92,40 +50,16 @@ export const ToolsPanel = forwardRef<ToolsPanelRef, ToolsPanelProps>(({
   const [editingTool, setEditingTool] = useState<Tool | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [selectedTag, setSelectedTag] = useState<string>('all')
-
-  // Form data for create/edit
-  const [formData, setFormData] = useState({
-    name: '',
-    description: '',
-    schema: '',
-    tag: ''
-  })
-  const [schemaError, setSchemaError] = useState('')
-
-  const resetForm = () => {
-    setFormData({
-      name: '',
-      description: '',
-      schema: JSON.stringify({
-        type: 'function',
-        function: {
-          name: '',
-          description: '',
-          parameters: {
-            type: 'object',
-            properties: {},
-            required: []
-          }
-        }
-      }, null, 2),
-      tag: ''
-    })
-    setSchemaError('')
-  }
+  const [generatedToolData, setGeneratedToolData] = useState<{
+    name: string
+    description: string
+    schema: string
+    tag: string
+  } | null>(null)
 
   const handleCreate = () => {
-    resetForm()
     setEditingTool(null)
+    setGeneratedToolData(null)
     setShowCreateModal(true)
   }
 
@@ -137,105 +71,18 @@ export const ToolsPanel = forwardRef<ToolsPanelRef, ToolsPanelProps>(({
 
   const handleEdit = (tool: Tool) => {
     setEditingTool(tool)
-    setFormData({
-      name: tool.name,
-      description: tool.description,
-      schema: JSON.stringify(tool.schema, null, 2),
-      tag: tool.tag || ''
-    })
-    setSchemaError('')
     setShowEditModal(true)
   }
 
-  const validateSchema = (schemaStr: string): ToolSchema | null => {
-    try {
-      const parsed = JSON.parse(schemaStr)
-
-      if (parsed.type !== 'function') {
-        setSchemaError('Schema type must be "function"')
-        return null
-      }
-
-      if (!parsed.function || !parsed.function.name || !parsed.function.description) {
-        setSchemaError('Schema must have function.name and function.description')
-        return null
-      }
-
-      if (!parsed.function.parameters || parsed.function.parameters.type !== 'object') {
-        setSchemaError('Schema must have function.parameters with type "object"')
-        return null
-      }
-
-      setSchemaError('')
-      return parsed as ToolSchema
-    } catch (e) {
-      setSchemaError('Invalid JSON format')
-      return null
-    }
-  }
-
-  const handleSaveCreate = () => {
-    if (!formData.name.trim() || !formData.description.trim()) {
-      setSchemaError('Name and description are required')
-      return
-    }
-
-    const schema = validateSchema(formData.schema)
-    if (!schema) return
-
-    // Update schema function name to match tool name
-    schema.function.name = formData.name
-
-    onToolCreate({
-      id: `tool_${Date.now()}`,
-      name: formData.name,
-      description: formData.description,
-      schema,
-      tag: formData.tag || undefined,
-      createdAt: Date.now(),
-      updatedAt: Date.now()
-    })
-
-    // 添加标签到最近使用列表
-    if (formData.tag && formData.tag.trim()) {
-      addRecentTag(formData.tag.trim())
-    }
-
+  const handleToolCreate = (tool: Tool) => {
+    onToolCreate(tool)
     setShowCreateModal(false)
-    resetForm()
   }
 
-  const handleSaveEdit = () => {
-    if (!formData.name.trim() || !formData.description.trim()) {
-      setSchemaError('Name and description are required')
-      return
-    }
-
-    const schema = validateSchema(formData.schema)
-    if (!schema) return
-
-    if (!editingTool) return
-
-    // Update schema function name to match tool name
-    schema.function.name = formData.name
-
-    onToolUpdate({
-      ...editingTool,
-      name: formData.name,
-      description: formData.description,
-      schema,
-      tag: formData.tag || undefined,
-      updatedAt: Date.now()
-    })
-
-    // 添加标签到最近使用列表
-    if (formData.tag && formData.tag.trim()) {
-      addRecentTag(formData.tag.trim())
-    }
-
+  const handleToolUpdate = (tool: Tool) => {
+    onToolUpdate(tool)
     setShowEditModal(false)
     setEditingTool(null)
-    resetForm()
   }
 
   const handleGenerateTool = async (prompt: string) => {
@@ -256,13 +103,12 @@ export const ToolsPanel = forwardRef<ToolsPanelRef, ToolsPanelProps>(({
       const generatedTool = await generator.generateTool(prompt)
 
       // 填充到创建表单而不是直接创建
-      setFormData({
+      setGeneratedToolData({
         name: generatedTool.name,
         description: generatedTool.description,
         schema: JSON.stringify(generatedTool.schema, null, 2),
         tag: ''
       })
-      setSchemaError('')
       setEditingTool(null)
 
       // 关闭生成器模态框，打开创建模态框
@@ -340,9 +186,11 @@ export const ToolsPanel = forwardRef<ToolsPanelRef, ToolsPanelProps>(({
 
     // 各个标签组
     allTags.forEach(tag => {
-      const taggedTools = tools.filter(t => t.tag === tag).sort((a, b) => a.name.localeCompare(b.name))
-      if (taggedTools.length > 0) {
-        groups[tag] = taggedTools
+      if (tag) {
+        const taggedTools = tools.filter(t => t.tag === tag).sort((a, b) => a.name.localeCompare(b.name))
+        if (taggedTools.length > 0) {
+          groups[tag] = taggedTools
+        }
       }
     })
 
@@ -362,7 +210,7 @@ export const ToolsPanel = forwardRef<ToolsPanelRef, ToolsPanelProps>(({
               <SelectItem value="all">All Tools</SelectItem>
               <SelectItem value="untagged">Untagged</SelectItem>
               {Array.from(new Set(tools.map(t => t.tag).filter(Boolean))).sort().map(tag => (
-                <SelectItem key={tag} value={tag}>{tag}</SelectItem>
+                <SelectItem key={tag} value={tag!}>{tag}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -455,184 +303,28 @@ export const ToolsPanel = forwardRef<ToolsPanelRef, ToolsPanelProps>(({
       </div>
 
       {/* Create Tool Modal */}
-      {showCreateModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg max-w-2xl w-full mx-4 shadow-xl max-h-[90vh] flex flex-col">
-            {/* Fixed Header */}
-            <div className="flex justify-between items-center p-6 border-b">
-              <h3 className="text-lg font-semibold">Create Tool</h3>
-              <button
-                onClick={() => setShowCreateModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Scrollable Form Content */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-4">
-              <div>
-                <Label htmlFor="create-name">Name</Label>
-                <Input
-                  id="create-name"
-                  value={formData.name}
-                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder="Tool name"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="create-description">Description</Label>
-                <Textarea
-                  id="create-description"
-                  value={formData.description}
-                  onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                  placeholder="Tool description"
-                  rows={3}
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="create-tag">Tag</Label>
-                <Input
-                  id="create-tag"
-                  value={formData.tag}
-                  onChange={(e) => setFormData(prev => ({ ...prev, tag: e.target.value }))}
-                  placeholder="Enter tag name (optional)"
-                />
-                <RecentTagsPills
-                  recentTags={recentTags}
-                  onTagClick={(tag) => setFormData(prev => ({ ...prev, tag }))}
-                  onTagRemove={removeRecentTag}
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="create-schema">JSON Schema</Label>
-                <Textarea
-                  id="create-schema"
-                  value={formData.schema}
-                  onChange={(e) => setFormData(prev => ({ ...prev, schema: e.target.value }))}
-                  placeholder="Tool JSON schema"
-                  rows={12}
-                  className="font-mono text-sm"
-                />
-                {schemaError && (
-                  <p className="text-sm text-red-600 mt-1">{schemaError}</p>
-                )}
-              </div>
-            </div>
-
-            {/* Fixed Footer */}
-            <div className="border-t p-6">
-              <div className="flex justify-end gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => setShowCreateModal(false)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleSaveCreate}
-                  disabled={!formData.name.trim() || !formData.description.trim()}
-                >
-                  Create Tool
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <ToolFormModal
+        isOpen={showCreateModal}
+        onClose={() => {
+          setShowCreateModal(false)
+          setGeneratedToolData(null)
+        }}
+        mode="create"
+        onToolCreate={handleToolCreate}
+        initialData={generatedToolData || undefined}
+      />
 
       {/* Edit Tool Modal */}
-      {showEditModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg max-w-2xl w-full mx-4 shadow-xl max-h-[90vh] flex flex-col">
-            {/* Fixed Header */}
-            <div className="flex justify-between items-center p-6 border-b">
-              <h3 className="text-lg font-semibold">Edit Tool</h3>
-              <button
-                onClick={() => setShowEditModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Scrollable Form Content */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-4">
-              <div>
-                <Label htmlFor="edit-name">Name</Label>
-                <Input
-                  id="edit-name"
-                  value={formData.name}
-                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder="Tool name"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="edit-description">Description</Label>
-                <Textarea
-                  id="edit-description"
-                  value={formData.description}
-                  onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                  placeholder="Tool description"
-                  rows={3}
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="edit-tag">Tag</Label>
-                <Input
-                  id="edit-tag"
-                  value={formData.tag}
-                  onChange={(e) => setFormData(prev => ({ ...prev, tag: e.target.value }))}
-                  placeholder="Enter tag name (optional)"
-                />
-                <RecentTagsPills
-                  recentTags={recentTags}
-                  onTagClick={(tag) => setFormData(prev => ({ ...prev, tag }))}
-                  onTagRemove={removeRecentTag}
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="edit-schema">JSON Schema</Label>
-                <Textarea
-                  id="edit-schema"
-                  value={formData.schema}
-                  onChange={(e) => setFormData(prev => ({ ...prev, schema: e.target.value }))}
-                  placeholder="Tool JSON schema"
-                  rows={12}
-                  className="font-mono text-sm"
-                />
-                {schemaError && (
-                  <p className="text-sm text-red-600 mt-1">{schemaError}</p>
-                )}
-              </div>
-            </div>
-
-            {/* Fixed Footer */}
-            <div className="border-t p-6">
-              <div className="flex justify-end gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => setShowEditModal(false)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleSaveEdit}
-                  disabled={!formData.name.trim() || !formData.description.trim()}
-                >
-                  Update Tool
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <ToolFormModal
+        isOpen={showEditModal}
+        onClose={() => {
+          setShowEditModal(false)
+          setEditingTool(null)
+        }}
+        mode="edit"
+        tool={editingTool || undefined}
+        onToolUpdate={handleToolUpdate}
+      />
 
       {/* Tool Generator Modal */}
       <ToolGeneratorModal

@@ -2,6 +2,9 @@
 .markdown-content {
   line-height: 1.6;
   color: inherit;
+  min-width: 0;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
 }
 
 /* Ensure code blocks don't overflow */
@@ -18,6 +21,35 @@
   min-width: 100%;
 }
 
+/* Table row zebra striping */
+.markdown-content tbody tr:nth-child(even) {
+  background-color: #f9fafb;
+}
+
+.markdown-content tbody tr:nth-child(odd) {
+  background-color: #ffffff;
+}
+
+/* Table header styling */
+.markdown-content thead tr {
+  background-color: #f3f4f6 !important;
+}
+
+/* Dark mode zebra striping */
+@media (prefers-color-scheme: dark) {
+  .markdown-content thead tr {
+    background-color: #374151 !important;
+  }
+
+  .markdown-content tbody tr:nth-child(even) {
+    background-color: rgba(55, 65, 81, 0.5);
+  }
+
+  .markdown-content tbody tr:nth-child(odd) {
+    background-color: transparent;
+  }
+}
+
 /* Table cell width constraints */
 .markdown-content th,
 .markdown-content td {
@@ -28,6 +60,47 @@
   word-wrap: break-word;
   overflow-wrap: break-word;
   white-space: normal;
+}
+
+/* 删除重复的表格样式定义 */
+
+/* 表格头部样式优化 */
+.markdown-content thead th {
+  /* 表头也遵循相同的宽度约束 */
+  min-width: 80px;
+  max-width: 240px;
+  /* 表头文字优先不换行，但超出时允许换行 */
+  white-space: nowrap;
+  overflow-wrap: break-word;
+  padding: 8px 12px;
+  font-weight: 600;
+}
+
+/* 当表头文字超过240px时允许换行 */
+.markdown-content thead th {
+  white-space: normal;
+}
+
+/* 表格数据单元格的精确控制 */
+.markdown-content tbody td {
+  /* 优化内边距 */
+  padding: 8px 12px;
+  /* 行高优化，便于多行文字阅读 */
+  line-height: 1.4;
+}
+
+/* 移除冲突的宽度设置，让上面的规则生效 */
+
+/* 优化表格在不同屏幕尺寸下的表现 */
+@media (max-width: 768px) {
+  .markdown-content th,
+  .markdown-content td {
+    /* 在小屏幕上稍微减小最小宽度 */
+    min-width: 60px;
+    max-width: 240px;
+    padding: 6px 8px;
+    font-size: 0.9em;
+  }
 }
 
 /* Remove last cell border */
