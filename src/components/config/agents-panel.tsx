@@ -19,6 +19,7 @@ interface AgentsPanelProps {
   onAgentUpdate: (agentId: string, updates: Partial<Agent>) => void
   onAgentDelete: (agentId: string) => void
   onAgentReorder: (agents: Agent[]) => void
+  onToolCreate: (tool: Tool) => void
   apiConfig: any
 }
 
@@ -171,6 +172,7 @@ export function AgentsPanel({
   onAgentUpdate,
   onAgentDelete,
   onAgentReorder,
+  onToolCreate,
   apiConfig
 }: AgentsPanelProps) {
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null)
@@ -339,6 +341,7 @@ export function AgentsPanel({
           agent={selectedAgent}
           allTools={tools}
           onSave={handleToolsUpdate}
+          onToolCreate={onToolCreate}
         />
       )}
     </DndProvider>

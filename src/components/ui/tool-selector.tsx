@@ -47,7 +47,7 @@ export function ToolSelector({ tools, selectedToolIds, onToolsChange }: ToolSele
     }
   }
 
-  // Group tools by tag
+  // Group tools by tag and sort within each group
   const groupedTools = tools.reduce((groups, tool) => {
     const category = tool.tag || 'Other'
     if (!groups[category]) {
@@ -56,6 +56,11 @@ export function ToolSelector({ tools, selectedToolIds, onToolsChange }: ToolSele
     groups[category].push(tool)
     return groups
   }, {} as Record<string, Tool[]>)
+
+  // Sort tools within each group by name
+  Object.keys(groupedTools).forEach(category => {
+    groupedTools[category].sort((a, b) => a.name.localeCompare(b.name))
+  })
 
   if (tools.length === 0) {
     return null

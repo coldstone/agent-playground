@@ -58,6 +58,8 @@ export function AgentToolsModal({ isOpen, onClose, agent, allTools, onSave }: Ag
     onClose()
   }
 
+
+
   if (!isOpen || !agent) return null
 
   const selectedCount = selectedToolIds.size
@@ -134,7 +136,7 @@ export function AgentToolsModal({ isOpen, onClose, agent, allTools, onSave }: Ag
                   return (
                     <button
                       key={tag}
-                      onClick={() => setSelectedTag(tag)}
+                      onClick={() => setSelectedTag(tag!)}
                       className={`w-full text-left px-3 py-2 rounded text-sm transition-colors ${
                         selectedTag === tag
                           ? 'bg-blue-100 text-blue-700'
@@ -155,7 +157,7 @@ export function AgentToolsModal({ isOpen, onClose, agent, allTools, onSave }: Ag
           {/* 右侧：工具列表 */}
           <div className="flex-1 p-6 overflow-y-auto">
             <div className="mb-4">
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-gray-600 mb-3">
                 Select the tools that this agent can use. Tools provide additional capabilities like API calls, data processing, and external integrations.
               </p>
             </div>
@@ -209,13 +211,13 @@ export function AgentToolsModal({ isOpen, onClose, agent, allTools, onSave }: Ag
         </div>
 
         <div className="flex items-center justify-between p-6 border-t bg-gray-50">
-          <div className="text-sm text-gray-600">
+          <div className="text-sm text-gray-600 flex items-center">
             Selected: {selectedCount} tool{selectedCount !== 1 ? 's' : ''}
           </div>
-          <div className="flex gap-3">
+          <div className="flex items-center gap-3">
             <button
               onClick={handleCancel}
-              className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+              className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors flex items-center"
               disabled={isSaving}
             >
               Cancel
@@ -231,6 +233,8 @@ export function AgentToolsModal({ isOpen, onClose, agent, allTools, onSave }: Ag
           </div>
         </div>
       </div>
+
+
     </div>
   )
 }

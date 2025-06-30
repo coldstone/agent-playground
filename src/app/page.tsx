@@ -453,7 +453,8 @@ export default function HomePage() {
   }
 
   // Tool management functions
-  const createTool = async (toolData: Omit<Tool, 'id' | 'createdAt' | 'updatedAt'>) => {
+  const createTool = async (toolData: Omit<Tool, 'id' | 'createdAt' | 'updatedAt'> | Tool) => {
+    // If toolData already has an id, we need to replace it with a new one
     const newTool: Tool = {
       ...toolData,
       id: generateId(),
@@ -2144,6 +2145,7 @@ export default function HomePage() {
         onClose={() => setShowAgentModal(false)}
         tools={tools}
         onAgentCreate={createAgent}
+        onToolCreate={createTool}
       />
 
 

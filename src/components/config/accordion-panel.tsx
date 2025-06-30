@@ -104,6 +104,7 @@ export function AccordionPanel({
                   onAgentUpdate={onAgentUpdate}
                   onAgentDelete={onAgentDelete}
                   onAgentReorder={onAgentReorder}
+                  onToolCreate={onToolCreate}
                   apiConfig={config}
                 />
               </div>
