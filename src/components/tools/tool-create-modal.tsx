@@ -10,7 +10,6 @@ import { Textarea } from '@/components/ui/textarea'
 import { useRecentTags } from '@/hooks/use-recent-tags'
 import { X } from 'lucide-react'
 
-// 最近使用的标签胶囊组件
 interface RecentTagsPillsProps {
   recentTags: string[]
   onTagClick: (tag: string) => void

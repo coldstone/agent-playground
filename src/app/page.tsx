@@ -556,13 +556,13 @@ export default function HomePage() {
     abortControllerRef.current = new AbortController()
 
     try {
-      // Get tools for agent mode
-      const agentTools = currentAgentWithTools ? currentAgentWithTools.tools : []
+      // Get tools based on current mode (agent or no-agent)
+      const currentTools = getCurrentTools()
 
       // Get complete config for current model (includes correct endpoint and API key)
       const currentConfig = getCurrentModelConfig()
 
-      const client = new OpenAIClient(currentConfig, agentTools, currentConfig.provider)
+      const client = new OpenAIClient(currentConfig, currentTools, currentConfig.provider)
 
       // Filter out any existing system messages from history to avoid conflicts
       const messagesWithoutSystem = sessionData.messages.filter(m => m.role !== 'system')
@@ -1289,13 +1289,13 @@ export default function HomePage() {
           // Create new AbortController for this request
           abortControllerRef.current = new AbortController()
 
-          // Get tools for agent mode
-          const agentTools = currentAgentWithTools ? currentAgentWithTools.tools : []
+          // Get tools based on current mode (agent or no-agent)
+          const currentTools = getCurrentTools()
 
           // Get complete config for current model (includes correct endpoint and API key)
           const currentConfig = getCurrentModelConfig()
 
-          const client = new OpenAIClient(currentConfig, agentTools, currentConfig.provider)
+          const client = new OpenAIClient(currentConfig, currentTools, currentConfig.provider)
 
           // Filter out any existing system messages from history to avoid conflicts
           const messagesWithoutSystem = updatedSession.messages.filter(m => m.role !== 'system')
@@ -1571,6 +1571,14 @@ export default function HomePage() {
       // If session has an agentId, switch to that agent
       // If session has no agentId (undefined), clear agent selection
       setCurrentAgentId(session.agentId || null)
+
+      // For no-agent mode sessions, restore tool selection
+      if (!session.agentId && session.toolIds) {
+        setSelectedToolIds(session.toolIds)
+      } else if (!session.agentId) {
+        // Clear tool selection for no-agent sessions without saved tools
+        setSelectedToolIds([])
+      }
     }
 
     // Trigger scroll to bottom after session switch
@@ -1602,6 +1610,46 @@ export default function HomePage() {
           console.error('Failed to update session agent:', error)
         }
       }
+    }
+  }
+
+  // Tool selection with session update for no-agent mode
+  const handleToolsChange = async (toolIds: string[]) => {
+    setSelectedToolIds(toolIds)
+
+    // Update current session's toolIds if in no-agent mode
+    if (currentSessionId && !currentAgentId) {
+      const session = sessions.find(s => s.id === currentSessionId)
+      if (session) {
+        const updatedSession = {
+          ...session,
+          toolIds: toolIds.length > 0 ? toolIds : undefined,
+          updatedAt: Date.now()
+        }
+
+        try {
+          await dbManager.saveSession(updatedSession)
+          setSessions(prev => prev.map(s =>
+            s.id === currentSessionId ? updatedSession : s
+          ))
+        } catch (error) {
+          console.error('Failed to update session tools:', error)
+        }
+      }
+    }
+  }
+
+  // Get current tools based on agent mode or no-agent mode selection
+  const getCurrentTools = () => {
+    if (currentAgentWithTools) {
+      // Agent mode: use agent's tools
+      return currentAgentWithTools.tools
+    } else if (selectedToolIds.length > 0) {
+      // No-agent mode: filter tools by selected IDs
+      return tools.filter(tool => selectedToolIds.includes(tool.id))
+    } else {
+      // No tools selected
+      return []
     }
   }
 
@@ -1757,13 +1805,13 @@ export default function HomePage() {
       // Create new AbortController for this request
       abortControllerRef.current = new AbortController()
 
-      // Get tools for agent mode
-      const agentTools = currentAgentWithTools ? currentAgentWithTools.tools : []
+      // Get tools based on current mode (agent or no-agent)
+      const currentTools = getCurrentTools()
 
       // Get complete config for current model (includes correct endpoint and API key)
       const currentConfig = getCurrentModelConfig()
 
-      const client = new OpenAIClient(currentConfig, agentTools, currentConfig.provider)
+      const client = new OpenAIClient(currentConfig, currentTools, currentConfig.provider)
 
       // For API call, use the messages before edit plus the new user message
       // Filter out any existing system messages from history to avoid conflicts
@@ -2116,7 +2164,7 @@ export default function HomePage() {
               currentAgent={currentAgentWithTools}
               tools={tools}
               selectedToolIds={selectedToolIds}
-              onToolsChange={setSelectedToolIds}
+              onToolsChange={handleToolsChange}
             />
           </>
         )}

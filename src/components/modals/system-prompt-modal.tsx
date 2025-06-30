@@ -57,7 +57,7 @@ export function SystemPromptModal({
               className="mt-1"
             />
             <p className="text-xs text-muted-foreground mt-1">
-              This system prompt will be used for this conversation only. It will override the global system prompt.
+              This system prompt will be used for this conversation only. 
             </p>
           </div>
         </div>
