@@ -98,30 +98,36 @@ export function ToolSelector({ tools, selectedToolIds, onToolsChange }: ToolSele
               )}
 
               {/* Grouped tools */}
-              {Object.entries(groupedTools).map(([category, categoryTools]) => (
-                <div key={category}>
-                  <div className="px-3 py-1.5 text-xs font-medium text-muted-foreground bg-muted/50 border-b border-border">
-                    {category}
-                  </div>
-                  {categoryTools.map((tool) => (
-                    <div
-                      key={tool.id}
-                      className="flex items-center gap-2 p-2 hover:bg-muted/50 rounded cursor-pointer"
-                      onClick={() => handleToolToggle(tool.id)}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedToolIds.includes(tool.id)}
-                        onChange={() => {}} // Handled by parent div click
-                        className="flex-shrink-0"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm truncate">{tool.name}</div>
-                      </div>
+              {Object.entries(groupedTools)
+                .sort(([a], [b]) => {
+                  if (a === 'Other') return 1;
+                  if (b === 'Other') return -1;
+                  return a.localeCompare(b);
+                })
+                .map(([category, categoryTools]) => (
+                  <div key={category}>
+                    <div className="px-3 py-1.5 text-xs font-medium text-muted-foreground bg-muted/50 border-b border-border">
+                      {category}
                     </div>
-                  ))}
-                </div>
-              ))}
+                    {categoryTools.map((tool) => (
+                      <div
+                        key={tool.id}
+                        className="flex items-center gap-2 p-2 hover:bg-muted/50 rounded cursor-pointer"
+                        onClick={() => handleToolToggle(tool.id)}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedToolIds.includes(tool.id)}
+                          onChange={() => {}} // Handled by parent div click
+                          className="flex-shrink-0"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm truncate">{tool.name}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ))}
             </div>
           )}
         </div>
