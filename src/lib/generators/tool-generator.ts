@@ -1,4 +1,5 @@
 import { APIConfig, ToolSchema } from '@/types'
+import { OpenAIClient } from '@/lib/clients'
 
 export interface GeneratedTool {
   name: string
@@ -8,12 +9,20 @@ export interface GeneratedTool {
 
 export class ToolGenerator {
   private config: APIConfig
+  private provider: string
 
-  constructor(config: APIConfig) {
+  constructor(config: APIConfig, provider: string) {
     this.config = config
+    this.provider = provider
   }
 
   async generateTool(prompt: string): Promise<GeneratedTool> {
+    if (!prompt.trim() || !this.config?.apiKey || !this.config?.endpoint) {
+      throw new Error('Invalid prompt or API configuration')
+    }
+
+    const client = new OpenAIClient(this.config, [], this.provider)
+
     const systemPrompt = `You are an expert at creating OpenAI function calling tools. Your task is to generate a tool definition based on the user's description.
 
 You must respond with a valid JSON object containing exactly these fields:
@@ -52,46 +61,25 @@ Important guidelines:
 
 Respond ONLY with the JSON object, no additional text or formatting.`
 
-    const requestBody = {
-      model: this.config.model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: prompt }
-      ],
-      temperature: 0.3, // Lower temperature for more consistent output
-      max_tokens: 2000,
-      stream: false
-    }
+    const messages = [
+      { id: 'system', role: 'system' as const, content: systemPrompt, timestamp: Date.now() },
+      { id: 'user', role: 'user' as const, content: prompt, timestamp: Date.now() }
+    ]
 
     try {
-      const response = await fetch(this.config.endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.config.apiKey}`,
-        },
-        body: JSON.stringify(requestBody),
-      })
+      const response = await client.chatCompletion(messages)
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(`API Error: ${response.status} - ${errorData.error?.message || response.statusText}`)
-      }
-
-      const data = await response.json()
-      const content = data.choices?.[0]?.message?.content
-
-      if (!content) {
+      if (!response) {
         throw new Error('No content received from API')
       }
 
       // Parse the JSON response
       let generatedTool: GeneratedTool
       try {
-        generatedTool = JSON.parse(content.trim())
+        generatedTool = JSON.parse(response.trim())
       } catch (parseError) {
         // Try to extract JSON from the response if it's wrapped in markdown or other text
-        const jsonMatch = content.match(/\{[\s\S]*\}/)
+        const jsonMatch = response.match(/\{[\s\S]*\}/)
         if (jsonMatch) {
           generatedTool = JSON.parse(jsonMatch[0])
         } else {

@@ -52,8 +52,13 @@ export default function HomePage() {
 
   const [reasoningDuration, setReasoningDuration] = useState<number | null>(null)
   const [scrollToBottomTrigger, setScrollToBottomTrigger] = useState(0)
+  const [forceScrollTrigger, setForceScrollTrigger] = useState<number>()
+  const [showAIMessageBox, setShowAIMessageBox] = useState(false)
   const abortControllerRef = useRef<AbortController | null>(null)
   const chatInputRef = useRef<ChatInputRef>(null)
+  const aiMessageTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const hasApiResponseStartedRef = useRef(false)
+  const isInitializedFromOverlayRef = useRef(false)
 
   // Tool selection for no-agent mode
   const [selectedToolIds, setSelectedToolIds] = useState<string[]>([])
@@ -318,6 +323,19 @@ export default function HomePage() {
     // Close the overlay immediately to show the chat interface
     setShowNewChatOverlay(false)
 
+    // 立即设置loading状态和AI消息框显示逻辑
+    setIsLoading(true)
+    setStreamingContent('')
+    setStreamingToolCalls([])
+    setShowAIMessageBox(false)
+    hasApiResponseStartedRef.current = false
+    isInitializedFromOverlayRef.current = true
+
+    // 500ms后显示AI消息框（如果API响应更快，会被API响应覆盖）
+    aiMessageTimeoutRef.current = setTimeout(() => {
+      setShowAIMessageBox(true)
+    }, 500)
+
     // Send the message - this will create the session with the first message
     await handleSendMessage(content, toolIds)
   }
@@ -551,6 +569,13 @@ export default function HomePage() {
     setIsLoading(true)
     setStreamingContent('')
     setStreamingToolCalls([])
+    setShowAIMessageBox(false)
+    hasApiResponseStartedRef.current = false
+
+    // 500ms后显示AI消息框
+    aiMessageTimeoutRef.current = setTimeout(() => {
+      setShowAIMessageBox(true)
+    }, 500)
 
     // Create new AbortController for this request
     abortControllerRef.current = new AbortController()
@@ -583,6 +608,19 @@ export default function HomePage() {
 
       // Stream the response
       for await (const chunk of client.streamChatCompletion(allMessages, abortControllerRef.current.signal)) {
+        // 一旦开始接收到响应，确保AI消息框显示（只在第一次响应时处理）
+        if (!hasApiResponseStartedRef.current) {
+          hasApiResponseStartedRef.current = true
+          if (!showAIMessageBox) {
+            setShowAIMessageBox(true)
+          }
+          // 清理timeout，因为我们已经有响应了
+          if (aiMessageTimeoutRef.current) {
+            clearTimeout(aiMessageTimeoutRef.current)
+            aiMessageTimeoutRef.current = null
+          }
+        }
+
         if (chunk.reasoningContent) {
           // 记录推理开始时间
           if (!localReasoningStartTime) {
@@ -754,6 +792,13 @@ export default function HomePage() {
       setIsLoading(false)
       setStreamingContent('')
       setStreamingToolCalls([])
+      setShowAIMessageBox(false)
+
+      // 清理AI消息框显示的timeout
+      if (aiMessageTimeoutRef.current) {
+        clearTimeout(aiMessageTimeoutRef.current)
+        aiMessageTimeoutRef.current = null
+      }
 
       // Focus input after tool conversation response is complete
       setTimeout(() => {
@@ -768,6 +813,9 @@ export default function HomePage() {
     if (!currentConfig.apiKey.trim() || !currentConfig.endpoint.trim()) {
       return
     }
+
+    // 用户发送消息时，强制滚动到底部并启用自动滚动
+    setForceScrollTrigger(Date.now())
 
     // Create a new session if none exists or if current session is not in sessions list (temporary session)
     let sessionId = currentSessionId
@@ -830,7 +878,7 @@ export default function HomePage() {
         try {
           const systemModelConfig = getSystemModelConfig()
           if (systemModelConfig) {
-            const titleGenerator = new TitleGenerator(systemModelConfig)
+            const titleGenerator = new TitleGenerator(systemModelConfig, systemModelConfig.provider)
             const newTitle = await titleGenerator.generateTitle(content)
 
             if (newTitle && newTitle !== 'New Conversation') {
@@ -859,9 +907,22 @@ export default function HomePage() {
       return
     }
 
-    setIsLoading(true)
-    setStreamingContent('')
-    setStreamingToolCalls([])
+    // 只有在不是从覆盖层初始化时才设置状态（避免与handleOverlaySendMessage重复设置）
+    if (!isInitializedFromOverlayRef.current) {
+      setIsLoading(true)
+      setStreamingContent('')
+      setStreamingToolCalls([])
+      setShowAIMessageBox(false)
+      hasApiResponseStartedRef.current = false
+
+      // 500ms后显示AI消息框
+      aiMessageTimeoutRef.current = setTimeout(() => {
+        setShowAIMessageBox(true)
+      }, 500)
+    }
+
+    // 重置覆盖层标志
+    isInitializedFromOverlayRef.current = false
 
     // Create new AbortController for this request
     abortControllerRef.current = new AbortController()
@@ -912,6 +973,19 @@ export default function HomePage() {
 
       // Stream the response - use the messages from the session including the new user message
       for await (const chunk of client.streamChatCompletion(allMessages, abortControllerRef.current.signal)) {
+        // 一旦开始接收到响应，确保AI消息框显示（只在第一次响应时处理）
+        if (!hasApiResponseStartedRef.current) {
+          hasApiResponseStartedRef.current = true
+          if (!showAIMessageBox) {
+            setShowAIMessageBox(true)
+          }
+          // 清理timeout，因为我们已经有响应了
+          if (aiMessageTimeoutRef.current) {
+            clearTimeout(aiMessageTimeoutRef.current)
+            aiMessageTimeoutRef.current = null
+          }
+        }
+
         if (chunk.reasoningContent) {
           // 记录推理开始时间
           if (!localReasoningStartTime) {
@@ -1094,8 +1168,15 @@ export default function HomePage() {
       setStreamingReasoningContent('')
       setStreamingToolCalls([])
       setIsStreamingReasoningExpanded(false)
+      setShowAIMessageBox(false)
 
       setReasoningDuration(null)
+
+      // 清理AI消息框显示的timeout
+      if (aiMessageTimeoutRef.current) {
+        clearTimeout(aiMessageTimeoutRef.current)
+        aiMessageTimeoutRef.current = null
+      }
 
       // Focus input after AI response is complete and tokens are displayed
       setTimeout(() => {
@@ -1285,6 +1366,13 @@ export default function HomePage() {
           setIsLoading(true)
           setStreamingContent('')
           setStreamingToolCalls([])
+          setShowAIMessageBox(false)
+          hasApiResponseStartedRef.current = false
+
+          // 500ms后显示AI消息框
+          aiMessageTimeoutRef.current = setTimeout(() => {
+            setShowAIMessageBox(true)
+          }, 500)
 
           // Create new AbortController for this request
           abortControllerRef.current = new AbortController()
@@ -1315,6 +1403,19 @@ export default function HomePage() {
 
           // Stream the response
           for await (const chunk of client.streamChatCompletion(allMessages, abortControllerRef.current.signal)) {
+            // 一旦开始接收到响应，确保AI消息框显示（只在第一次响应时处理）
+            if (!hasApiResponseStartedRef.current) {
+              hasApiResponseStartedRef.current = true
+              if (!showAIMessageBox) {
+                setShowAIMessageBox(true)
+              }
+              // 清理timeout，因为我们已经有响应了
+              if (aiMessageTimeoutRef.current) {
+                clearTimeout(aiMessageTimeoutRef.current)
+                aiMessageTimeoutRef.current = null
+              }
+            }
+
             if (chunk.reasoningContent) {
               // 记录推理开始时间
               if (!localReasoningStartTime) {
@@ -1480,6 +1581,13 @@ export default function HomePage() {
           setStreamingReasoningContent('')
           setStreamingToolCalls([])
           setIsStreamingReasoningExpanded(false)
+          setShowAIMessageBox(false)
+
+          // 清理AI消息框显示的timeout
+          if (aiMessageTimeoutRef.current) {
+            clearTimeout(aiMessageTimeoutRef.current)
+            aiMessageTimeoutRef.current = null
+          }
         }
       }
     }
@@ -1774,7 +1882,7 @@ export default function HomePage() {
         try {
           const systemModelConfig = getSystemModelConfig()
           if (systemModelConfig) {
-            const titleGenerator = new TitleGenerator(systemModelConfig)
+            const titleGenerator = new TitleGenerator(systemModelConfig, systemModelConfig.provider)
             const newTitle = await titleGenerator.generateTitle(newContent)
 
             if (newTitle && newTitle !== 'New Conversation') {
@@ -1801,6 +1909,13 @@ export default function HomePage() {
       setIsLoading(true)
       setStreamingContent('')
       setStreamingToolCalls([])
+      setShowAIMessageBox(false)
+      hasApiResponseStartedRef.current = false
+
+      // 500ms后显示AI消息框
+      aiMessageTimeoutRef.current = setTimeout(() => {
+        setShowAIMessageBox(true)
+      }, 500)
 
       // Create new AbortController for this request
       abortControllerRef.current = new AbortController()
@@ -1832,6 +1947,19 @@ export default function HomePage() {
 
       // Stream the response
       for await (const chunk of client.streamChatCompletion(allMessages, abortControllerRef.current.signal)) {
+        // 一旦开始接收到响应，确保AI消息框显示（只在第一次响应时处理）
+        if (!hasApiResponseStartedRef.current) {
+          hasApiResponseStartedRef.current = true
+          if (!showAIMessageBox) {
+            setShowAIMessageBox(true)
+          }
+          // 清理timeout，因为我们已经有响应了
+          if (aiMessageTimeoutRef.current) {
+            clearTimeout(aiMessageTimeoutRef.current)
+            aiMessageTimeoutRef.current = null
+          }
+        }
+
         if (chunk.reasoningContent) {
           // 记录推理开始时间
           if (!localReasoningStartTime) {
@@ -1997,6 +2125,13 @@ export default function HomePage() {
       setStreamingReasoningContent('')
       setStreamingToolCalls([])
       setIsStreamingReasoningExpanded(false)
+      setShowAIMessageBox(false)
+
+      // 清理AI消息框显示的timeout
+      if (aiMessageTimeoutRef.current) {
+        clearTimeout(aiMessageTimeoutRef.current)
+        aiMessageTimeoutRef.current = null
+      }
     }
   }
 
@@ -2134,6 +2269,7 @@ export default function HomePage() {
             <ChatMessages
               messages={currentSession?.messages || []}
               isLoading={isLoading}
+              showAIMessageBox={showAIMessageBox}
               streamingContent={streamingContent}
               streamingReasoningContent={streamingReasoningContent}
               isStreamingReasoningExpanded={isStreamingReasoningExpanded}
@@ -2145,6 +2281,7 @@ export default function HomePage() {
               currentAgent={currentAgentWithTools}
               tools={tools}
               scrollToBottomTrigger={scrollToBottomTrigger}
+              forceScrollTrigger={forceScrollTrigger}
               onProvideToolResult={handleProvideToolResult}
               onMarkToolFailed={handleMarkToolFailed}
               onRetryMessage={handleRetryMessage}

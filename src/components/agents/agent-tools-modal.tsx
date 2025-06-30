@@ -105,7 +105,7 @@ export function AgentToolsModal({ isOpen, onClose, agent, allTools, onSave, onTo
 
     setIsGeneratingTool(true)
     try {
-      const generator = new ToolGenerator(systemModelConfig)
+      const generator = new ToolGenerator(systemModelConfig, systemModelConfig.provider)
       const generatedTool = await generator.generateTool(prompt)
 
       // 填充到创建表单而不是直接创建

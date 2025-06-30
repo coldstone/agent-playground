@@ -147,7 +147,7 @@ export function AgentFormModal({
 
     setIsGeneratingTool(true)
     try {
-      const generator = new ToolGenerator(systemModelConfig)
+      const generator = new ToolGenerator(systemModelConfig, systemModelConfig.provider)
       const generatedTool = await generator.generateTool(prompt)
 
       // Close generator modal and open create tool modal with generated data

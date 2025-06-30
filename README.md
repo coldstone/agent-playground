@@ -50,9 +50,44 @@ A comprehensive development and debugging platform for AI Agents and Tools. Agen
 - **Error Handling**: Comprehensive error messages and debugging info
 - **Responsive Design**: Works on desktop and mobile devices
 
+### 🐳 Docker Support
+- **Easy Deployment**: Docker Compose for instant setup
+- **Development & Production**: Separate configurations for different environments
+- **Health Monitoring**: Built-in health checks
+
 ## 🚀 Quick Start
 
-### Option 1: Run with npx (Recommended)
+### Option 1: Docker (Recommended)
+
+```bash
+# Clone the repository
+git clone https://github.com/coldstone/agent-playground.git
+cd agent-playground
+
+# Start with Docker Compose
+docker-compose up -d
+```
+
+Open `http://localhost:3001` in your browser. That's it! 🎉
+
+### Docker Commands
+
+```bash
+# Development mode (with hot reload)
+docker-compose -f docker-compose.dev.yml up
+
+# Production mode
+docker-compose build
+docker-compose up
+
+# Test Docker configuration
+./scripts/test-docker.sh
+
+# Stop services
+docker-compose down
+```
+
+### Option 2: Run with npx (Node.js Required)
 
 ```bash
 npx agent-playground
@@ -60,14 +95,16 @@ npx agent-playground
 
 This command will automatically download and start Agent Playground on your local machine at `http://localhost:3001`.
 
-### Option 2: Global Installation
+### Option 3: Global Installation
 
 ```bash
 npm install -g agent-playground
 agent-playground
 ```
 
-### Option 3: Local Development
+
+
+### Option 4: Local Development
 
 ```bash
 git clone https://github.com/coldstone/agent-playground.git
@@ -78,8 +115,14 @@ npm run dev
 
 ## 📦 Installation Requirements
 
+### For npm/npx installation:
 - **Node.js**: Version 18.0.0 or higher
 - **npm**: Version 8.0.0 or higher (comes with Node.js)
+- **Modern Browser**: Chrome, Firefox, Safari, or Edge
+
+### For Docker installation:
+- **Docker**: Version 20.0.0 or higher
+- **Docker Compose**: Version 2.0.0 or higher (optional, for easier management)
 - **Modern Browser**: Chrome, Firefox, Safari, or Edge
 
 ## 🔧 Development Setup
@@ -155,6 +198,8 @@ npm run dev
 npm run build
 ```
 
+
+
 ### Linting
 ```bash
 npm run lint
@@ -164,6 +209,8 @@ npm run lint
 ```bash
 npx tsc --noEmit
 ```
+
+
 
 ## 📁 Project Structure
 
@@ -184,6 +231,13 @@ agent-playground/
 │   │   ├── storage/         # Data persistence layer
 │   └── types/               # TypeScript type definitions
 ├── bin/                     # Executable scripts
+├── scripts/                 # Build and deployment scripts
+│   └── test-docker.sh      # Docker test script
+├── Dockerfile               # Docker image configuration
+├── docker-compose.yml       # Docker Compose production configuration
+├── docker-compose.dev.yml  # Docker Compose development configuration
+├── .dockerignore           # Docker ignore file
+├── docker-healthcheck.js   # Docker health check script
 ```
 
 ## 📝 License
