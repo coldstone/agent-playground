@@ -6,6 +6,8 @@
 
 A comprehensive development and debugging platform for AI Agents and Tools. Agent Playground helps developers create, test, and debug AI agents powered by various Large Language Models (LLMs) with custom tools and API integrations.
 
+![Screenshot of Agent Playground](screenshot-0-agent-playground.png)
+
 ![Screenshot of Agent Playground](screenshot-agent-playground.png)
 
 ## ✨ Key Features

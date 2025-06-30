@@ -119,10 +119,11 @@ export function AgentInstructionModal({ isOpen, onClose, agent, onSave, apiConfi
                     Define how this agent should behave and respond to user messages.
                   </p>
                 </div>
-                {apiConfig?.apiKey && apiConfig?.endpoint && (
+                {hasSystemModel && (
                   <button
                     onClick={() => setShowAIGenerator(true)}
                     className="flex items-center gap-2 px-3 py-2 text-sm bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-md transition-all"
+                    disabled={!hasSystemModel}
                   >
                     <Sparkles className="w-4 h-4" />
                     AI Generate
