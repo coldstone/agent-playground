@@ -20,7 +20,7 @@ export class TitleGenerator {
 
       const systemPrompt = 'You are a title generator that uses user conversation language. Generate very short, concise titles (2-5 words) capturing the main topic. Return only the title, no quotes or extra text.'
 
-      const userPrompt = `Generate a very short title (no more than 8 words) that summarizes the topic or main point:
+      const userPrompt = `Generate a very short title (In user's language: Chinese no more than 15 characters; English no more than 5 words.) that summarizes the topic or main point:
 
 "${aiResponse.slice(0, 500)}"`
 

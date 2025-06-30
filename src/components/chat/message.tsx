@@ -8,7 +8,7 @@ import { MessageContent } from '@/components/markdown'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Tooltip } from '@/components/ui/tooltip'
-import { User, Bot, Settings, Wrench, RotateCcw, Trash2, Edit2, Check, X, Atom, Brain, Cpu, Zap, GanttChartSquare, SquareCode } from 'lucide-react'
+import { User, Bot, Settings, Wrench, RefreshCw, Trash2, Edit2, Check, X, Atom, Brain, Cpu, Zap, Text, Code, Copy } from 'lucide-react'
 
 interface MessageProps {
   message: MessageType | AgentMessage
@@ -42,6 +42,7 @@ export function Message({
   const [isEditing, setIsEditing] = useState(false)
   const [editContent, setEditContent] = useState(message.content)
   const [showMarkdown, setShowMarkdown] = useState(true)
+  const [isCopied, setIsCopied] = useState(false)
 
   const isUser = message.role === 'user'
   const isSystem = message.role === 'system'
@@ -71,6 +72,29 @@ export function Message({
       handleSaveEdit()
     } else if (e.key === 'Escape') {
       handleCancelEdit()
+    }
+  }
+
+  const handleCopyContent = async () => {
+    try {
+      let contentToCopy = message.content
+
+      // If showing markdown, copy the formatted content
+      // If showing raw text, copy the raw content
+      if (showMarkdown) {
+        // For markdown mode, we copy the raw markdown content
+        // Users can paste it and it will render as markdown elsewhere
+        contentToCopy = message.content
+      } else {
+        // For raw text mode, copy the raw content
+        contentToCopy = message.content
+      }
+
+      await navigator.clipboard.writeText(contentToCopy)
+      setIsCopied(true)
+      setTimeout(() => setIsCopied(false), 2000)
+    } catch (err) {
+      console.error('Failed to copy content: ', err)
     }
   }
 
@@ -138,6 +162,21 @@ export function Message({
 
           {/* Action buttons */}
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            {/* Copy button */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleCopyContent}
+              className="h-6 w-6 p-0 flex items-center justify-center flex-shrink-0"
+              title="Copy content"
+            >
+              {isCopied ? (
+                <Check className="w-3 h-3 flex-shrink-0 text-green-600" />
+              ) : (
+                <Copy className="w-3 h-3 flex-shrink-0" />
+              )}
+            </Button>
+
             {/* Markdown toggle button */}
             <Button
               variant="ghost"
@@ -147,9 +186,9 @@ export function Message({
               title={showMarkdown ? 'Show raw text' : 'Show markdown'}
             >
               {showMarkdown ? (
-                <SquareCode className="w-3 h-3 flex-shrink-0" />
+                <Code className="w-3 h-3 flex-shrink-0" />
               ) : (
-                <GanttChartSquare className="w-3 h-3 flex-shrink-0" />
+                <Text className="w-3 h-3 flex-shrink-0" />
               )}
             </Button>
 
@@ -181,7 +220,7 @@ export function Message({
                     : "Retry"
                 }
               >
-                <RotateCcw className="w-3 h-3 flex-shrink-0" />
+                <RefreshCw className="w-3 h-3 flex-shrink-0" />
               </Button>
             )}
 

@@ -36,12 +36,12 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(function ChatI
   onToolsChange
 }, ref) {
   const { message: input, setMessage: setInput, clearDraft } = useDraftMessage()
-  const { hasAvailableModels } = useAvailableModels()
+  const { hasAvailableModels, hasValidCurrentModel } = useAvailableModels()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (input.trim() && !isLoading && !disabled) {
+    if (input.trim() && !isLoading && !disabled && hasValidCurrentModel) {
       onSendMessage(input.trim(), selectedToolIds)
       clearDraft()
     }
@@ -93,8 +93,8 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(function ChatI
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={!hasAvailableModels ? "Please configure LLM first..." : "Type your message..."}
-            disabled={disabled || isLoading || !hasAvailableModels}
+            placeholder={!hasAvailableModels ? "Please configure LLM first..." : !hasValidCurrentModel ? "Please select a model..." : "Type your message..."}
+            disabled={disabled || isLoading || !hasValidCurrentModel}
             className="min-h-[60px] max-h-[200px] resize-none"
             rows={1}
           />
@@ -113,7 +113,7 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(function ChatI
           ) : (
             <Button
               type="submit"
-              disabled={!input.trim() || disabled || !hasAvailableModels}
+              disabled={!input.trim() || disabled || !hasValidCurrentModel}
               size="icon"
               className="h-[60px] w-12"
             >

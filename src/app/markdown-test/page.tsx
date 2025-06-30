@@ -129,7 +129,93 @@ npm install react-markdown remark-gfm remark-math rehype-highlight rehype-katex
 npm run dev
 \`\`\`
 
-That's all for now!`
+That's all for now!
+
+### Test Cases for Bug Fixes
+
+**一、本周工作内容：**
+
+1.
+2.
+3.
+
+**二、下周计划：**
+1. 完成项目A
+2. 开始项目B
+3.
+
+### Code Block Without Language
+
+\`\`\`
+function test() {
+  console.log("This should be rendered as plain text block")
+  return "not inline code"
+}
+\`\`\`
+
+### Another Test
+
+\`\`\`
+plain text without language specification
+should be rendered as a code block
+not as inline code
+\`\`\`
+
+### 用户报告的问题测试
+
+**一、本周工作内容：**
+
+1.
+2.
+3.
+
+这应该显示为粗体标题，然后下面是一个有序列表，而不是把数字显示在粗体后面。
+
+### 自动修复测试
+
+**三、问题测试：**
+1. 这个应该被自动修复
+2. 不需要手动添加空行
+3. 系统会自动处理
+
+**四、另一个测试：**
+1. 第一项
+2. 第二项
+
+### 无序列表测试
+
+**五、无序列表问题测试：**
+- 这个应该被自动修复
+- 不需要手动添加空行
+- 系统会自动处理
+
+**六、复杂示例：**
+- **免费额度**：每月100次请求
+- 特点：
+  - 支持多种货币
+  - API简单易用
+
+### 用户报告的具体问题
+
+是的，有多个**免费的汇率查询 API**可以使用：
+
+---
+
+### ✅ exchangerate-api.com
+
+**网站链接**：[exchangerate-api.com](https://www.exchangerate-api.com)
+- **免费额度**：每月100次请求
+- 特点：
+  - 支持多种货币
+  - 提供最新的汇率和历史汇率
+  - 支持货币转换
+
+### 另一个测试案例
+
+**API服务商推荐：**
+- 第一个选择
+- 第二个选择
+- 第三个选择`
 
 export default function MarkdownTestPage() {
   return (

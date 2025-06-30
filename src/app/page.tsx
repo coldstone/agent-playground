@@ -323,7 +323,6 @@ export default function HomePage() {
     // Close the overlay immediately to show the chat interface
     setShowNewChatOverlay(false)
 
-    // 立即设置loading状态和AI消息框显示逻辑
     setIsLoading(true)
     setStreamingContent('')
     setStreamingToolCalls([])
@@ -331,7 +330,6 @@ export default function HomePage() {
     hasApiResponseStartedRef.current = false
     isInitializedFromOverlayRef.current = true
 
-    // 500ms后显示AI消息框（如果API响应更快，会被API响应覆盖）
     aiMessageTimeoutRef.current = setTimeout(() => {
       setShowAIMessageBox(true)
     }, 500)
@@ -572,7 +570,6 @@ export default function HomePage() {
     setShowAIMessageBox(false)
     hasApiResponseStartedRef.current = false
 
-    // 500ms后显示AI消息框
     aiMessageTimeoutRef.current = setTimeout(() => {
       setShowAIMessageBox(true)
     }, 500)
@@ -608,13 +605,11 @@ export default function HomePage() {
 
       // Stream the response
       for await (const chunk of client.streamChatCompletion(allMessages, abortControllerRef.current.signal)) {
-        // 一旦开始接收到响应，确保AI消息框显示（只在第一次响应时处理）
         if (!hasApiResponseStartedRef.current) {
           hasApiResponseStartedRef.current = true
           if (!showAIMessageBox) {
             setShowAIMessageBox(true)
           }
-          // 清理timeout，因为我们已经有响应了
           if (aiMessageTimeoutRef.current) {
             clearTimeout(aiMessageTimeoutRef.current)
             aiMessageTimeoutRef.current = null
@@ -622,18 +617,15 @@ export default function HomePage() {
         }
 
         if (chunk.reasoningContent) {
-          // 记录推理开始时间
           if (!localReasoningStartTime) {
             localReasoningStartTime = Date.now()
           }
           reasoningContent += chunk.reasoningContent
           setStreamingReasoningContent(reasoningContent)
-          // 自动展开流式推理框并设置为活跃对话状态
           setIsStreamingReasoningExpanded(true)
           setIsInActiveConversation(true)
         }
         if (chunk.content) {
-          // 如果有推理内容且这是第一次接收到 content，计算思考时长
           if (reasoningContent && localReasoningStartTime && !localReasoningDuration) {
             localReasoningDuration = Date.now() - localReasoningStartTime
             setReasoningDuration(localReasoningDuration)
@@ -697,10 +689,6 @@ export default function HomePage() {
         tc.function?.arguments && tc.function.arguments.trim() !== ''
       )
 
-      // Debug logging
-      console.log('All tool calls:', toolCalls)
-      console.log('Complete tool calls:', completeToolCalls)
-
       // 流结束后，如果有推理内容，设置为非活跃状态以显示收起/展开按钮
       if (reasoningContent) {
         setIsInActiveConversation(false)
@@ -735,9 +723,13 @@ export default function HomePage() {
         setReasoningDuration(null)
 
         // Save the assistant message to the session
+        // Get the latest session data to preserve any title changes
+        const latestSessionData = await dbManager.getSession(sessionData.id)
+        const baseSessionData = latestSessionData || sessionData
+
         const finalUpdatedSession = {
-          ...sessionData,
-          messages: [...sessionData.messages, agentMessage],
+          ...baseSessionData,
+          messages: [...baseSessionData.messages, agentMessage],
           updatedAt: Date.now()
         }
 
@@ -773,9 +765,13 @@ export default function HomePage() {
         }
 
         // Save error message to session
+        // Get the latest session data to preserve any title changes
+        const latestSessionData = await dbManager.getSession(sessionData.id)
+        const baseSessionData = latestSessionData || sessionData
+
         const sessionWithError = {
-          ...sessionData,
-          messages: [...sessionData.messages, errorMessage],
+          ...baseSessionData,
+          messages: [...baseSessionData.messages, errorMessage],
           updatedAt: Date.now()
         }
 
@@ -814,7 +810,6 @@ export default function HomePage() {
       return
     }
 
-    // 用户发送消息时，强制滚动到底部并启用自动滚动
     setForceScrollTrigger(Date.now())
 
     // Create a new session if none exists or if current session is not in sessions list (temporary session)
@@ -873,34 +868,47 @@ export default function HomePage() {
         s.id === sessionId ? updatedSessionData : s
       ))
 
-      // Generate title from user's first message if session name is still "New Conversation"
+      // Start title generation in parallel (non-blocking) if session name is still "New Conversation"
       if (updatedSessionData.name === 'New Conversation' && content.trim()) {
-        try {
-          const systemModelConfig = getSystemModelConfig()
-          if (systemModelConfig) {
-            const titleGenerator = new TitleGenerator(systemModelConfig, systemModelConfig.provider)
-            const newTitle = await titleGenerator.generateTitle(content)
-
-            if (newTitle && newTitle !== 'New Conversation') {
-              const sessionWithTitle = {
-                ...updatedSessionData,
-                name: newTitle,
-                updatedAt: Date.now()
+        // Add 100ms delay before starting title generation as requested
+        setTimeout(() => {
+          // Completely isolate title generation to prevent any interference with AI responses
+          (async () => {
+            try {
+              const systemModelConfig = getSystemModelConfig()
+              if (!systemModelConfig) {
+                console.log('No system model configured, skipping title generation')
+                return
               }
 
-              await dbManager.saveSession(sessionWithTitle)
-              setSessions(prev => prev.map(s =>
-                s.id === sessionId ? sessionWithTitle : s
-              ))
+              const titleGenerator = new TitleGenerator(systemModelConfig, systemModelConfig.provider)
+              const newTitle = await titleGenerator.generateTitle(content)
 
-              // Update the current session data reference for the rest of the function
-              updatedSessionData = sessionWithTitle
+              if (newTitle && newTitle !== 'New Conversation') {
+                // Get the latest session data to avoid overwriting AI responses
+                const latestSession = await dbManager.getSession(sessionId)
+                if (latestSession && latestSession.name === 'New Conversation') {
+                  const sessionWithTitle = {
+                    ...latestSession,
+                    name: newTitle,
+                    updatedAt: Date.now()
+                  }
+
+                  await dbManager.saveSession(sessionWithTitle)
+                  setSessions(prev => prev.map(s =>
+                    s.id === sessionId ? sessionWithTitle : s
+                  ))
+                }
+              }
+            } catch (titleError) {
+              console.error('Failed to generate title from user message:', titleError)
+              // Title generation failure should never affect AI responses
             }
-          }
-        } catch (titleError) {
-          console.error('Failed to generate title from user message:', titleError)
-          // Don't fail the whole operation if title generation fails
-        }
+          })().catch(error => {
+            console.error('Title generation process failed:', error)
+            // Completely isolated error handling
+          })
+        }, 100)
       }
     } catch (error) {
       console.error('Failed to save user message:', error)
@@ -915,7 +923,6 @@ export default function HomePage() {
       setShowAIMessageBox(false)
       hasApiResponseStartedRef.current = false
 
-      // 500ms后显示AI消息框
       aiMessageTimeoutRef.current = setTimeout(() => {
         setShowAIMessageBox(true)
       }, 500)
@@ -951,14 +958,6 @@ export default function HomePage() {
       const systemPrompt = updatedSessionData.systemPrompt ||
                           (currentAgent ? currentAgent.systemPrompt : config.systemPrompt)
 
-      // Debug logging
-      console.log('=== System Prompt Debug ===')
-      console.log('currentAgentId:', currentAgentId)
-      console.log('currentAgent:', currentAgent)
-      console.log('currentAgent.systemPrompt:', currentAgent?.systemPrompt)
-      console.log('config.systemPrompt:', config.systemPrompt)
-      console.log('Final systemPrompt:', systemPrompt)
-      console.log('========================')
 
       const allMessages = systemPrompt.trim()
         ? [{ id: generateId(), role: 'system' as const, content: systemPrompt, timestamp: Date.now() }, ...messagesWithoutSystem]
@@ -993,12 +992,10 @@ export default function HomePage() {
           }
           reasoningContent += chunk.reasoningContent
           setStreamingReasoningContent(reasoningContent)
-          // 自动展开流式推理框并设置为活跃对话状态
           setIsStreamingReasoningExpanded(true)
           setIsInActiveConversation(true)
         }
         if (chunk.content) {
-          // 如果有推理内容且这是第一次接收到 content，计算思考时长
           if (reasoningContent && localReasoningStartTime && !localReasoningDuration) {
             localReasoningDuration = Date.now() - localReasoningStartTime
             setReasoningDuration(localReasoningDuration)
@@ -1032,7 +1029,6 @@ export default function HomePage() {
                 }
               }
             } else {
-              // First chunk with complete structure - create new tool call
               const completeToolCall: ToolCall = {
                 id: streamingToolCall.id || `call_${Date.now()}`,
                 type: 'function',
@@ -1042,7 +1038,6 @@ export default function HomePage() {
                 }
               }
 
-              // Insert at correct index or append
               if (streamingToolCall.index !== undefined) {
                 updatedToolCalls[streamingToolCall.index] = completeToolCall
               } else {
@@ -1052,26 +1047,18 @@ export default function HomePage() {
           }
 
           toolCalls = updatedToolCalls
-          // Show streaming tool calls immediately (with typing effect for arguments)
           setStreamingToolCalls([...updatedToolCalls])
         }
       }
 
-      // Filter out incomplete tool calls (those without arguments)
       const completeToolCalls = toolCalls.filter(tc =>
         tc.function?.arguments && tc.function.arguments.trim() !== ''
       )
 
-      // Debug logging
-      console.log('All tool calls:', toolCalls)
-      console.log('Complete tool calls:', completeToolCalls)
-
-      // 流结束后，如果有推理内容，设置为非活跃状态以显示收起/展开按钮
       if (reasoningContent) {
         setIsInActiveConversation(false)
       }
 
-      // Save the assistant message with tool calls only after streaming is complete
       if (assistantContent || completeToolCalls.length > 0) {
         const agentMessage: AgentMessage = {
           id: generateId(),
@@ -1101,9 +1088,13 @@ export default function HomePage() {
         setReasoningDuration(null)
 
         // Save the assistant message to the session
+        // Get the latest session data to preserve any title changes
+        const latestSessionData = await dbManager.getSession(sessionId)
+        const baseSessionData = latestSessionData || updatedSessionData
+
         const finalUpdatedSession = {
-          ...updatedSessionData,
-          messages: [...updatedSessionData.messages, agentMessage],
+          ...baseSessionData,
+          messages: [...baseSessionData.messages, agentMessage],
           updatedAt: Date.now()
         }
 
@@ -1146,9 +1137,13 @@ export default function HomePage() {
 
         // Save error message to session
         if (sessionId && updatedSessionData) {
+          // Get the latest session data to preserve any title changes
+          const latestSessionData = await dbManager.getSession(sessionId)
+          const baseSessionData = latestSessionData || updatedSessionData
+
           const sessionWithError = {
-            ...updatedSessionData,
-            messages: [...updatedSessionData.messages, errorMessage],
+            ...baseSessionData,
+            messages: [...baseSessionData.messages, errorMessage],
             updatedAt: Date.now()
           }
 
@@ -1366,13 +1361,8 @@ export default function HomePage() {
           setIsLoading(true)
           setStreamingContent('')
           setStreamingToolCalls([])
-          setShowAIMessageBox(false)
+          setShowAIMessageBox(true)
           hasApiResponseStartedRef.current = false
-
-          // 500ms后显示AI消息框
-          aiMessageTimeoutRef.current = setTimeout(() => {
-            setShowAIMessageBox(true)
-          }, 500)
 
           // Create new AbortController for this request
           abortControllerRef.current = new AbortController()
@@ -1403,13 +1393,11 @@ export default function HomePage() {
 
           // Stream the response
           for await (const chunk of client.streamChatCompletion(allMessages, abortControllerRef.current.signal)) {
-            // 一旦开始接收到响应，确保AI消息框显示（只在第一次响应时处理）
             if (!hasApiResponseStartedRef.current) {
               hasApiResponseStartedRef.current = true
               if (!showAIMessageBox) {
                 setShowAIMessageBox(true)
               }
-              // 清理timeout，因为我们已经有响应了
               if (aiMessageTimeoutRef.current) {
                 clearTimeout(aiMessageTimeoutRef.current)
                 aiMessageTimeoutRef.current = null
@@ -1417,18 +1405,15 @@ export default function HomePage() {
             }
 
             if (chunk.reasoningContent) {
-              // 记录推理开始时间
               if (!localReasoningStartTime) {
                 localReasoningStartTime = Date.now()
               }
               reasoningContent += chunk.reasoningContent
               setStreamingReasoningContent(reasoningContent)
-              // 自动展开流式推理框并设置为活跃对话状态
               setIsStreamingReasoningExpanded(true)
               setIsInActiveConversation(true)
             }
             if (chunk.content) {
-              // 如果有推理内容且这是第一次接收到 content，计算思考时长
               if (reasoningContent && localReasoningStartTime && !localReasoningDuration) {
                 localReasoningDuration = Date.now() - localReasoningStartTime
                 setReasoningDuration(localReasoningDuration)
@@ -1485,7 +1470,6 @@ export default function HomePage() {
             tc.function?.arguments && tc.function.arguments.trim() !== ''
           )
 
-          // 流结束后，如果有推理内容，设置为非活跃状态以显示收起/展开按钮
           if (reasoningContent) {
             setIsInActiveConversation(false)
           }
@@ -1519,9 +1503,13 @@ export default function HomePage() {
 
             setReasoningDuration(null)
 
+            // Get the latest session data to preserve any title changes
+            const latestSessionData = await dbManager.getSession(currentSessionId!)
+            const baseSessionData = latestSessionData || updatedSession
+
             const finalSession = {
-              ...updatedSession,
-              messages: [...updatedSession.messages, agentMessage],
+              ...baseSessionData,
+              messages: [...baseSessionData.messages, agentMessage],
               updatedAt: Date.now()
             }
 
@@ -1583,7 +1571,6 @@ export default function HomePage() {
           setIsStreamingReasoningExpanded(false)
           setShowAIMessageBox(false)
 
-          // 清理AI消息框显示的timeout
           if (aiMessageTimeoutRef.current) {
             clearTimeout(aiMessageTimeoutRef.current)
             aiMessageTimeoutRef.current = null
@@ -1876,35 +1863,51 @@ export default function HomePage() {
         s.id === currentSessionId ? sessionWithNewMessage : s
       ))
 
-      // Generate title from user's message if session name is still "New Conversation"
-      let finalSessionData = sessionWithNewMessage
+      // Start title generation in parallel (non-blocking) if session name is still "New Conversation"
       if (sessionWithNewMessage.name === 'New Conversation' && newContent.trim()) {
-        try {
-          const systemModelConfig = getSystemModelConfig()
-          if (systemModelConfig) {
-            const titleGenerator = new TitleGenerator(systemModelConfig, systemModelConfig.provider)
-            const newTitle = await titleGenerator.generateTitle(newContent)
-
-            if (newTitle && newTitle !== 'New Conversation') {
-              const sessionWithTitle = {
-                ...sessionWithNewMessage,
-                name: newTitle,
-                updatedAt: Date.now()
+        // Add 100ms delay before starting title generation as requested
+        setTimeout(() => {
+          // Completely isolate title generation to prevent any interference with AI responses
+          (async () => {
+            try {
+              const systemModelConfig = getSystemModelConfig()
+              if (!systemModelConfig) {
+                console.log('No system model configured, skipping title generation')
+                return
               }
 
-              await dbManager.saveSession(sessionWithTitle)
-              setSessions(prev => prev.map(s =>
-                s.id === currentSessionId ? sessionWithTitle : s
-              ))
+              const titleGenerator = new TitleGenerator(systemModelConfig, systemModelConfig.provider)
+              const newTitle = await titleGenerator.generateTitle(newContent)
 
-              finalSessionData = sessionWithTitle
+              if (newTitle && newTitle !== 'New Conversation') {
+                // Get the latest session data to avoid overwriting AI responses
+                const latestSession = await dbManager.getSession(currentSessionId!)
+                if (latestSession && latestSession.name === 'New Conversation') {
+                  const sessionWithTitle = {
+                    ...latestSession,
+                    name: newTitle,
+                    updatedAt: Date.now()
+                  }
+
+                  await dbManager.saveSession(sessionWithTitle)
+                  setSessions(prev => prev.map(s =>
+                    s.id === currentSessionId ? sessionWithTitle : s
+                  ))
+                }
+              }
+            } catch (titleError) {
+              console.error('Failed to generate title from edited message:', titleError)
+              // Title generation failure should never affect AI responses
             }
-          }
-        } catch (titleError) {
-          console.error('Failed to generate title from edited message:', titleError)
-          // Don't fail the whole operation if title generation fails
-        }
+          })().catch(error => {
+            console.error('Title generation process failed:', error)
+            // Completely isolated error handling
+          })
+        }, 100)
       }
+
+      // Use the session data without waiting for title generation
+      const finalSessionData = sessionWithNewMessage
 
       setIsLoading(true)
       setStreamingContent('')
@@ -1912,7 +1915,6 @@ export default function HomePage() {
       setShowAIMessageBox(false)
       hasApiResponseStartedRef.current = false
 
-      // 500ms后显示AI消息框
       aiMessageTimeoutRef.current = setTimeout(() => {
         setShowAIMessageBox(true)
       }, 500)
@@ -1947,13 +1949,11 @@ export default function HomePage() {
 
       // Stream the response
       for await (const chunk of client.streamChatCompletion(allMessages, abortControllerRef.current.signal)) {
-        // 一旦开始接收到响应，确保AI消息框显示（只在第一次响应时处理）
         if (!hasApiResponseStartedRef.current) {
           hasApiResponseStartedRef.current = true
           if (!showAIMessageBox) {
             setShowAIMessageBox(true)
           }
-          // 清理timeout，因为我们已经有响应了
           if (aiMessageTimeoutRef.current) {
             clearTimeout(aiMessageTimeoutRef.current)
             aiMessageTimeoutRef.current = null
@@ -1961,18 +1961,15 @@ export default function HomePage() {
         }
 
         if (chunk.reasoningContent) {
-          // 记录推理开始时间
           if (!localReasoningStartTime) {
             localReasoningStartTime = Date.now()
           }
           reasoningContent += chunk.reasoningContent
           setStreamingReasoningContent(reasoningContent)
-          // 自动展开流式推理框并设置为活跃对话状态
           setIsStreamingReasoningExpanded(true)
           setIsInActiveConversation(true)
         }
         if (chunk.content) {
-          // 如果有推理内容且这是第一次接收到 content，计算思考时长
           if (reasoningContent && localReasoningStartTime && !localReasoningDuration) {
             localReasoningDuration = Date.now() - localReasoningStartTime
             setReasoningDuration(localReasoningDuration)
@@ -2029,7 +2026,6 @@ export default function HomePage() {
         tc.function?.arguments && tc.function.arguments.trim() !== ''
       )
 
-      // 流结束后，如果有推理内容，设置为非活跃状态以显示收起/展开按钮
       if (reasoningContent) {
         setIsInActiveConversation(false)
       }
@@ -2063,9 +2059,13 @@ export default function HomePage() {
 
         setReasoningDuration(null)
 
+        // Get the latest session data to preserve any title changes
+        const latestSessionData = await dbManager.getSession(currentSessionId!)
+        const baseSessionData = latestSessionData || finalSessionData
+
         const finalSession = {
-          ...finalSessionData,
-          messages: [...finalSessionData.messages, agentMessage],
+          ...baseSessionData,
+          messages: [...baseSessionData.messages, agentMessage],
           updatedAt: Date.now()
         }
 
@@ -2237,7 +2237,7 @@ export default function HomePage() {
       />
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col min-w-[800px]">
+      <div className="flex-1 flex flex-col min-w-[600px]">
         {showNewChatOverlay ? (
           /* New Chat Overlay */
           <NewChatOverlay

@@ -30,7 +30,7 @@ export function NewChatOverlay({
   tools = []
 }: NewChatOverlayProps) {
   const { message, setMessage, clearDraft } = useDraftMessage()
-  const { hasAvailableModels } = useAvailableModels()
+  const { hasAvailableModels, hasValidCurrentModel } = useAvailableModels()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [selectedToolIds, setSelectedToolIds] = useState<string[]>([])
 
@@ -48,7 +48,7 @@ export function NewChatOverlay({
   }, [agents.length, shouldFocus]) // Re-focus when agents list changes or shouldFocus changes
 
   const handleSend = () => {
-    if (!message.trim() || !hasAvailableModels) return
+    if (!message.trim() || !hasValidCurrentModel) return
 
     onSendMessage(message, currentAgentId, !currentAgentId ? selectedToolIds : undefined)
 
@@ -133,8 +133,8 @@ export function NewChatOverlay({
             ref={textareaRef}
             value={message}
             onChange={(e) => setMessage(e.target.value)}
-            placeholder={!hasAvailableModels ? "Please configure LLM first..." : "Type your message..."}
-            disabled={!hasAvailableModels}
+            placeholder={!hasAvailableModels ? "Please configure LLM first..." : !hasValidCurrentModel ? "Please select a model..." : "Type your message..."}
+            disabled={!hasValidCurrentModel}
             className="w-full min-h-[100px] p-3 border border-border rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
@@ -157,7 +157,7 @@ export function NewChatOverlay({
             </div>
             <Button
               onClick={handleSend}
-              disabled={!message.trim() || !hasAvailableModels}
+              disabled={!message.trim() || !hasValidCurrentModel}
               size="sm"
               className="h-8"
             >

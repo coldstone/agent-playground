@@ -72,16 +72,18 @@ const MarkdownContentComponent = function MarkdownContent({ content, className =
             }
 
             const language = match ? match[1] : ''
-            const inline = !match
+            // 检查是否是代码块：有语言标识或者包含换行符
+            const isCodeBlock = match || codeString.includes('\n')
+            const inline = !isCodeBlock
 
             // 检查是否是 SVG 代码
             const isSvg = language === 'svg' || (language === 'xml' && codeString.trim().startsWith('<svg'))
 
-            return !inline && match ? (
+            return !inline ? (
               <div className="relative group my-4">
                 <div className="flex items-center justify-between bg-gray-800 text-gray-300 px-3 py-1.5 text-xs rounded-t-lg">
                   <span className="font-mono text-xs uppercase tracking-wide">
-                    {language}
+                    {language || 'plain'}
                   </span>
                   <button
                     onClick={() => copyToClipboard(codeString)}
