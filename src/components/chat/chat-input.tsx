@@ -4,16 +4,21 @@ import React, { useRef, useEffect, forwardRef, useImperativeHandle } from 'react
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { ModelSelector } from '@/components/ui/model-selector'
+import { ToolSelector } from '@/components/ui/tool-selector'
 import { Send, Square } from 'lucide-react'
 import { useDraftMessage } from '@/hooks/use-draft-message'
 import { useAvailableModels } from '@/hooks/use-available-models'
+import { Tool } from '@/types'
 
 interface ChatInputProps {
-  onSendMessage: (content: string) => void
+  onSendMessage: (content: string, selectedToolIds?: string[]) => void
   isLoading: boolean
   onStop?: () => void
   disabled?: boolean
   currentAgent?: { name: string } | null
+  tools?: Tool[]
+  selectedToolIds?: string[]
+  onToolsChange?: (toolIds: string[]) => void
 }
 
 export interface ChatInputRef {
@@ -25,7 +30,10 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(function ChatI
   isLoading,
   onStop,
   disabled,
-  currentAgent
+  currentAgent,
+  tools = [],
+  selectedToolIds = [],
+  onToolsChange
 }, ref) {
   const { message: input, setMessage: setInput, clearDraft } = useDraftMessage()
   const { hasAvailableModels } = useAvailableModels()
@@ -34,7 +42,7 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(function ChatI
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (input.trim() && !isLoading && !disabled) {
-      onSendMessage(input.trim())
+      onSendMessage(input.trim(), selectedToolIds)
       clearDraft()
     }
   }
@@ -117,7 +125,13 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(function ChatI
       <div className="mt-2 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <ModelSelector />
-          <span className='text-xs text-muted-foreground'>Press Enter to send, Shift+Enter for new line</span>
+          {!currentAgent && tools.length > 0 && onToolsChange && (
+            <ToolSelector
+              tools={tools}
+              selectedToolIds={selectedToolIds}
+              onToolsChange={onToolsChange}
+            />
+          )}
         </div>
       </div>
     </div>

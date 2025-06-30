@@ -12,7 +12,7 @@ import { AgentFormModal } from '@/components/agents'
 import { useSystemModel } from '@/hooks/use-system-model'
 
 
-import { ExportModal, ImportModal } from '@/components/modals'
+import { ExportModal, ImportModal, SystemPromptModal } from '@/components/modals'
 
 export default function HomePage() {
   // Create initial config with empty provider to avoid triggering saves
@@ -54,6 +54,12 @@ export default function HomePage() {
   const [scrollToBottomTrigger, setScrollToBottomTrigger] = useState(0)
   const abortControllerRef = useRef<AbortController | null>(null)
   const chatInputRef = useRef<ChatInputRef>(null)
+
+  // Tool selection for no-agent mode
+  const [selectedToolIds, setSelectedToolIds] = useState<string[]>([])
+
+  // System prompt modal
+  const [showSystemPromptModal, setShowSystemPromptModal] = useState(false)
 
   // 格式化思考时长
   const formatReasoningDuration = (durationMs: number) => {
@@ -297,9 +303,14 @@ export default function HomePage() {
     setShowNewChatOverlay(true)
   }
 
-  const handleOverlaySendMessage = async (content: string, agentId: string | null) => {
+  const handleOverlaySendMessage = async (content: string, agentId: string | null, toolIds?: string[]) => {
     // Set the current agent (but don't create session yet)
     setCurrentAgentId(agentId)
+
+    // Set selected tools for no-agent mode
+    if (!agentId && toolIds) {
+      setSelectedToolIds(toolIds)
+    }
 
     // Clear current session so handleSendMessage will create a new one
     setCurrentSessionId(null)
@@ -308,7 +319,7 @@ export default function HomePage() {
     setShowNewChatOverlay(false)
 
     // Send the message - this will create the session with the first message
-    await handleSendMessage(content)
+    await handleSendMessage(content, toolIds)
   }
 
   const deleteSession = async (sessionId: string) => {
@@ -750,7 +761,7 @@ export default function HomePage() {
     }
   }
 
-  const handleSendMessage = async (content: string) => {
+  const handleSendMessage = async (content: string, toolIds?: string[]) => {
     // Get complete config for current model to check if it's properly configured
     const currentConfig = getCurrentModelConfig()
     if (!currentConfig.apiKey.trim() || !currentConfig.endpoint.trim()) {
@@ -768,7 +779,9 @@ export default function HomePage() {
         messages: [],
         createdAt: Date.now(),
         updatedAt: Date.now(),
-        agentId: currentAgentId || undefined // Include the current agent ID
+        agentId: currentAgentId || undefined, // Include the current agent ID
+        toolIds: !currentAgentId && toolIds ? toolIds : undefined, // Include tools for no-agent mode
+        systemPrompt: !currentAgentId ? config.systemPrompt : undefined // Use LLM config system prompt for no-agent mode
       }
 
       // Now save to IndexedDB and add to sessions list when user sends first message
@@ -853,20 +866,28 @@ export default function HomePage() {
     abortControllerRef.current = new AbortController()
 
     try {
-      // Get tools for agent mode
-      const agentTools = currentAgentWithTools ? currentAgentWithTools.tools : []
+      // Get tools for agent mode or no-agent mode
+      let availableTools: Tool[] = []
+      if (currentAgentWithTools) {
+        // Agent mode: use agent's tools
+        availableTools = currentAgentWithTools.tools
+      } else {
+        // No-agent mode: use selected tools from session or current selection
+        const sessionToolIds = updatedSessionData.toolIds || toolIds || []
+        availableTools = tools.filter(tool => sessionToolIds.includes(tool.id))
+      }
 
       // Get complete config for current model (includes correct endpoint and API key)
       const currentConfig = getCurrentModelConfig()
 
-      const client = new OpenAIClient(currentConfig, agentTools, currentConfig.provider)
+      const client = new OpenAIClient(currentConfig, availableTools, currentConfig.provider)
 
       // Filter out any existing system messages from history to avoid conflicts
       const messagesWithoutSystem = updatedSessionData.messages.filter(m => m.role !== 'system')
 
-      // Use agent system prompt if in agent mode, otherwise use config system prompt
-      // When agent is selected, ONLY use agent's system prompt, ignore config system prompt
-      const systemPrompt = currentAgent ? currentAgent.systemPrompt : config.systemPrompt
+      // Use session system prompt, agent system prompt, or config system prompt
+      const systemPrompt = updatedSessionData.systemPrompt ||
+                          (currentAgent ? currentAgent.systemPrompt : config.systemPrompt)
 
       // Debug logging
       console.log('=== System Prompt Debug ===')
@@ -1128,6 +1149,29 @@ export default function HomePage() {
     setIsStreamingReasoningExpanded(false)
 
     setReasoningDuration(null)
+  }
+
+  // System prompt handlers
+  const handleSystemPromptSave = async (prompt: string) => {
+    if (!currentSessionId) return
+
+    const session = sessions.find(s => s.id === currentSessionId)
+    if (!session) return
+
+    const updatedSession = {
+      ...session,
+      systemPrompt: prompt.trim() || undefined,
+      updatedAt: Date.now()
+    }
+
+    try {
+      await dbManager.saveSession(updatedSession)
+      setSessions(prev => prev.map(s =>
+        s.id === currentSessionId ? updatedSession : s
+      ))
+    } catch (error) {
+      console.error('Failed to save system prompt:', error)
+    }
   }
 
   // Tool execution handlers
@@ -2019,6 +2063,7 @@ export default function HomePage() {
             onCreateAgent={() => setShowAgentModal(true)}
             onAgentSelect={setCurrentAgentId}
             shouldFocus={showNewChatOverlay}
+            tools={tools}
           />
         ) : (
           <>
@@ -2033,6 +2078,7 @@ export default function HomePage() {
               onAgentInstructionUpdate={handleAgentInstructionUpdate}
               onAgentToolsUpdate={handleAgentToolsUpdate}
               onCreateAgent={() => setShowAgentModal(true)}
+              onSystemPromptEdit={() => setShowSystemPromptModal(true)}
             />
 
             {/* Messages */}
@@ -2067,6 +2113,9 @@ export default function HomePage() {
               onStop={handleStop}
               disabled={!isConfigured}
               currentAgent={currentAgentWithTools}
+              tools={tools}
+              selectedToolIds={selectedToolIds}
+              onToolsChange={setSelectedToolIds}
             />
           </>
         )}
@@ -2112,6 +2161,13 @@ export default function HomePage() {
         onImport={handleImport}
         existingAgents={agents}
         existingTools={tools}
+      />
+
+      <SystemPromptModal
+        isOpen={showSystemPromptModal}
+        onClose={() => setShowSystemPromptModal(false)}
+        initialPrompt={currentSession?.systemPrompt || config.systemPrompt}
+        onSave={handleSystemPromptSave}
       />
     </div>
   )

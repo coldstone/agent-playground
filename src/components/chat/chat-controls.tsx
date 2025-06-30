@@ -16,6 +16,7 @@ interface ChatControlsProps {
   onAgentInstructionUpdate: (agentId: string, instruction: string) => void
   onAgentToolsUpdate: (agentId: string, toolIds: string[]) => void
   onCreateAgent: () => void
+  onSystemPromptEdit?: () => void
 }
 
 export function ChatControls({
@@ -27,7 +28,8 @@ export function ChatControls({
   onAgentSelect,
   onAgentInstructionUpdate,
   onAgentToolsUpdate,
-  onCreateAgent
+  onCreateAgent,
+  onSystemPromptEdit
 }: ChatControlsProps) {
   const [showInstructionModal, setShowInstructionModal] = useState(false)
   const [showToolsModal, setShowToolsModal] = useState(false)
@@ -51,11 +53,11 @@ export function ChatControls({
             {/* Agent Info */}
             <div className="flex items-center gap-3">
               {currentAgent ? (
-                <div className="flex items-start gap-2">
+                <div className="flex items-center gap-2">
                   <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
                     <Bot className="w-4 h-4 text-primary" />
                   </div>
-                  <div className="min-w-0">
+                  <div>
                     <h3 className="font-medium text-base">{currentAgent.name}</h3>
                     <p className="text-xs mt-1 text-muted-foreground">{currentAgent.description}</p>
                   </div>
@@ -67,7 +69,7 @@ export function ChatControls({
                   </div>
                   <div>
                     <h3 className="font-medium text-base">No Agent</h3>
-                    <p className="text-xs mt-1 text-muted-foreground">Configure an agent to get started</p>
+                    <p className="text-xs mt-1 text-muted-foreground">You can freely write system prompts and freely choose tools during the conversation</p>
                   </div>
                 </div>
               )}
@@ -75,7 +77,7 @@ export function ChatControls({
 
             {/* Agent Controls */}
             <div className="flex items-center gap-2">
-              {currentAgent && (
+              {currentAgent ? (
                 <>
                   {/* Instruction Button */}
                   <Button
@@ -99,6 +101,19 @@ export function ChatControls({
                     {getToolButtonText()}
                   </Button>
                 </>
+              ) : (
+                onSystemPromptEdit && (
+                  /* System Prompt Button for No Agent mode */
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={onSystemPromptEdit}
+                    className="flex items-center gap-1 text-xs"
+                  >
+                    <BookUser className="w-3 h-3" />
+                    System Prompt
+                  </Button>
+                )
               )}
             </div>
           </div>

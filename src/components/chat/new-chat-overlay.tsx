@@ -1,9 +1,10 @@
 'use client'
 
-import React, { useRef, useEffect } from 'react'
-import { Agent } from '@/types'
+import React, { useRef, useEffect, useState } from 'react'
+import { Agent, Tool } from '@/types'
 import { Button } from '@/components/ui/button'
 import { ModelSelector } from '@/components/ui/model-selector'
+import { ToolSelector } from '@/components/ui/tool-selector'
 import { Plus, Send } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useDraftMessage } from '@/hooks/use-draft-message'
@@ -12,10 +13,11 @@ import { useAvailableModels } from '@/hooks/use-available-models'
 interface NewChatOverlayProps {
   agents: Agent[]
   currentAgentId: string | null
-  onSendMessage: (content: string, agentId: string | null) => void
+  onSendMessage: (content: string, agentId: string | null, toolIds?: string[]) => void
   onCreateAgent: () => void
   onAgentSelect: (agentId: string | null) => void
   shouldFocus?: boolean
+  tools?: Tool[]
 }
 
 export function NewChatOverlay({
@@ -24,11 +26,13 @@ export function NewChatOverlay({
   onSendMessage,
   onCreateAgent,
   onAgentSelect,
-  shouldFocus = true
+  shouldFocus = true,
+  tools = []
 }: NewChatOverlayProps) {
   const { message, setMessage, clearDraft } = useDraftMessage()
   const { hasAvailableModels } = useAvailableModels()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const [selectedToolIds, setSelectedToolIds] = useState<string[]>([])
 
   // Focus on textarea when component mounts, when agents change, or when shouldFocus changes
   useEffect(() => {
@@ -46,7 +50,7 @@ export function NewChatOverlay({
   const handleSend = () => {
     if (!message.trim() || !hasAvailableModels) return
 
-    onSendMessage(message, currentAgentId)
+    onSendMessage(message, currentAgentId, !currentAgentId ? selectedToolIds : undefined)
 
     // Clear draft from localStorage after sending
     clearDraft()
@@ -143,9 +147,13 @@ export function NewChatOverlay({
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-4">
               <ModelSelector />
-              <div className="text-xs text-muted-foreground">
-                Press Enter to send, Shift+Enter for new line
-              </div>
+              {!currentAgentId && tools.length > 0 && (
+                <ToolSelector
+                  tools={tools}
+                  selectedToolIds={selectedToolIds}
+                  onToolsChange={setSelectedToolIds}
+                />
+              )}
             </div>
             <Button
               onClick={handleSend}

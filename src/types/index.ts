@@ -18,6 +18,8 @@ export interface ChatSession {
   createdAt: number;
   updatedAt: number;
   agentId?: string; // The agent used in this session
+  toolIds?: string[]; // Tools selected for no-agent mode
+  systemPrompt?: string; // Custom system prompt for this session
 }
 
 export interface APIConfig {
