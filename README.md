@@ -6,6 +6,8 @@
 
 A comprehensive development and debugging platform for AI Agents and Tools. Agent Playground helps developers create, test, and debug AI agents powered by various Large Language Models (LLMs) with custom tools and API integrations.
 
+![Screenshot of Agent Playground](screenshot-0-agent-playground.png)
+
 ![Screenshot of Agent Playground](screenshot-agent-playground.png)
 
 ## ✨ Key Features
@@ -14,7 +16,6 @@ A comprehensive development and debugging platform for AI Agents and Tools. Agen
 - **Agent Management**: Create and configure multiple AI agents with custom instructions
 - **Agent Templates**: Pre-built agent templates for common use cases
 - **AI-Powered Generation**: Generate agent instructions using AI assistance
-- **Multi-Language Support**: Generate instructions in user's preferred language
 
 ### 🛠️ Advanced Tool System
 - **Custom Tool Creation**: Build tools with JSON schema definitions
@@ -38,15 +39,18 @@ A comprehensive development and debugging platform for AI Agents and Tools. Agen
 - **Tool Call Execution**: Watch agents use tools in real-time
 - **Token Usage Tracking**: Monitor API costs and usage statistics
 - **Model Information**: Display provider and model info for each response
-- **Message Management**: Edit, retry, and delete messages
+- **Message Management**: Markdown supported and copy, edit, retry, and delete messages
 - **Session Management**: Multiple chat sessions with auto-save
 
 ### 🔧 Developer-Friendly Features
 - **Local Storage**: All data stored locally in browser (IndexedDB)
 - **Import/Export**: Backup and share agent/tool configurations
 - **Hot Reload**: Instant updates during development
-- **Error Handling**: Comprehensive error messages and debugging info
-- **Responsive Design**: Works on desktop and mobile devices
+
+### 🐳 Docker Support
+- **Easy Deployment**: Docker Compose for instant setup
+- **Development & Production**: Separate configurations for different environments
+- **Health Monitoring**: Built-in health checks
 
 ## 🚀 Quick Start
 
@@ -58,14 +62,46 @@ npx agent-playground
 
 This command will automatically download and start Agent Playground on your local machine at `http://localhost:3001`.
 
-### Option 2: Global Installation
+### Option 2: Docker
+
+```bash
+# Clone the repository
+git clone https://github.com/coldstone/agent-playground.git
+cd agent-playground
+
+# Start with Docker Compose
+docker-compose up -d
+```
+
+Open `http://localhost:3001` in your browser. That's it! 🎉
+
+### Docker Commands
+
+```bash
+# Development mode (with hot reload)
+docker-compose -f docker-compose.dev.yml up
+
+# Production mode
+docker-compose build
+docker-compose up
+
+# Test Docker configuration
+./scripts/test-docker.sh
+
+# Stop services
+docker-compose down
+```
+
+### Option 3: Global Installation
 
 ```bash
 npm install -g agent-playground
 agent-playground
 ```
 
-### Option 3: Local Development
+
+
+### Option 4: Local Development
 
 ```bash
 git clone https://github.com/coldstone/agent-playground.git
@@ -76,8 +112,14 @@ npm run dev
 
 ## 📦 Installation Requirements
 
+### For npm/npx installation:
 - **Node.js**: Version 18.0.0 or higher
 - **npm**: Version 8.0.0 or higher (comes with Node.js)
+- **Modern Browser**: Chrome, Firefox, Safari, or Edge
+
+### For Docker installation:
+- **Docker**: Version 20.0.0 or higher
+- **Docker Compose**: Version 2.0.0 or higher (optional, for easier management)
 - **Modern Browser**: Chrome, Firefox, Safari, or Edge
 
 ## 🔧 Development Setup
@@ -135,7 +177,7 @@ npm start
 5. Test tools manually before assigning to agents
 
 ### 4. Start Debugging
-1. Select an agent from the dropdown
+1. Select an agent from the welcome page
 2. Start a conversation to test agent behavior
 3. Watch tool calls execute in real-time
 4. Monitor token usage and API costs
@@ -153,6 +195,8 @@ npm run dev
 npm run build
 ```
 
+
+
 ### Linting
 ```bash
 npm run lint
@@ -163,25 +207,36 @@ npm run lint
 npx tsc --noEmit
 ```
 
+
+
 ## 📁 Project Structure
 
 ```
 agent-playground/
+├── public/                  # Static assets and icons
 ├── src/
 │   ├── app/                 # Next.js app directory
+│   │   ├── api/             # API routes
+│   │   ├── debug/           # Debug pages
+│   │   └── markdown-test/   # Markdown testing page
 │   ├── components/          # React components
 │   │   ├── agents/          # Agent management components
 │   │   ├── chat/            # Chat interface components
 │   │   ├── config/          # Configuration components
+│   │   ├── layout/          # Layout components
+│   │   ├── markdown/        # Markdown rendering components
 │   │   ├── modals/          # Modal dialog components
 │   │   ├── tools/           # Tool management components
-│   │   ├── ui/              # Reusable UI components
+│   │   └── ui/              # Reusable UI components
+│   ├── hooks/               # Custom React hooks
 │   ├── lib/                 # Utility libraries and services
 │   │   ├── clients/         # API client implementations
 │   │   ├── generators/      # AI-powered generators
-│   │   ├── storage/         # Data persistence layer
+│   │   └── storage/         # Data persistence layer
+│   ├── styles/              # CSS and styling files
 │   └── types/               # TypeScript type definitions
 ├── bin/                     # Executable scripts
+└── scripts/                 # Build and deployment scripts
 ```
 
 ## 📝 License

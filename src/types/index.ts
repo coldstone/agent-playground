@@ -18,6 +18,8 @@ export interface ChatSession {
   createdAt: number;
   updatedAt: number;
   agentId?: string; // The agent used in this session
+  toolIds?: string[]; // Tools selected for no-agent mode
+  systemPrompt?: string; // Custom system prompt for this session
 }
 
 export interface APIConfig {
@@ -49,6 +51,18 @@ export interface ModelProvider {
   requiresApiKey: boolean;
   docsLink: string;
   client: 'openai' | 'anthropic';
+}
+
+export interface AvailableModel {
+  id: string; // unique identifier: `${provider}-${model}`
+  provider: string;
+  model: string;
+  displayName: string; // for UI display
+}
+
+export interface CurrentModel {
+  provider: string;
+  model: string;
 }
 
 export interface ChatCompletionRequest {
@@ -104,6 +118,7 @@ export interface Tool {
   description: string;
   schema: ToolSchema;
   httpRequest?: HTTPRequestConfig;
+  tag?: string; // 工具分类标签
   createdAt: number;
   updatedAt: number;
 }
@@ -127,6 +142,7 @@ export interface Agent {
   description: string;
   systemPrompt: string;
   tools: string[]; // Store tool IDs instead of full Tool objects
+  order?: number; // For drag and drop ordering
   createdAt: number;
   updatedAt: number;
 }

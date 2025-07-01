@@ -1,16 +1,25 @@
 'use client'
 
-import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react'
+import React, { useRef, useEffect, forwardRef, useImperativeHandle } from 'react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { Send, Square, Bot } from 'lucide-react'
+import { ModelSelector } from '@/components/ui/model-selector'
+import { ToolSelector } from '@/components/ui/tool-selector'
+import { Send, Square } from 'lucide-react'
+import { useDraftMessage } from '@/hooks/use-draft-message'
+import { useAvailableModels } from '@/hooks/use-available-models'
+import { Tool } from '@/types'
 
 interface ChatInputProps {
-  onSendMessage: (content: string) => void
+  onSendMessage: (content: string, selectedToolIds?: string[]) => void
   isLoading: boolean
   onStop?: () => void
   disabled?: boolean
+  disabledReason?: string
   currentAgent?: { name: string } | null
+  tools?: Tool[]
+  selectedToolIds?: string[]
+  onToolsChange?: (toolIds: string[]) => void
 }
 
 export interface ChatInputRef {
@@ -22,16 +31,21 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(function ChatI
   isLoading,
   onStop,
   disabled,
-  currentAgent
+  disabledReason,
+  currentAgent,
+  tools = [],
+  selectedToolIds = [],
+  onToolsChange
 }, ref) {
-  const [input, setInput] = useState('')
+  const { message: input, setMessage: setInput, clearDraft } = useDraftMessage()
+  const { hasAvailableModels, hasValidCurrentModel } = useAvailableModels()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (input.trim() && !isLoading && !disabled) {
-      onSendMessage(input.trim())
-      setInput('')
+    if (input.trim() && !isLoading && !disabled && hasValidCurrentModel) {
+      onSendMessage(input.trim(), selectedToolIds)
+      clearDraft()
     }
   }
 
@@ -81,8 +95,13 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(function ChatI
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={disabled ? "Configure your LLM settings to start chatting..." : "Type your message..."}
-            disabled={disabled || isLoading}
+            placeholder={
+              !hasAvailableModels ? "Please configure LLM first..." :
+              !hasValidCurrentModel ? "Please select a model..." :
+              disabledReason ? disabledReason :
+              "Type your message..."
+            }
+            disabled={disabled || isLoading || !hasValidCurrentModel}
             className="min-h-[60px] max-h-[200px] resize-none"
             rows={1}
           />
@@ -101,7 +120,7 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(function ChatI
           ) : (
             <Button
               type="submit"
-              disabled={!input.trim() || disabled}
+              disabled={!input.trim() || disabled || !hasValidCurrentModel}
               size="icon"
               className="h-[60px] w-12"
             >
@@ -111,14 +130,15 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(function ChatI
         </div>
       </form>
       <div className="mt-2 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          {currentAgent && (
-            <span className="inline-flex items-center gap-1 px-2 py-1 bg-primary/10 text-primary rounded-full text-xs">
-              <Bot className="w-3 h-3" />
-              Agent Mode: {currentAgent.name}
-            </span>
+        <div className="flex items-center gap-4">
+          <ModelSelector />
+          {!currentAgent && tools.length > 0 && onToolsChange && (
+            <ToolSelector
+              tools={tools}
+              selectedToolIds={selectedToolIds}
+              onToolsChange={onToolsChange}
+            />
           )}
-          <span className='text-xs text-muted-foreground'>Press Enter to send, Shift+Enter for new line</span>
         </div>
       </div>
     </div>

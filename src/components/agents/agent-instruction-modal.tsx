@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react'
 import { Agent, APIConfig } from '@/types'
 import { X, BookUser, Save, Sparkles, Wand2 } from 'lucide-react'
 import { InstructionGenerator } from '@/lib/generators'
+import { useSystemModel } from '@/hooks/use-system-model'
 
 interface AgentInstructionModalProps {
   isOpen: boolean
@@ -14,6 +15,7 @@ interface AgentInstructionModalProps {
 }
 
 export function AgentInstructionModal({ isOpen, onClose, agent, onSave, apiConfig }: AgentInstructionModalProps) {
+  const { hasSystemModel, getSystemModelConfig } = useSystemModel()
   const [instruction, setInstruction] = useState('')
   const [isSaving, setIsSaving] = useState(false)
   const [showAIGenerator, setShowAIGenerator] = useState(false)
@@ -49,7 +51,13 @@ export function AgentInstructionModal({ isOpen, onClose, agent, onSave, apiConfi
   }
 
   const handleGenerateInstruction = async () => {
-    if (!aiPrompt.trim() || !apiConfig?.apiKey || !apiConfig?.endpoint) {
+    if (!aiPrompt.trim() || !hasSystemModel) {
+      return
+    }
+
+    const systemModelConfig = getSystemModelConfig()
+    if (!systemModelConfig) {
+      alert('Please configure System Model first')
       return
     }
 
@@ -58,7 +66,7 @@ export function AgentInstructionModal({ isOpen, onClose, agent, onSave, apiConfi
     setInstruction('')
 
     try {
-      const generator = new InstructionGenerator(apiConfig, apiConfig.provider)
+      const generator = new InstructionGenerator(systemModelConfig, systemModelConfig.provider)
 
       let generatedContent = ''
       for await (const chunk of generator.generateInstruction(aiPrompt)) {
@@ -111,10 +119,11 @@ export function AgentInstructionModal({ isOpen, onClose, agent, onSave, apiConfi
                     Define how this agent should behave and respond to user messages.
                   </p>
                 </div>
-                {apiConfig?.apiKey && apiConfig?.endpoint && (
+                {hasSystemModel && (
                   <button
                     onClick={() => setShowAIGenerator(true)}
                     className="flex items-center gap-2 px-3 py-2 text-sm bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-md transition-all"
+                    disabled={!hasSystemModel}
                   >
                     <Sparkles className="w-4 h-4" />
                     AI Generate
@@ -158,7 +167,7 @@ export function AgentInstructionModal({ isOpen, onClose, agent, onSave, apiConfi
                   <div className="flex gap-2">
                     <button
                       onClick={handleGenerateInstruction}
-                      disabled={!aiPrompt.trim() || isGenerating}
+                      disabled={!aiPrompt.trim() || isGenerating || !hasSystemModel}
                       className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                     >
                       {isGenerating ? (

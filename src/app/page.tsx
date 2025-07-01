@@ -1,18 +1,18 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react'
-import { APIConfig, Message, ChatSession, Agent, Tool, AgentMessage, ToolCall, ToolCallExecution } from '@/types'
+import { APIConfig, Message, ChatSession, Agent, Tool, AgentMessage, ToolCall } from '@/types'
 import { DEFAULT_CONFIG, MODEL_PROVIDERS, generateId } from '@/lib'
 import { OpenAIClient } from '@/lib/clients'
 import { TitleGenerator } from '@/lib/generators'
 import { IndexedDBManager } from '@/lib/storage'
-import { APIConfig as APIConfigPanel } from '@/components/config'
-import { ChatMessages, ChatInput, ChatInputRef, ChatControls, SessionManager } from '@/components/chat'
-import { AgentModal } from '@/components/agents'
-import { ToolModal } from '@/components/tools'
-import { ExportModal, ImportModal } from '@/components/modals'
-import { Button, Tooltip } from '@/components/ui'
-import { Download, Upload, Bot, Wrench, BrainCircuit } from 'lucide-react'
+import { AccordionPanel } from '@/components/config'
+import { ChatMessages, ChatInput, ChatInputRef, ChatControls, SessionManager, NewChatOverlay } from '@/components/chat'
+import { AgentFormModal } from '@/components/agents'
+import { useSystemModel } from '@/hooks/use-system-model'
+
+
+import { ExportModal, ImportModal, SystemPromptModal } from '@/components/modals'
 
 export default function HomePage() {
   // Create initial config with empty provider to avoid triggering saves
@@ -36,18 +36,36 @@ export default function HomePage() {
   const [currentAgentId, setCurrentAgentId] = useState<string | null>(null)
   const [tools, setTools] = useState<Tool[]>([])
   const [dbManager] = useState(() => IndexedDBManager.getInstance())
-  const [isDataLoaded, setIsDataLoaded] = useState(false)
+
+  const [isMounted, setIsMounted] = useState(false)
   const [showAgentModal, setShowAgentModal] = useState(false)
-  const [showToolModal, setShowToolModal] = useState(false)
+
   const [showExportModal, setShowExportModal] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
+  const [showNewChatOverlay, setShowNewChatOverlay] = useState(true) // Start with overlay visible
+
+  // System Model hook for AI generation
+  const { getSystemModelConfig } = useSystemModel()
   const [expandedReasoningMessages, setExpandedReasoningMessages] = useState<Set<string>>(new Set())
   const [isStreamingReasoningExpanded, setIsStreamingReasoningExpanded] = useState(false)
   const [isInActiveConversation, setIsInActiveConversation] = useState(false)
-  const [reasoningStartTime, setReasoningStartTime] = useState<number | null>(null)
+
   const [reasoningDuration, setReasoningDuration] = useState<number | null>(null)
+  const [scrollToBottomTrigger, setScrollToBottomTrigger] = useState(0)
+  const [scrollToTopTrigger, setScrollToTopTrigger] = useState(0)
+  const [forceScrollTrigger, setForceScrollTrigger] = useState<number>()
+  const [showAIMessageBox, setShowAIMessageBox] = useState(false)
   const abortControllerRef = useRef<AbortController | null>(null)
   const chatInputRef = useRef<ChatInputRef>(null)
+  const aiMessageTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const hasApiResponseStartedRef = useRef(false)
+  const isInitializedFromOverlayRef = useRef(false)
+
+  // Tool selection for no-agent mode
+  const [selectedToolIds, setSelectedToolIds] = useState<string[]>([])
+
+  // System prompt modal
+  const [showSystemPromptModal, setShowSystemPromptModal] = useState(false)
 
   // 格式化思考时长
   const formatReasoningDuration = (durationMs: number) => {
@@ -74,12 +92,90 @@ export default function HomePage() {
     })
   }
 
+  // Set mounted state to avoid hydration issues
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
+
+  // Validate and cleanup models in IndexedDB against current providers
+  const validateAndCleanupModels = async () => {
+    try {
+      // Get all valid models from current providers
+      const validModelIds = new Set<string>()
+      MODEL_PROVIDERS.forEach(provider => {
+        if (provider.models) {
+          provider.models.forEach(model => {
+            validModelIds.add(`${provider.name}-${model}`)
+          })
+        }
+      })
+
+      // Get all available models from IndexedDB
+      const availableModels = await dbManager.getAllAvailableModels()
+
+      // Find models that are no longer valid
+      const modelsToRemove: string[] = []
+      availableModels.forEach(availableModel => {
+        if (!validModelIds.has(availableModel.id)) {
+          modelsToRemove.push(availableModel.id)
+        }
+      })
+
+      // Remove invalid models from IndexedDB
+      if (modelsToRemove.length > 0) {
+        console.log('Removing invalid models from IndexedDB:', modelsToRemove)
+        for (const modelId of modelsToRemove) {
+          await dbManager.deleteAvailableModel(modelId)
+        }
+      }
+
+      // Check if current model is still valid
+      const currentModelStr = localStorage.getItem('agent-playground-current-model')
+      if (currentModelStr) {
+        try {
+          const currentModel = JSON.parse(currentModelStr)
+          const currentModelKey = `${currentModel.provider}-${currentModel.model}`
+          if (!validModelIds.has(currentModelKey)) {
+            console.log('Current model is no longer valid, clearing:', currentModel)
+            localStorage.removeItem('agent-playground-current-model')
+          }
+        } catch (error) {
+          console.error('Failed to parse current model, clearing:', error)
+          localStorage.removeItem('agent-playground-current-model')
+        }
+      }
+
+      // Check if system model is still valid
+      const systemModelStr = localStorage.getItem('agent-playground-system-model')
+      if (systemModelStr) {
+        try {
+          const systemModel = JSON.parse(systemModelStr)
+          const systemModelKey = `${systemModel.provider}-${systemModel.model}`
+          if (!validModelIds.has(systemModelKey)) {
+            console.log('System model is no longer valid, clearing:', systemModel)
+            localStorage.removeItem('agent-playground-system-model')
+          }
+        } catch (error) {
+          console.error('Failed to parse system model, clearing:', error)
+          localStorage.removeItem('agent-playground-system-model')
+        }
+      }
+    } catch (error) {
+      console.error('Failed to validate and cleanup models:', error)
+    }
+  }
+
   // Load data from IndexedDB and localStorage on mount
   useEffect(() => {
+    if (!isMounted) return
+
     const loadData = async () => {
       try {
         // Initialize IndexedDB first
         await dbManager.init()
+
+        // Validate and clean up available models
+        await validateAndCleanupModels()
 
         // Load current provider from localStorage
         const savedProviderName = localStorage.getItem('agent-playground-current-provider')
@@ -156,38 +252,20 @@ export default function HomePage() {
         setAgents(loadedAgents)
         setTools(loadedTools)
 
-        // Load current session and agent from localStorage (UI state)
-        const savedCurrentSession = localStorage.getItem('agent-playground-current-session')
+        // Don't auto-load previous session - always start with new chat overlay
+        // Clear any saved session state
+        localStorage.removeItem('agent-playground-current-session')
+        localStorage.removeItem('agent-playground-current-agent')
 
-        if (savedCurrentSession && loadedSessions.find(s => s.id === savedCurrentSession)) {
-          setCurrentSessionId(savedCurrentSession)
 
-          // Auto-switch to the agent used in this session
-          const session = loadedSessions.find(s => s.id === savedCurrentSession)
-          if (session && session.agentId && loadedAgents.find(a => a.id === session.agentId)) {
-            setCurrentAgentId(session.agentId)
-          } else {
-            // Session has no agent or agent doesn't exist, clear agent selection
-            setCurrentAgentId(null)
-          }
-        } else {
-          // No saved session or session doesn't exist
-          // If there are no sessions at all, don't select any agent
-          if (loadedSessions.length === 0) {
-            setCurrentAgentId(null)
-          }
-          // Don't auto-select first session - let user create one when they send a message
-        }
 
-        setIsDataLoaded(true)
       } catch (error) {
         console.error('Failed to load data from IndexedDB:', error)
-        setIsDataLoaded(true) // Still mark as loaded to prevent infinite loading
       }
     }
 
     loadData()
-  }, [])
+  }, [isMounted])
 
   // Save provider selection when it changes (but not during initial load)
   useEffect(() => {
@@ -225,24 +303,40 @@ export default function HomePage() {
   } : null
 
   const createNewSession = async () => {
-    const newSession: ChatSession = {
-      id: generateId(),
-      name: 'New Conversation',
-      messages: [],
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      agentId: undefined // New sessions start without an agent
+    // Clear current session and show the new chat overlay
+    setCurrentSessionId(null)
+    setCurrentAgentId(null)
+    setShowNewChatOverlay(true)
+  }
+
+  const handleOverlaySendMessage = async (content: string, agentId: string | null, toolIds?: string[]) => {
+    // Set the current agent (but don't create session yet)
+    setCurrentAgentId(agentId)
+
+    // Set selected tools for no-agent mode
+    if (!agentId && toolIds) {
+      setSelectedToolIds(toolIds)
     }
 
-    try {
-      await dbManager.saveSession(newSession)
-      setSessions(prev => [newSession, ...prev])
-      setCurrentSessionId(newSession.id)
-      // Clear agent selection for new session
-      setCurrentAgentId(null)
-    } catch (error) {
-      console.error('Failed to create session:', error)
-    }
+    // Clear current session so handleSendMessage will create a new one
+    setCurrentSessionId(null)
+
+    // Close the overlay immediately to show the chat interface
+    setShowNewChatOverlay(false)
+
+    setIsLoading(true)
+    setStreamingContent('')
+    setStreamingToolCalls([])
+    setShowAIMessageBox(false)
+    hasApiResponseStartedRef.current = false
+    isInitializedFromOverlayRef.current = true
+
+    aiMessageTimeoutRef.current = setTimeout(() => {
+      setShowAIMessageBox(true)
+    }, 500)
+
+    // Send the message - this will create the session with the first message
+    await handleSendMessage(content, toolIds)
   }
 
   const deleteSession = async (sessionId: string) => {
@@ -275,59 +369,9 @@ export default function HomePage() {
     }
   }
 
-  const clearCurrentSession = async () => {
-    if (!currentSessionId) return
 
-    const session = sessions.find(s => s.id === currentSessionId)
-    if (!session) return
 
-    const updatedSession = { ...session, messages: [], updatedAt: Date.now() }
 
-    try {
-      await dbManager.saveSession(updatedSession)
-      setSessions(prev => prev.map(s =>
-        s.id === currentSessionId ? updatedSession : s
-      ))
-
-      // Focus the input after clearing messages
-      setTimeout(() => {
-        chatInputRef.current?.focus()
-      }, 100)
-    } catch (error) {
-      console.error('Failed to clear session:', error)
-    }
-  }
-
-  const addMessage = async (message: Omit<Message, 'id' | 'timestamp'>, sessionId?: string) => {
-    const targetSessionId = sessionId || currentSessionId
-    if (!targetSessionId) return null
-
-    const newMessage: Message = {
-      ...message,
-      id: generateId(),
-      timestamp: Date.now()
-    }
-
-    const session = sessions.find(s => s.id === targetSessionId)
-    if (!session) return null
-
-    const updatedSession = {
-      ...session,
-      messages: [...session.messages, newMessage],
-      updatedAt: Date.now()
-    }
-
-    try {
-      await dbManager.saveSession(updatedSession)
-      setSessions(prev => prev.map(s =>
-        s.id === targetSessionId ? updatedSession : s
-      ))
-      return newMessage
-    } catch (error) {
-      console.error('Failed to save message:', error)
-      return null
-    }
-  }
 
   // Agent management functions
   const createAgent = async (agentData: Omit<Agent, 'id' | 'createdAt' | 'updatedAt'>) => {
@@ -341,7 +385,13 @@ export default function HomePage() {
     try {
       await dbManager.saveAgent(newAgent)
       setAgents(prev => [...prev, newAgent])
-      return newAgent
+
+      // Auto-select the newly created agent if we're in new chat overlay
+      if (showNewChatOverlay) {
+        setCurrentAgentId(newAgent.id)
+      }
+
+      return newAgent.id
     } catch (error) {
       console.error('Failed to create agent:', error)
       throw error
@@ -396,8 +446,32 @@ export default function HomePage() {
     }
   }
 
+  const reorderAgents = async (reorderedAgents: Agent[]) => {
+    try {
+      // Update the order in state immediately for UI responsiveness
+      setAgents(reorderedAgents)
+
+      // Save the new order to IndexedDB
+      for (let i = 0; i < reorderedAgents.length; i++) {
+        const agent = reorderedAgents[i]
+        const updatedAgent = { ...agent, order: i, updatedAt: Date.now() }
+        await dbManager.saveAgent(updatedAgent)
+      }
+    } catch (error) {
+      console.error('Failed to reorder agents:', error)
+      // Reload agents from DB on error
+      try {
+        const loadedAgents = await dbManager.getAllAgents()
+        setAgents(loadedAgents)
+      } catch (reloadError) {
+        console.error('Failed to reload agents:', reloadError)
+      }
+    }
+  }
+
   // Tool management functions
-  const createTool = async (toolData: Omit<Tool, 'id' | 'createdAt' | 'updatedAt'>) => {
+  const createTool = async (toolData: Omit<Tool, 'id' | 'createdAt' | 'updatedAt'> | Tool) => {
+    // If toolData already has an id, we need to replace it with a new one
     const newTool: Tool = {
       ...toolData,
       id: generateId(),
@@ -494,14 +568,24 @@ export default function HomePage() {
     setIsLoading(true)
     setStreamingContent('')
     setStreamingToolCalls([])
+    setShowAIMessageBox(false)
+    hasApiResponseStartedRef.current = false
+
+    aiMessageTimeoutRef.current = setTimeout(() => {
+      setShowAIMessageBox(true)
+    }, 500)
 
     // Create new AbortController for this request
     abortControllerRef.current = new AbortController()
 
     try {
-      // Get tools for agent mode
-      const agentTools = currentAgentWithTools ? currentAgentWithTools.tools : []
-      const client = new OpenAIClient(config, agentTools, config.provider)
+      // Get tools based on current mode (agent or no-agent)
+      const currentTools = getCurrentTools()
+
+      // Get complete config for current model (includes correct endpoint and API key)
+      const currentConfig = getCurrentModelConfig()
+
+      const client = new OpenAIClient(currentConfig, currentTools, currentConfig.provider)
 
       // Filter out any existing system messages from history to avoid conflicts
       const messagesWithoutSystem = sessionData.messages.filter(m => m.role !== 'system')
@@ -522,20 +606,27 @@ export default function HomePage() {
 
       // Stream the response
       for await (const chunk of client.streamChatCompletion(allMessages, abortControllerRef.current.signal)) {
+        if (!hasApiResponseStartedRef.current) {
+          hasApiResponseStartedRef.current = true
+          if (!showAIMessageBox) {
+            setShowAIMessageBox(true)
+          }
+          if (aiMessageTimeoutRef.current) {
+            clearTimeout(aiMessageTimeoutRef.current)
+            aiMessageTimeoutRef.current = null
+          }
+        }
+
         if (chunk.reasoningContent) {
-          // 记录推理开始时间
           if (!localReasoningStartTime) {
             localReasoningStartTime = Date.now()
-            setReasoningStartTime(localReasoningStartTime)
           }
           reasoningContent += chunk.reasoningContent
           setStreamingReasoningContent(reasoningContent)
-          // 自动展开流式推理框并设置为活跃对话状态
           setIsStreamingReasoningExpanded(true)
           setIsInActiveConversation(true)
         }
         if (chunk.content) {
-          // 如果有推理内容且这是第一次接收到 content，计算思考时长
           if (reasoningContent && localReasoningStartTime && !localReasoningDuration) {
             localReasoningDuration = Date.now() - localReasoningStartTime
             setReasoningDuration(localReasoningDuration)
@@ -599,10 +690,6 @@ export default function HomePage() {
         tc.function?.arguments && tc.function.arguments.trim() !== ''
       )
 
-      // Debug logging
-      console.log('All tool calls:', toolCalls)
-      console.log('Complete tool calls:', completeToolCalls)
-
       // 流结束后，如果有推理内容，设置为非活跃状态以显示收起/展开按钮
       if (reasoningContent) {
         setIsInActiveConversation(false)
@@ -634,13 +721,16 @@ export default function HomePage() {
         setStreamingReasoningContent('')
         setStreamingToolCalls([])
         setIsStreamingReasoningExpanded(false)
-        setReasoningStartTime(null)
         setReasoningDuration(null)
 
         // Save the assistant message to the session
+        // Get the latest session data to preserve any title changes
+        const latestSessionData = await dbManager.getSession(sessionData.id)
+        const baseSessionData = latestSessionData || sessionData
+
         const finalUpdatedSession = {
-          ...sessionData,
-          messages: [...sessionData.messages, agentMessage],
+          ...baseSessionData,
+          messages: [...baseSessionData.messages, agentMessage],
           updatedAt: Date.now()
         }
 
@@ -676,9 +766,13 @@ export default function HomePage() {
         }
 
         // Save error message to session
+        // Get the latest session data to preserve any title changes
+        const latestSessionData = await dbManager.getSession(sessionData.id)
+        const baseSessionData = latestSessionData || sessionData
+
         const sessionWithError = {
-          ...sessionData,
-          messages: [...sessionData.messages, errorMessage],
+          ...baseSessionData,
+          messages: [...baseSessionData.messages, errorMessage],
           updatedAt: Date.now()
         }
 
@@ -695,27 +789,47 @@ export default function HomePage() {
       setIsLoading(false)
       setStreamingContent('')
       setStreamingToolCalls([])
+      setShowAIMessageBox(false)
+
+      // 清理AI消息框显示的timeout
+      if (aiMessageTimeoutRef.current) {
+        clearTimeout(aiMessageTimeoutRef.current)
+        aiMessageTimeoutRef.current = null
+      }
+
+      // Focus input after tool conversation response is complete
+      setTimeout(() => {
+        chatInputRef.current?.focus()
+      }, 100)
     }
   }
 
-  const handleSendMessage = async (content: string) => {
-    if (!config.apiKey.trim() || !config.endpoint.trim()) {
+  const handleSendMessage = async (content: string, toolIds?: string[]) => {
+    // Get complete config for current model to check if it's properly configured
+    const currentConfig = getCurrentModelConfig()
+    if (!currentConfig.apiKey.trim() || !currentConfig.endpoint.trim()) {
       return
     }
 
-    // Create a new session if none exists
+    setScrollToBottomTrigger(prev => prev + 1)
+
+    // Create a new session if none exists or if current session is not in sessions list (temporary session)
     let sessionId = currentSessionId
     let currentSessionData = currentSessionId ? sessions.find(s => s.id === currentSessionId) : null
 
-    if (!sessionId) {
+    if (!sessionId || !currentSessionData) {
       const newSession: ChatSession = {
-        id: generateId(),
+        id: sessionId || generateId(), // Use existing sessionId if available (from New Chat button)
         name: 'New Conversation',
         messages: [],
         createdAt: Date.now(),
-        updatedAt: Date.now()
+        updatedAt: Date.now(),
+        agentId: currentAgentId || undefined, // Include the current agent ID
+        toolIds: !currentAgentId && toolIds ? toolIds : undefined, // Include tools for no-agent mode
+        systemPrompt: !currentAgentId ? config.systemPrompt : undefined // Use LLM config system prompt for no-agent mode
       }
 
+      // Now save to IndexedDB and add to sessions list when user sends first message
       try {
         await dbManager.saveSession(newSession)
         setSessions(prev => [newSession, ...prev])
@@ -755,55 +869,97 @@ export default function HomePage() {
         s.id === sessionId ? updatedSessionData : s
       ))
 
-      // Generate title from user's first message if session name is still "New Conversation"
+      // Start title generation in parallel (non-blocking) if session name is still "New Conversation"
       if (updatedSessionData.name === 'New Conversation' && content.trim()) {
-        try {
-          const titleGenerator = new TitleGenerator(config)
-          const newTitle = await titleGenerator.generateTitle(content)
+        // Add 100ms delay before starting title generation as requested
+        setTimeout(() => {
+          // Completely isolate title generation to prevent any interference with AI responses
+          (async () => {
+            try {
+              const systemModelConfig = getSystemModelConfig()
+              if (!systemModelConfig) {
+                console.log('No system model configured, skipping title generation')
+                return
+              }
 
-          if (newTitle && newTitle !== 'New Conversation') {
-            const sessionWithTitle = {
-              ...updatedSessionData,
-              name: newTitle,
-              updatedAt: Date.now()
+              const titleGenerator = new TitleGenerator(systemModelConfig, systemModelConfig.provider)
+              const newTitle = await titleGenerator.generateTitle(content)
+
+              if (newTitle && newTitle !== 'New Conversation') {
+                // Get the latest session data to avoid overwriting AI responses
+                const latestSession = await dbManager.getSession(sessionId)
+                if (latestSession && latestSession.name === 'New Conversation') {
+                  const sessionWithTitle = {
+                    ...latestSession,
+                    name: newTitle,
+                    updatedAt: Date.now()
+                  }
+
+                  await dbManager.saveSession(sessionWithTitle)
+                  setSessions(prev => prev.map(s =>
+                    s.id === sessionId ? sessionWithTitle : s
+                  ))
+                }
+              }
+            } catch (titleError) {
+              console.error('Failed to generate title from user message:', titleError)
+              // Title generation failure should never affect AI responses
             }
-
-            await dbManager.saveSession(sessionWithTitle)
-            setSessions(prev => prev.map(s =>
-              s.id === sessionId ? sessionWithTitle : s
-            ))
-
-            // Update the current session data reference for the rest of the function
-            updatedSessionData = sessionWithTitle
-          }
-        } catch (titleError) {
-          console.error('Failed to generate title from user message:', titleError)
-          // Don't fail the whole operation if title generation fails
-        }
+          })().catch(error => {
+            console.error('Title generation process failed:', error)
+            // Completely isolated error handling
+          })
+        }, 100)
       }
     } catch (error) {
       console.error('Failed to save user message:', error)
       return
     }
 
-    setIsLoading(true)
-    setStreamingContent('')
-    setStreamingToolCalls([])
+    // 只有在不是从覆盖层初始化时才设置状态（避免与handleOverlaySendMessage重复设置）
+    if (!isInitializedFromOverlayRef.current) {
+      setIsLoading(true)
+      setStreamingContent('')
+      setStreamingToolCalls([])
+      setShowAIMessageBox(false)
+      hasApiResponseStartedRef.current = false
+
+      aiMessageTimeoutRef.current = setTimeout(() => {
+        setShowAIMessageBox(true)
+      }, 500)
+    }
+
+    // 重置覆盖层标志
+    isInitializedFromOverlayRef.current = false
 
     // Create new AbortController for this request
     abortControllerRef.current = new AbortController()
 
     try {
-      // Get tools for agent mode
-      const agentTools = currentAgentWithTools ? currentAgentWithTools.tools : []
-      const client = new OpenAIClient(config, agentTools, config.provider)
+      // Get tools for agent mode or no-agent mode
+      let availableTools: Tool[] = []
+      if (currentAgentWithTools) {
+        // Agent mode: use agent's tools
+        availableTools = currentAgentWithTools.tools
+      } else {
+        // No-agent mode: use selected tools from session or current selection
+        const sessionToolIds = updatedSessionData.toolIds || toolIds || []
+        availableTools = tools.filter(tool => sessionToolIds.includes(tool.id))
+      }
+
+      // Get complete config for current model (includes correct endpoint and API key)
+      const currentConfig = getCurrentModelConfig()
+
+      const client = new OpenAIClient(currentConfig, availableTools, currentConfig.provider)
 
       // Filter out any existing system messages from history to avoid conflicts
       const messagesWithoutSystem = updatedSessionData.messages.filter(m => m.role !== 'system')
 
-      // Use agent system prompt if in agent mode, otherwise use config system prompt
-      // When agent is selected, ONLY use agent's system prompt, ignore config system prompt
-      const systemPrompt = currentAgent ? currentAgent.systemPrompt : config.systemPrompt
+      // Use session system prompt, agent system prompt, or config system prompt
+      const systemPrompt = updatedSessionData.systemPrompt ||
+                          (currentAgent ? currentAgent.systemPrompt : config.systemPrompt)
+
+
       const allMessages = systemPrompt.trim()
         ? [{ id: generateId(), role: 'system' as const, content: systemPrompt, timestamp: Date.now() }, ...messagesWithoutSystem]
         : messagesWithoutSystem
@@ -817,20 +973,30 @@ export default function HomePage() {
 
       // Stream the response - use the messages from the session including the new user message
       for await (const chunk of client.streamChatCompletion(allMessages, abortControllerRef.current.signal)) {
+        // 一旦开始接收到响应，确保AI消息框显示（只在第一次响应时处理）
+        if (!hasApiResponseStartedRef.current) {
+          hasApiResponseStartedRef.current = true
+          if (!showAIMessageBox) {
+            setShowAIMessageBox(true)
+          }
+          // 清理timeout，因为我们已经有响应了
+          if (aiMessageTimeoutRef.current) {
+            clearTimeout(aiMessageTimeoutRef.current)
+            aiMessageTimeoutRef.current = null
+          }
+        }
+
         if (chunk.reasoningContent) {
           // 记录推理开始时间
           if (!localReasoningStartTime) {
             localReasoningStartTime = Date.now()
-            setReasoningStartTime(localReasoningStartTime)
           }
           reasoningContent += chunk.reasoningContent
           setStreamingReasoningContent(reasoningContent)
-          // 自动展开流式推理框并设置为活跃对话状态
           setIsStreamingReasoningExpanded(true)
           setIsInActiveConversation(true)
         }
         if (chunk.content) {
-          // 如果有推理内容且这是第一次接收到 content，计算思考时长
           if (reasoningContent && localReasoningStartTime && !localReasoningDuration) {
             localReasoningDuration = Date.now() - localReasoningStartTime
             setReasoningDuration(localReasoningDuration)
@@ -864,7 +1030,6 @@ export default function HomePage() {
                 }
               }
             } else {
-              // First chunk with complete structure - create new tool call
               const completeToolCall: ToolCall = {
                 id: streamingToolCall.id || `call_${Date.now()}`,
                 type: 'function',
@@ -874,7 +1039,6 @@ export default function HomePage() {
                 }
               }
 
-              // Insert at correct index or append
               if (streamingToolCall.index !== undefined) {
                 updatedToolCalls[streamingToolCall.index] = completeToolCall
               } else {
@@ -884,26 +1048,18 @@ export default function HomePage() {
           }
 
           toolCalls = updatedToolCalls
-          // Show streaming tool calls immediately (with typing effect for arguments)
           setStreamingToolCalls([...updatedToolCalls])
         }
       }
 
-      // Filter out incomplete tool calls (those without arguments)
       const completeToolCalls = toolCalls.filter(tc =>
         tc.function?.arguments && tc.function.arguments.trim() !== ''
       )
 
-      // Debug logging
-      console.log('All tool calls:', toolCalls)
-      console.log('Complete tool calls:', completeToolCalls)
-
-      // 流结束后，如果有推理内容，设置为非活跃状态以显示收起/展开按钮
       if (reasoningContent) {
         setIsInActiveConversation(false)
       }
 
-      // Save the assistant message with tool calls only after streaming is complete
       if (assistantContent || completeToolCalls.length > 0) {
         const agentMessage: AgentMessage = {
           id: generateId(),
@@ -929,13 +1085,17 @@ export default function HomePage() {
         setStreamingReasoningContent('')
         setStreamingToolCalls([])
         setIsStreamingReasoningExpanded(false)
-        setReasoningStartTime(null)
+
         setReasoningDuration(null)
 
         // Save the assistant message to the session
+        // Get the latest session data to preserve any title changes
+        const latestSessionData = await dbManager.getSession(sessionId)
+        const baseSessionData = latestSessionData || updatedSessionData
+
         const finalUpdatedSession = {
-          ...updatedSessionData,
-          messages: [...updatedSessionData.messages, agentMessage],
+          ...baseSessionData,
+          messages: [...baseSessionData.messages, agentMessage],
           updatedAt: Date.now()
         }
 
@@ -955,7 +1115,7 @@ export default function HomePage() {
         setStreamingReasoningContent('')
         setStreamingToolCalls([])
         setIsStreamingReasoningExpanded(false)
-        setReasoningStartTime(null)
+
         setReasoningDuration(null)
       }
 
@@ -978,9 +1138,13 @@ export default function HomePage() {
 
         // Save error message to session
         if (sessionId && updatedSessionData) {
+          // Get the latest session data to preserve any title changes
+          const latestSessionData = await dbManager.getSession(sessionId)
+          const baseSessionData = latestSessionData || updatedSessionData
+
           const sessionWithError = {
-            ...updatedSessionData,
-            messages: [...updatedSessionData.messages, errorMessage],
+            ...baseSessionData,
+            messages: [...baseSessionData.messages, errorMessage],
             updatedAt: Date.now()
           }
 
@@ -1000,8 +1164,20 @@ export default function HomePage() {
       setStreamingReasoningContent('')
       setStreamingToolCalls([])
       setIsStreamingReasoningExpanded(false)
-      setReasoningStartTime(null)
+      setShowAIMessageBox(false)
+
       setReasoningDuration(null)
+
+      // 清理AI消息框显示的timeout
+      if (aiMessageTimeoutRef.current) {
+        clearTimeout(aiMessageTimeoutRef.current)
+        aiMessageTimeoutRef.current = null
+      }
+
+      // Focus input after AI response is complete and tokens are displayed
+      setTimeout(() => {
+        chatInputRef.current?.focus()
+      }, 100)
     }
   }
 
@@ -1010,14 +1186,16 @@ export default function HomePage() {
       abortControllerRef.current.abort()
     }
 
-    // Save the partial assistant message if there's any content
-    if (streamingContent.trim() && currentSessionId) {
+    // Save the partial assistant message if there's any content (reasoning or regular content)
+    if ((streamingContent.trim() || streamingReasoningContent.trim()) && currentSessionId) {
       const session = sessions.find(s => s.id === currentSessionId)
       if (session) {
         const partialMessage: AgentMessage = {
           id: generateId(),
           role: 'assistant',
           content: streamingContent,
+          reasoningContent: streamingReasoningContent || undefined,
+          reasoningDuration: reasoningDuration || undefined,
           timestamp: Date.now(),
           // Mark as incomplete/stopped
           incomplete: true,
@@ -1047,8 +1225,31 @@ export default function HomePage() {
     setStreamingReasoningContent('')
     setStreamingToolCalls([])
     setIsStreamingReasoningExpanded(false)
-    setReasoningStartTime(null)
+
     setReasoningDuration(null)
+  }
+
+  // System prompt handlers
+  const handleSystemPromptSave = async (prompt: string) => {
+    if (!currentSessionId) return
+
+    const session = sessions.find(s => s.id === currentSessionId)
+    if (!session) return
+
+    const updatedSession = {
+      ...session,
+      systemPrompt: prompt.trim() || undefined,
+      updatedAt: Date.now()
+    }
+
+    try {
+      await dbManager.saveSession(updatedSession)
+      setSessions(prev => prev.map(s =>
+        s.id === currentSessionId ? updatedSession : s
+      ))
+    } catch (error) {
+      console.error('Failed to save system prompt:', error)
+    }
   }
 
   // Tool execution handlers
@@ -1161,13 +1362,19 @@ export default function HomePage() {
           setIsLoading(true)
           setStreamingContent('')
           setStreamingToolCalls([])
+          setShowAIMessageBox(true)
+          hasApiResponseStartedRef.current = false
 
           // Create new AbortController for this request
           abortControllerRef.current = new AbortController()
 
-          // Get tools for agent mode
-          const agentTools = currentAgentWithTools ? currentAgentWithTools.tools : []
-          const client = new OpenAIClient(config, agentTools, config.provider)
+          // Get tools based on current mode (agent or no-agent)
+          const currentTools = getCurrentTools()
+
+          // Get complete config for current model (includes correct endpoint and API key)
+          const currentConfig = getCurrentModelConfig()
+
+          const client = new OpenAIClient(currentConfig, currentTools, currentConfig.provider)
 
           // Filter out any existing system messages from history to avoid conflicts
           const messagesWithoutSystem = updatedSession.messages.filter(m => m.role !== 'system')
@@ -1187,20 +1394,27 @@ export default function HomePage() {
 
           // Stream the response
           for await (const chunk of client.streamChatCompletion(allMessages, abortControllerRef.current.signal)) {
+            if (!hasApiResponseStartedRef.current) {
+              hasApiResponseStartedRef.current = true
+              if (!showAIMessageBox) {
+                setShowAIMessageBox(true)
+              }
+              if (aiMessageTimeoutRef.current) {
+                clearTimeout(aiMessageTimeoutRef.current)
+                aiMessageTimeoutRef.current = null
+              }
+            }
+
             if (chunk.reasoningContent) {
-              // 记录推理开始时间
               if (!localReasoningStartTime) {
                 localReasoningStartTime = Date.now()
-                setReasoningStartTime(localReasoningStartTime)
               }
               reasoningContent += chunk.reasoningContent
               setStreamingReasoningContent(reasoningContent)
-              // 自动展开流式推理框并设置为活跃对话状态
               setIsStreamingReasoningExpanded(true)
               setIsInActiveConversation(true)
             }
             if (chunk.content) {
-              // 如果有推理内容且这是第一次接收到 content，计算思考时长
               if (reasoningContent && localReasoningStartTime && !localReasoningDuration) {
                 localReasoningDuration = Date.now() - localReasoningStartTime
                 setReasoningDuration(localReasoningDuration)
@@ -1257,7 +1471,6 @@ export default function HomePage() {
             tc.function?.arguments && tc.function.arguments.trim() !== ''
           )
 
-          // 流结束后，如果有推理内容，设置为非活跃状态以显示收起/展开按钮
           if (reasoningContent) {
             setIsInActiveConversation(false)
           }
@@ -1288,12 +1501,16 @@ export default function HomePage() {
             setStreamingReasoningContent('')
             setStreamingToolCalls([])
             setIsStreamingReasoningExpanded(false)
-            setReasoningStartTime(null)
+
             setReasoningDuration(null)
 
+            // Get the latest session data to preserve any title changes
+            const latestSessionData = await dbManager.getSession(currentSessionId!)
+            const baseSessionData = latestSessionData || updatedSession
+
             const finalSession = {
-              ...updatedSession,
-              messages: [...updatedSession.messages, agentMessage],
+              ...baseSessionData,
+              messages: [...baseSessionData.messages, agentMessage],
               updatedAt: Date.now()
             }
 
@@ -1308,6 +1525,11 @@ export default function HomePage() {
           setStreamingReasoningContent('')
           setStreamingToolCalls([])
           setIsStreamingReasoningExpanded(false)
+
+          // Focus input after retry response is complete
+          setTimeout(() => {
+            chatInputRef.current?.focus()
+          }, 100)
 
         } catch (error) {
           console.error('Failed to retry message:', error)
@@ -1348,6 +1570,12 @@ export default function HomePage() {
           setStreamingReasoningContent('')
           setStreamingToolCalls([])
           setIsStreamingReasoningExpanded(false)
+          setShowAIMessageBox(false)
+
+          if (aiMessageTimeoutRef.current) {
+            clearTimeout(aiMessageTimeoutRef.current)
+            aiMessageTimeoutRef.current = null
+          }
         }
       }
     }
@@ -1430,13 +1658,53 @@ export default function HomePage() {
   const handleSessionSelect = (sessionId: string) => {
     setCurrentSessionId(sessionId)
 
+    // Hide the new chat overlay when selecting a session
+    setShowNewChatOverlay(false)
+
     // Auto-switch to the agent used in this session
     const session = sessions.find(s => s.id === sessionId)
     if (session) {
       // If session has an agentId, switch to that agent
       // If session has no agentId (undefined), clear agent selection
       setCurrentAgentId(session.agentId || null)
+
+      // For no-agent mode sessions, restore tool selection
+      if (!session.agentId && session.toolIds) {
+        setSelectedToolIds(session.toolIds)
+      } else if (!session.agentId) {
+        // Clear tool selection for no-agent sessions without saved tools
+        setSelectedToolIds([])
+      }
     }
+
+    // 直接跳转到底部 - 每次切换会话都直接显示底部，不使用滚动动画
+    setTimeout(() => {
+      setForceScrollTrigger(Date.now())
+    }, 50)
+
+    // 聚焦到输入框 - 除非有待处理的Tool Call
+    setTimeout(() => {
+      // 需要延迟检查，因为会话切换后状态可能还没更新
+      const sessionToCheck = sessions.find(s => s.id === sessionId)
+      if (sessionToCheck) {
+        const lastMessage = sessionToCheck.messages[sessionToCheck.messages.length - 1]
+        let hasPending = false
+
+        if (lastMessage?.role === 'assistant') {
+          const agentMessage = lastMessage as AgentMessage
+          if (agentMessage.toolCalls && agentMessage.toolCalls.length > 0) {
+            hasPending = agentMessage.toolCalls.some(toolCall => {
+              const execution = agentMessage.toolCallExecutions?.find(exec => exec.toolCall.id === toolCall.id)
+              return !execution || execution.status === 'pending'
+            })
+          }
+        }
+
+        if (!hasPending) {
+          chatInputRef.current?.focus()
+        }
+      }
+    }, 200)
   }
 
   // Agent selection with session update
@@ -1465,10 +1733,137 @@ export default function HomePage() {
     }
   }
 
-  // Focus input functionality
-  const handleFocusInput = () => {
-    chatInputRef.current?.focus()
+  // 处理滚动到底部
+  const handleScrollToBottom = () => {
+    setScrollToBottomTrigger(prev => prev + 1)
   }
+
+  // 检查是否有待处理的Tool Call
+  const hasPendingToolCalls = () => {
+    if (!currentSession?.messages) return false
+
+    // 检查最后一条AI消息是否有待处理的Tool Call
+    const lastMessage = currentSession.messages[currentSession.messages.length - 1]
+    if (lastMessage?.role === 'assistant') {
+      const agentMessage = lastMessage as AgentMessage
+      if (agentMessage.toolCalls && agentMessage.toolCalls.length > 0) {
+        // 检查是否有Tool Call没有对应的execution或者execution状态为pending
+        return agentMessage.toolCalls.some(toolCall => {
+          const execution = agentMessage.toolCallExecutions?.find(exec => exec.toolCall.id === toolCall.id)
+          return !execution || execution.status === 'pending'
+        })
+      }
+    }
+
+    return false
+  }
+
+  // Tool selection with session update for no-agent mode
+  const handleToolsChange = async (toolIds: string[]) => {
+    setSelectedToolIds(toolIds)
+
+    // Update current session's toolIds if in no-agent mode
+    if (currentSessionId && !currentAgentId) {
+      const session = sessions.find(s => s.id === currentSessionId)
+      if (session) {
+        const updatedSession = {
+          ...session,
+          toolIds: toolIds.length > 0 ? toolIds : undefined,
+          updatedAt: Date.now()
+        }
+
+        try {
+          await dbManager.saveSession(updatedSession)
+          setSessions(prev => prev.map(s =>
+            s.id === currentSessionId ? updatedSession : s
+          ))
+        } catch (error) {
+          console.error('Failed to update session tools:', error)
+        }
+      }
+    }
+  }
+
+  // Get current tools based on agent mode or no-agent mode selection
+  const getCurrentTools = () => {
+    if (currentAgentWithTools) {
+      // Agent mode: use agent's tools
+      return currentAgentWithTools.tools
+    } else if (selectedToolIds.length > 0) {
+      // No-agent mode: filter tools by selected IDs
+      return tools.filter(tool => selectedToolIds.includes(tool.id))
+    } else {
+      // No tools selected
+      return []
+    }
+  }
+
+  // Get current model from localStorage
+  const getCurrentModel = () => {
+    // Check if we're in browser environment
+    if (typeof window === 'undefined') {
+      return null
+    }
+
+    try {
+      const saved = localStorage.getItem('agent-playground-current-model')
+      if (saved) {
+        return JSON.parse(saved)
+      }
+    } catch (error) {
+      console.error('Failed to parse current model:', error)
+    }
+    return null
+  }
+
+  // Get complete config for current model
+  const getCurrentModelConfig = (): APIConfig => {
+    // Check if we're in browser environment
+    if (typeof window === 'undefined') {
+      // Server-side rendering, return default config
+      return config
+    }
+
+    const currentModel = getCurrentModel()
+
+    if (!currentModel) {
+      // No model selected, use default config
+      return config
+    }
+
+    // Find the provider for the selected model
+    const provider = MODEL_PROVIDERS.find(p => p.name === currentModel.provider)
+    if (!provider) {
+      console.warn(`Provider ${currentModel.provider} not found, using default config`)
+      return config
+    }
+
+    try {
+      // Get API keys from localStorage
+      const apiKeysStr = localStorage.getItem('agent-playground-api-keys')
+      const apiKeys = apiKeysStr ? JSON.parse(apiKeysStr) : {}
+      const apiKey = apiKeys[provider.name] || ''
+
+      // Get endpoints from localStorage (for custom endpoints)
+      const endpointsStr = localStorage.getItem('agent-playground-api-endpoints')
+      const endpoints = endpointsStr ? JSON.parse(endpointsStr) : {}
+      const endpoint = endpoints[provider.name] || provider.endpoint
+
+      // Create config with selected model's provider settings
+      return {
+        ...config,
+        provider: provider.name,
+        endpoint,
+        apiKey,
+        model: currentModel.model
+      }
+    } catch (error) {
+      console.error('Failed to get current model config:', error)
+      return config
+    }
+  }
+
+
 
   // Edit message functionality
   const handleEditMessage = async (messageId: string, newContent: string) => {
@@ -1518,43 +1913,72 @@ export default function HomePage() {
         s.id === currentSessionId ? sessionWithNewMessage : s
       ))
 
-      // Generate title from user's message if session name is still "New Conversation"
-      let finalSessionData = sessionWithNewMessage
+      // Start title generation in parallel (non-blocking) if session name is still "New Conversation"
       if (sessionWithNewMessage.name === 'New Conversation' && newContent.trim()) {
-        try {
-          const titleGenerator = new TitleGenerator(config)
-          const newTitle = await titleGenerator.generateTitle(newContent)
+        // Add 100ms delay before starting title generation as requested
+        setTimeout(() => {
+          // Completely isolate title generation to prevent any interference with AI responses
+          (async () => {
+            try {
+              const systemModelConfig = getSystemModelConfig()
+              if (!systemModelConfig) {
+                console.log('No system model configured, skipping title generation')
+                return
+              }
 
-          if (newTitle && newTitle !== 'New Conversation') {
-            const sessionWithTitle = {
-              ...sessionWithNewMessage,
-              name: newTitle,
-              updatedAt: Date.now()
+              const titleGenerator = new TitleGenerator(systemModelConfig, systemModelConfig.provider)
+              const newTitle = await titleGenerator.generateTitle(newContent)
+
+              if (newTitle && newTitle !== 'New Conversation') {
+                // Get the latest session data to avoid overwriting AI responses
+                const latestSession = await dbManager.getSession(currentSessionId!)
+                if (latestSession && latestSession.name === 'New Conversation') {
+                  const sessionWithTitle = {
+                    ...latestSession,
+                    name: newTitle,
+                    updatedAt: Date.now()
+                  }
+
+                  await dbManager.saveSession(sessionWithTitle)
+                  setSessions(prev => prev.map(s =>
+                    s.id === currentSessionId ? sessionWithTitle : s
+                  ))
+                }
+              }
+            } catch (titleError) {
+              console.error('Failed to generate title from edited message:', titleError)
+              // Title generation failure should never affect AI responses
             }
-
-            await dbManager.saveSession(sessionWithTitle)
-            setSessions(prev => prev.map(s =>
-              s.id === currentSessionId ? sessionWithTitle : s
-            ))
-
-            finalSessionData = sessionWithTitle
-          }
-        } catch (titleError) {
-          console.error('Failed to generate title from edited message:', titleError)
-          // Don't fail the whole operation if title generation fails
-        }
+          })().catch(error => {
+            console.error('Title generation process failed:', error)
+            // Completely isolated error handling
+          })
+        }, 100)
       }
+
+      // Use the session data without waiting for title generation
+      const finalSessionData = sessionWithNewMessage
 
       setIsLoading(true)
       setStreamingContent('')
       setStreamingToolCalls([])
+      setShowAIMessageBox(false)
+      hasApiResponseStartedRef.current = false
+
+      aiMessageTimeoutRef.current = setTimeout(() => {
+        setShowAIMessageBox(true)
+      }, 500)
 
       // Create new AbortController for this request
       abortControllerRef.current = new AbortController()
 
-      // Get tools for agent mode
-      const agentTools = currentAgentWithTools ? currentAgentWithTools.tools : []
-      const client = new OpenAIClient(config, agentTools, config.provider)
+      // Get tools based on current mode (agent or no-agent)
+      const currentTools = getCurrentTools()
+
+      // Get complete config for current model (includes correct endpoint and API key)
+      const currentConfig = getCurrentModelConfig()
+
+      const client = new OpenAIClient(currentConfig, currentTools, currentConfig.provider)
 
       // For API call, use the messages before edit plus the new user message
       // Filter out any existing system messages from history to avoid conflicts
@@ -1575,20 +1999,27 @@ export default function HomePage() {
 
       // Stream the response
       for await (const chunk of client.streamChatCompletion(allMessages, abortControllerRef.current.signal)) {
+        if (!hasApiResponseStartedRef.current) {
+          hasApiResponseStartedRef.current = true
+          if (!showAIMessageBox) {
+            setShowAIMessageBox(true)
+          }
+          if (aiMessageTimeoutRef.current) {
+            clearTimeout(aiMessageTimeoutRef.current)
+            aiMessageTimeoutRef.current = null
+          }
+        }
+
         if (chunk.reasoningContent) {
-          // 记录推理开始时间
           if (!localReasoningStartTime) {
             localReasoningStartTime = Date.now()
-            setReasoningStartTime(localReasoningStartTime)
           }
           reasoningContent += chunk.reasoningContent
           setStreamingReasoningContent(reasoningContent)
-          // 自动展开流式推理框并设置为活跃对话状态
           setIsStreamingReasoningExpanded(true)
           setIsInActiveConversation(true)
         }
         if (chunk.content) {
-          // 如果有推理内容且这是第一次接收到 content，计算思考时长
           if (reasoningContent && localReasoningStartTime && !localReasoningDuration) {
             localReasoningDuration = Date.now() - localReasoningStartTime
             setReasoningDuration(localReasoningDuration)
@@ -1645,7 +2076,6 @@ export default function HomePage() {
         tc.function?.arguments && tc.function.arguments.trim() !== ''
       )
 
-      // 流结束后，如果有推理内容，设置为非活跃状态以显示收起/展开按钮
       if (reasoningContent) {
         setIsInActiveConversation(false)
       }
@@ -1676,12 +2106,16 @@ export default function HomePage() {
         setStreamingReasoningContent('')
         setStreamingToolCalls([])
         setIsStreamingReasoningExpanded(false)
-        setReasoningStartTime(null)
+
         setReasoningDuration(null)
 
+        // Get the latest session data to preserve any title changes
+        const latestSessionData = await dbManager.getSession(currentSessionId!)
+        const baseSessionData = latestSessionData || finalSessionData
+
         const finalSession = {
-          ...finalSessionData,
-          messages: [...finalSessionData.messages, agentMessage],
+          ...baseSessionData,
+          messages: [...baseSessionData.messages, agentMessage],
           updatedAt: Date.now()
         }
 
@@ -1741,6 +2175,13 @@ export default function HomePage() {
       setStreamingReasoningContent('')
       setStreamingToolCalls([])
       setIsStreamingReasoningExpanded(false)
+      setShowAIMessageBox(false)
+
+      // 清理AI消息框显示的timeout
+      if (aiMessageTimeoutRef.current) {
+        clearTimeout(aiMessageTimeoutRef.current)
+        aiMessageTimeoutRef.current = null
+      }
     }
   }
 
@@ -1820,9 +2261,16 @@ export default function HomePage() {
 
 
 
-  const isConfigured = config.endpoint.trim() && (config.apiKey.trim() || !config.endpoint.includes('openai.com'))
+  // Check if current model is properly configured
+  const currentModelConfig = getCurrentModelConfig()
+  const isConfigured = currentModelConfig.endpoint.trim() && (currentModelConfig.apiKey.trim() || !currentModelConfig.endpoint.includes('openai.com'))
 
   // No automatic session creation - sessions are created when user sends first message
+
+  // Prevent hydration issues by not rendering until mounted
+  if (!isMounted) {
+    return null
+  }
 
   return (
     <div className="flex h-screen bg-background">
@@ -1830,145 +2278,115 @@ export default function HomePage() {
       <SessionManager
         sessions={sessions}
         currentSessionId={currentSessionId}
+        agents={agents}
+        isNewChatDisabled={showNewChatOverlay}
         onSessionSelect={handleSessionSelect}
-        onSessionCreate={createNewSession}
         onSessionDelete={deleteSession}
         onSessionRename={renameSession}
-        onFocusInput={handleFocusInput}
+        onNewChat={createNewSession}
       />
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col min-w-[800px]">
-        {/* Header */}
-        <div className="border-b border-border p-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-semibold">Agent Playground</h1>
-            <p className="text-sm text-muted-foreground">
-              {currentSession?.name || 'No conversation selected'}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowAgentModal(true)}
-              className="flex items-center gap-2"
-            >
-              <Bot className="w-4 h-4" />
-              Agents ({agents.length})
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowToolModal(true)}
-              className="flex items-center gap-2"
-            >
-              <Wrench className="w-4 h-4" />
-              Tools ({tools.length})
-            </Button>
-            <Tooltip content="Coming Soon" position="bottom">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled
-                className="flex items-center gap-2 cursor-not-allowed"
-              >
-                <BrainCircuit className="w-4 h-4" />
-                MCP (0)
-              </Button>
-            </Tooltip>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowExportModal(true)}
-            >
-              <Download className="w-4 h-4 mr-2" />
-              Export
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowImportModal(true)}
-            >
-              <Upload className="w-4 h-4 mr-2" />
-              Import
-            </Button>
-          </div>
-        </div>
+      <div className="flex-1 flex flex-col min-w-[600px]">
+        {showNewChatOverlay ? (
+          /* New Chat Overlay */
+          <NewChatOverlay
+            agents={agents}
+            currentAgentId={currentAgentId}
+            onSendMessage={handleOverlaySendMessage}
+            onCreateAgent={() => setShowAgentModal(true)}
+            onAgentSelect={setCurrentAgentId}
+            shouldFocus={showNewChatOverlay}
+            tools={tools}
+          />
+        ) : (
+          <>
+            {/* Chat Controls */}
+            <ChatControls
+              agents={agents}
+              currentAgentId={currentAgentId}
+              tools={tools}
+              hasMessages={!!(currentSession?.messages.length)}
+              apiConfig={config}
+              onAgentSelect={handleAgentSelect}
+              onAgentInstructionUpdate={handleAgentInstructionUpdate}
+              onAgentToolsUpdate={handleAgentToolsUpdate}
+              onCreateAgent={() => setShowAgentModal(true)}
+              onSystemPromptEdit={() => setShowSystemPromptModal(true)}
+            />
 
-        {/* Chat Controls */}
-        <ChatControls
-          agents={agents}
-          currentAgentId={currentAgentId}
-          tools={tools}
-          hasMessages={!!(currentSession?.messages.length)}
-          apiConfig={config}
-          onAgentSelect={handleAgentSelect}
-          onClearSession={clearCurrentSession}
-          onAgentInstructionUpdate={handleAgentInstructionUpdate}
-          onAgentToolsUpdate={handleAgentToolsUpdate}
-        />
+            {/* Messages */}
+            <ChatMessages
+              messages={currentSession?.messages || []}
+              isLoading={isLoading}
+              showAIMessageBox={showAIMessageBox}
+              streamingContent={streamingContent}
+              streamingReasoningContent={streamingReasoningContent}
+              isStreamingReasoningExpanded={isStreamingReasoningExpanded}
+              streamingToolCalls={streamingToolCalls}
+              expandedReasoningMessages={expandedReasoningMessages}
+              isInActiveConversation={isInActiveConversation}
+              reasoningDuration={reasoningDuration}
+              formatReasoningDuration={formatReasoningDuration}
+              currentAgent={currentAgentWithTools}
+              tools={tools}
+              scrollToBottomTrigger={scrollToBottomTrigger}
+              scrollToTopTrigger={scrollToTopTrigger}
+              forceScrollTrigger={forceScrollTrigger}
+              onProvideToolResult={handleProvideToolResult}
+              onMarkToolFailed={handleMarkToolFailed}
+              onRetryMessage={handleRetryMessage}
+              onDeleteMessage={handleDeleteMessage}
+              onEditMessage={handleEditMessage}
+              onToggleReasoningExpansion={toggleReasoningExpansion}
+              onToggleStreamingReasoningExpansion={() => setIsStreamingReasoningExpanded(!isStreamingReasoningExpanded)}
+              onScrollToBottom={handleScrollToBottom}
+            />
 
-        {/* Messages */}
-        <ChatMessages
-          messages={currentSession?.messages || []}
-          isLoading={isLoading}
-          streamingContent={streamingContent}
-          streamingReasoningContent={streamingReasoningContent}
-          isStreamingReasoningExpanded={isStreamingReasoningExpanded}
-          streamingToolCalls={streamingToolCalls}
-          expandedReasoningMessages={expandedReasoningMessages}
-          isInActiveConversation={isInActiveConversation}
-          reasoningDuration={reasoningDuration}
-          formatReasoningDuration={formatReasoningDuration}
-          currentAgent={currentAgentWithTools}
-          tools={tools}
-          onProvideToolResult={handleProvideToolResult}
-          onMarkToolFailed={handleMarkToolFailed}
-          onRetryMessage={handleRetryMessage}
-          onDeleteMessage={handleDeleteMessage}
-          onEditMessage={handleEditMessage}
-          onToggleReasoningExpansion={toggleReasoningExpansion}
-          onToggleStreamingReasoningExpansion={() => setIsStreamingReasoningExpanded(!isStreamingReasoningExpanded)}
-        />
-
-        {/* Input */}
-        <ChatInput
-          ref={chatInputRef}
-          onSendMessage={handleSendMessage}
-          isLoading={isLoading}
-          onStop={handleStop}
-          disabled={!isConfigured}
-          currentAgent={currentAgentWithTools}
-        />
+            {/* Input */}
+            <ChatInput
+              ref={chatInputRef}
+              onSendMessage={handleSendMessage}
+              isLoading={isLoading}
+              onStop={handleStop}
+              disabled={!isConfigured || hasPendingToolCalls()}
+              disabledReason={hasPendingToolCalls() ? "Please respond to the tool calls above..." : undefined}
+              currentAgent={currentAgentWithTools}
+              tools={tools}
+              selectedToolIds={selectedToolIds}
+              onToolsChange={handleToolsChange}
+            />
+          </>
+        )}
       </div>
 
-      {/* API Configuration Panel */}
-      <APIConfigPanel
+      {/* Accordion Panel */}
+      <AccordionPanel
         config={config}
+        agents={agents}
+        tools={tools}
         onConfigChange={setConfig}
+        onAgentCreate={() => setShowAgentModal(true)}
+        onAgentUpdate={updateAgent}
+        onAgentDelete={deleteAgent}
+        onAgentReorder={reorderAgents}
+        onToolCreate={createTool}
+        onToolUpdate={(tool: Tool) => updateTool(tool.id, tool)}
+        onToolDelete={deleteTool}
+        onExport={() => setShowExportModal(true)}
+        onImport={() => setShowImportModal(true)}
       />
 
       {/* Modals */}
-      <AgentModal
+      <AgentFormModal
         isOpen={showAgentModal}
         onClose={() => setShowAgentModal(false)}
-        agents={agents}
         tools={tools}
         onAgentCreate={createAgent}
-        onAgentUpdate={updateAgent}
-        onAgentDelete={deleteAgent}
+        onToolCreate={createTool}
       />
 
-      <ToolModal
-        isOpen={showToolModal}
-        onClose={() => setShowToolModal(false)}
-        tools={tools}
-        config={config}
-        onToolCreate={createTool}
-        onToolUpdate={updateTool}
-        onToolDelete={deleteTool}
-      />
+
 
       <ExportModal
         isOpen={showExportModal}
@@ -1983,6 +2401,13 @@ export default function HomePage() {
         onImport={handleImport}
         existingAgents={agents}
         existingTools={tools}
+      />
+
+      <SystemPromptModal
+        isOpen={showSystemPromptModal}
+        onClose={() => setShowSystemPromptModal(false)}
+        initialPrompt={currentSession?.systemPrompt || config.systemPrompt}
+        onSave={handleSystemPromptSave}
       />
     </div>
   )

@@ -4,7 +4,9 @@ import React, { useEffect, useRef } from 'react'
 import { Message as MessageType, AgentMessage, ToolCall, Agent, Tool } from '@/types'
 import { Message } from './message'
 import { ToolCallDisplay } from '@/components/tools'
+import { StreamingContent } from '@/components/markdown'
 import { Atom } from 'lucide-react'
+import { useSmartScroll } from '@/hooks/use-smart-scroll'
 
 // Agent with resolved tools for display purposes
 type AgentWithTools = Omit<Agent, 'tools'> & {
@@ -14,6 +16,7 @@ type AgentWithTools = Omit<Agent, 'tools'> & {
 interface ChatMessagesProps {
   messages: (MessageType | AgentMessage)[]
   isLoading: boolean
+  showAIMessageBox?: boolean // Add prop to control AI message box display
   streamingContent?: string
   streamingReasoningContent?: string
   isStreamingReasoningExpanded?: boolean
@@ -24,6 +27,9 @@ interface ChatMessagesProps {
   formatReasoningDuration?: (durationMs: number) => string
   currentAgent?: AgentWithTools | null
   tools?: Tool[]
+  scrollToBottomTrigger?: number // Add trigger to force scroll to bottom
+  scrollToTopTrigger?: number // Add trigger to force scroll to top
+  forceScrollTrigger?: number // Add trigger for user message send
   onProvideToolResult?: (toolCallId: string, result: string) => void
   onMarkToolFailed?: (toolCallId: string, error: string) => void
   onRetryMessage?: (messageId: string) => void
@@ -31,11 +37,13 @@ interface ChatMessagesProps {
   onEditMessage?: (messageId: string, newContent: string) => void
   onToggleReasoningExpansion?: (messageId: string) => void
   onToggleStreamingReasoningExpansion?: () => void
+  onScrollToBottom?: () => void
 }
 
 export function ChatMessages({
   messages,
   isLoading,
+  showAIMessageBox = false,
   streamingContent,
   streamingReasoningContent,
   isStreamingReasoningExpanded = false,
@@ -46,32 +54,71 @@ export function ChatMessages({
   formatReasoningDuration,
   currentAgent,
   tools = [],
+  scrollToBottomTrigger,
+  scrollToTopTrigger,
+  forceScrollTrigger,
   onProvideToolResult,
   onMarkToolFailed,
   onRetryMessage,
   onDeleteMessage,
   onEditMessage,
   onToggleReasoningExpansion,
-  onToggleStreamingReasoningExpansion
+  onToggleStreamingReasoningExpansion,
+  onScrollToBottom
 }: ChatMessagesProps) {
-  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const prevToolCallsLengthRef = useRef(0)
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
-
+  // 监听streamingToolCalls变化，当Tool Call卡片出现时立即滚动到底部
   useEffect(() => {
-    scrollToBottom()
-  }, [messages, streamingContent, streamingReasoningContent])
+    if (streamingToolCalls && streamingToolCalls.length > 0) {
+      // 当从没有tool calls变为有tool calls，或者tool calls数量增加时，触发滚动
+      if (prevToolCallsLengthRef.current === 0 || streamingToolCalls.length > prevToolCallsLengthRef.current) {
+        onScrollToBottom?.()
+      }
+      prevToolCallsLengthRef.current = streamingToolCalls.length
+    } else {
+      prevToolCallsLengthRef.current = 0
+    }
+  }, [streamingToolCalls, onScrollToBottom])
+
+  // 监听scrollToTopTrigger变化，滚动到顶部
+  useEffect(() => {
+    if (scrollToTopTrigger && scrollToTopTrigger > 0) {
+      const container = containerRef.current
+      if (container) {
+        container.scrollTo({
+          top: 0,
+          behavior: 'smooth'
+        })
+      }
+    }
+  }, [scrollToTopTrigger])
+
+  // 使用智能滚动控制
+  const { isAutoScrollEnabled, isUserScrolling } = useSmartScroll({
+    dependencies: [messages, streamingContent, streamingReasoningContent],
+    containerRef,
+    threshold: 100,
+    isStreaming: !!(streamingContent || streamingReasoningContent || isLoading),
+    forceScrollTrigger,
+    scrollToBottomTrigger
+  })
 
   const displayMessages = messages.filter(msg => msg.role !== 'system')
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 space-y-4 min-w-0">
+    <div ref={containerRef} className="flex-1 overflow-y-auto p-4 space-y-4 min-w-0">
       {displayMessages.length === 0 ? (
         <div className="flex items-center justify-center h-full text-center">
           <div className="space-y-4">
-            <div className="text-4xl">🤖</div>
+            <div className="flex justify-center">
+              <img
+                src="/logo.svg"
+                alt="Agent Playground Logo"
+                className="w-32 h-32 opacity-40"
+              />
+            </div>
             <div>
               {currentAgent ? (
                 <>
@@ -108,21 +155,23 @@ export function ChatMessages({
               onDeleteMessage={onDeleteMessage}
               onEditMessage={onEditMessage}
               onToggleReasoningExpansion={onToggleReasoningExpansion}
+              onScrollToBottom={onScrollToBottom}
             />
           ))}
           
-          {/* Streaming message */}
-          {isLoading && (streamingReasoningContent || streamingContent || (streamingToolCalls && streamingToolCalls.length > 0)) && (
+          {/* AI message box - unified for all states */}
+          {isLoading && showAIMessageBox && (
             <div className="flex gap-3 p-4 rounded-lg border bg-green-50 border-green-200">
               <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-green-600 bg-white border">
                 <div className="w-4 h-4 border-2 border-green-600 border-t-transparent rounded-full animate-spin" />
               </div>
-              <div className="flex-1 space-y-2">
+              <div className="flex-1 min-w-0 space-y-2">
                 <div className="flex items-center gap-2">
                   <span className="font-medium text-sm text-green-600">Assistant</span>
                   <span className="text-xs text-muted-foreground">
                     {streamingToolCalls?.length ? 'Calling tools...' :
-                     streamingReasoningContent && !streamingContent ? 'Thinking...' : 'Typing...'}
+                     streamingReasoningContent && !streamingContent ? 'Thinking...' :
+                     streamingContent ? 'Typing...' : 'Thinking...'}
                   </span>
                 </div>
 
@@ -159,10 +208,14 @@ export function ChatMessages({
                     {(isInActiveConversation || isStreamingReasoningExpanded) && (
                       <div className="p-3">
                         <div className="text-sm text-gray-500 leading-snug">
-                          <pre className="whitespace-pre-wrap font-sans break-all overflow-wrap-anywhere">
-                            {streamingReasoningContent}
-                            <span className="inline-block w-1 h-3 bg-gray-400 animate-pulse ml-1" />
-                          </pre>
+                          <div className="relative">
+                            <StreamingContent
+                              content={streamingReasoningContent}
+                              isStreaming={true}
+                              showToggle={false}
+                              className="min-w-0"
+                            />
+                          </div>
                         </div>
                       </div>
                     )}
@@ -171,11 +224,13 @@ export function ChatMessages({
 
                 {/* Streaming content */}
                 {streamingContent && (
-                  <div className="prose prose-sm max-w-none">
-                    <pre className="whitespace-pre-wrap font-sans text-base leading-relaxed break-all overflow-wrap-anywhere">
-                      {streamingContent}
-                      <span className="inline-block w-2 h-4 bg-green-600 animate-pulse ml-1" />
-                    </pre>
+                  <div className="min-w-0 overflow-hidden">
+                    <StreamingContent
+                      content={streamingContent}
+                      isStreaming={true}
+                      showToggle={true}
+                      className="min-w-0"
+                    />
                   </div>
                 )}
 
@@ -197,24 +252,8 @@ export function ChatMessages({
               </div>
             </div>
           )}
-
-          {/* Loading indicator without streaming */}
-          {isLoading && !streamingReasoningContent && !streamingContent && !(streamingToolCalls && streamingToolCalls.length > 0) && (
-            <div className="flex gap-3 p-4 rounded-lg border bg-green-50 border-green-200">
-              <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-green-600 bg-white border">
-                <div className="w-4 h-4 border-2 border-green-600 border-t-transparent rounded-full animate-spin" />
-              </div>
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium text-sm text-green-600">Assistant</span>
-                  <span className="text-xs text-muted-foreground">Thinking...</span>
-                </div>
-              </div>
-            </div>
-          )}
         </>
       )}
-      <div ref={messagesEndRef} />
     </div>
   )
 }
