@@ -57,7 +57,15 @@ A comprehensive development and debugging platform for AI Agents and Tools. Agen
 
 ## 🚀 Quick Start
 
-### Option 1: Docker (Recommended)
+### Option 1: Run with npx (Recommended)
+
+```bash
+npx agent-playground
+```
+
+This command will automatically download and start Agent Playground on your local machine at `http://localhost:3001`.
+
+### Option 2: Docker
 
 ```bash
 # Clone the repository
@@ -86,14 +94,6 @@ docker-compose up
 # Stop services
 docker-compose down
 ```
-
-### Option 2: Run with npx (Node.js Required)
-
-```bash
-npx agent-playground
-```
-
-This command will automatically download and start Agent Playground on your local machine at `http://localhost:3001`.
 
 ### Option 3: Global Installation
 
@@ -180,7 +180,7 @@ npm start
 5. Test tools manually before assigning to agents
 
 ### 4. Start Debugging
-1. Select an agent from the dropdown
+1. Select an agent from the welcome page
 2. Start a conversation to test agent behavior
 3. Watch tool calls execute in real-time
 4. Monitor token usage and API costs
@@ -216,28 +216,30 @@ npx tsc --noEmit
 
 ```
 agent-playground/
+├── public/                  # Static assets and icons
 ├── src/
 │   ├── app/                 # Next.js app directory
+│   │   ├── api/             # API routes
+│   │   ├── debug/           # Debug pages
+│   │   └── markdown-test/   # Markdown testing page
 │   ├── components/          # React components
 │   │   ├── agents/          # Agent management components
 │   │   ├── chat/            # Chat interface components
 │   │   ├── config/          # Configuration components
+│   │   ├── layout/          # Layout components
+│   │   ├── markdown/        # Markdown rendering components
 │   │   ├── modals/          # Modal dialog components
 │   │   ├── tools/           # Tool management components
-│   │   ├── ui/              # Reusable UI components
+│   │   └── ui/              # Reusable UI components
+│   ├── hooks/               # Custom React hooks
 │   ├── lib/                 # Utility libraries and services
 │   │   ├── clients/         # API client implementations
 │   │   ├── generators/      # AI-powered generators
-│   │   ├── storage/         # Data persistence layer
+│   │   └── storage/         # Data persistence layer
+│   ├── styles/              # CSS and styling files
 │   └── types/               # TypeScript type definitions
 ├── bin/                     # Executable scripts
-├── scripts/                 # Build and deployment scripts
-│   └── test-docker.sh      # Docker test script
-├── Dockerfile               # Docker image configuration
-├── docker-compose.yml       # Docker Compose production configuration
-├── docker-compose.dev.yml  # Docker Compose development configuration
-├── .dockerignore           # Docker ignore file
-├── docker-healthcheck.js   # Docker health check script
+└── scripts/                 # Build and deployment scripts
 ```
 
 ## 📝 License
