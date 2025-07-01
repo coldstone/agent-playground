@@ -1,15 +1,16 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { APIConfig } from '@/types'
+import { APIConfig, AvailableModel } from '@/types'
 import { MODEL_PROVIDERS, DEFAULT_CONFIG, Provider, ProviderCustomConfig } from '@/lib/providers'
 import { IndexedDBManager } from '@/lib/storage'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Select } from '@/components/ui/select'
+import { CustomSelect } from '@/components/ui/custom-select'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Slider } from '@/components/ui/slider'
+import { SystemModelSelector } from '@/components/ui/system-model-selector'
 import { StatusIndicator } from './status-indicator'
 import { Settings, Eye, EyeOff, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react'
 
@@ -21,12 +22,13 @@ interface APIConfigProps {
 export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
   const [selectedProvider, setSelectedProvider] = useState<Provider>(MODEL_PROVIDERS[0])
   const [showApiKey, setShowApiKey] = useState(false)
-  const [isExpanded, setIsExpanded] = useState(false)
   const [isClient, setIsClient] = useState(false)
   const [dbManager] = useState(() => IndexedDBManager.getInstance())
   const [providerConfigs, setProviderConfigs] = useState<ProviderCustomConfig[]>([])
   const [showModelSettings, setShowModelSettings] = useState(false)
   const [editingModels, setEditingModels] = useState('')
+  const [selectedModels, setSelectedModels] = useState<string[]>([])
+  const [availableModels, setAvailableModels] = useState<AvailableModel[]>([])
 
   useEffect(() => {
     setIsClient(true)
@@ -37,15 +39,82 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
     // Find provider by name from config, fallback to first provider if not found
     const provider = MODEL_PROVIDERS.find(p => p.name === config.provider) || MODEL_PROVIDERS[0]
     setSelectedProvider(provider)
-  }, [config.provider])
+
+    // Update selected models for the new provider
+    const currentProviderModels = availableModels
+      .filter(m => m.provider === provider.name)
+      .map(m => m.model)
+    setSelectedModels(currentProviderModels)
+  }, [config.provider, availableModels])
+
+  const loadAvailableModels = async () => {
+    try {
+      const models = await dbManager.getAllAvailableModels()
+      setAvailableModels(models)
+
+      // Load selected models for current provider
+      const currentProviderModels = models
+        .filter(m => m.provider === selectedProvider.name)
+        .map(m => m.model)
+      setSelectedModels(currentProviderModels)
+    } catch (error) {
+      console.error('Failed to load available models:', error)
+    }
+  }
 
   const loadProviderConfigs = async () => {
     try {
       const configs = await dbManager.getAllProviderConfigs()
       setProviderConfigs(configs)
+
+      // Load available models
+      await loadAvailableModels()
     } catch (error) {
       console.error('Failed to load provider configs:', error)
     }
+  }
+
+  const handleModelToggle = async (model: string) => {
+    const isSelected = selectedModels.includes(model)
+    let newSelectedModels: string[]
+
+    if (isSelected) {
+      // Remove model
+      newSelectedModels = selectedModels.filter(m => m !== model)
+
+      // Remove from available models
+      const modelId = `${selectedProvider.name}-${model}`
+      try {
+        await dbManager.deleteAvailableModel(modelId)
+      } catch (error) {
+        console.error('Failed to delete available model:', error)
+      }
+    } else {
+      // Add model
+      newSelectedModels = [...selectedModels, model]
+
+      // Add to available models if API key is configured
+      const hasApiKey = config.apiKey && config.apiKey.trim() !== ''
+      if (!selectedProvider.requiresApiKey || hasApiKey) {
+        const availableModel: AvailableModel = {
+          id: `${selectedProvider.name}-${model}`,
+          provider: selectedProvider.name,
+          model: model,
+          displayName: `${selectedProvider.name} - ${model}`
+        }
+
+        try {
+          await dbManager.saveAvailableModel(availableModel)
+        } catch (error) {
+          console.error('Failed to save available model:', error)
+        }
+      }
+    }
+
+    setSelectedModels(newSelectedModels)
+
+    // Reload available models to reflect changes immediately
+    await loadAvailableModels()
   }
 
 
@@ -99,6 +168,34 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
           const apiKeys = apiKeysStr ? JSON.parse(apiKeysStr) : {}
           apiKeys[selectedProvider.name] = value
           localStorage.setItem('agent-playground-api-keys', JSON.stringify(apiKeys))
+
+          // Update available models based on API key presence
+          if (value && value.trim() !== '') {
+            // API key added - add selected models to available models
+            for (const model of selectedModels) {
+              const availableModel: AvailableModel = {
+                id: `${selectedProvider.name}-${model}`,
+                provider: selectedProvider.name,
+                model: model,
+                displayName: `${selectedProvider.name} - ${model}`
+              }
+              try {
+                await dbManager.saveAvailableModel(availableModel)
+              } catch (error) {
+                console.error('Failed to save available model:', error)
+              }
+            }
+          } else {
+            // API key removed - remove all models for this provider
+            try {
+              await dbManager.deleteAvailableModelsByProvider(selectedProvider.name)
+            } catch (error) {
+              console.error('Failed to delete available models:', error)
+            }
+          }
+
+          // Reload available models
+          await loadAvailableModels()
         } else if (field === 'endpoint') {
           await saveProviderConfig({ endpoint: value })
         } else if (field === 'model') {
@@ -142,6 +239,47 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
     return customConfig?.models || selectedProvider.models
   }
 
+  const getModelGroups = () => {
+    const models = getCurrentModels()
+
+    // Group models by type for better organization
+    const groups: { [key: string]: string[] } = {}
+
+    models.forEach(model => {
+      if (model.includes('gpt-4o')) {
+        groups['GPT-4o Series'] = groups['GPT-4o Series'] || []
+        groups['GPT-4o Series'].push(model)
+      } else if (model.includes('gpt-4')) {
+        groups['GPT-4 Series'] = groups['GPT-4 Series'] || []
+        groups['GPT-4 Series'].push(model)
+      } else if (model.includes('o1') || model.includes('o3') || model.includes('o4')) {
+        groups['Reasoning Models'] = groups['Reasoning Models'] || []
+        groups['Reasoning Models'].push(model)
+      } else if (model.includes('deepseek')) {
+        groups['DeepSeek Models'] = groups['DeepSeek Models'] || []
+        groups['DeepSeek Models'].push(model)
+      } else if (model.includes('qwen')) {
+        groups['Qwen Models'] = groups['Qwen Models'] || []
+        groups['Qwen Models'].push(model)
+      } else if (model.includes('doubao')) {
+        groups['Doubao Models'] = groups['Doubao Models'] || []
+        groups['Doubao Models'].push(model)
+      } else {
+        groups['Other Models'] = groups['Other Models'] || []
+        groups['Other Models'].push(model)
+      }
+    })
+
+    // Convert to the format expected by CustomSelect
+    return Object.entries(groups).map(([label, models]) => ({
+      label,
+      options: models.map(model => ({
+        value: model,
+        label: model
+      }))
+    }))
+  }
+
   const handleModelSettingsOpen = () => {
     const currentModels = getCurrentModels()
     setEditingModels(currentModels.join('\n'))
@@ -151,37 +289,56 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
   const handleModelSettingsSave = async () => {
     try {
       const newModels = editingModels.split('\n').map(m => m.trim()).filter(m => m)
+      const oldModels = getCurrentModels()
+
+      // Find models that were removed
+      const removedModels = oldModels.filter(oldModel => !newModels.includes(oldModel))
+
+      // Remove deleted models from available models and selected models
+      for (const removedModel of removedModels) {
+        const modelId = `${selectedProvider.name}-${removedModel}`
+        try {
+          await dbManager.deleteAvailableModel(modelId)
+        } catch (error) {
+          console.error('Failed to delete available model:', error)
+        }
+      }
+
+      // Update selected models to only include models that still exist
+      const updatedSelectedModels = selectedModels.filter(model => newModels.includes(model))
+      setSelectedModels(updatedSelectedModels)
+
+      // Save the new models list
       await saveProviderConfig({ models: newModels })
       setShowModelSettings(false)
+
+      // Reload available models to reflect changes
+      await loadAvailableModels()
     } catch (error) {
       console.error('Failed to save models:', error)
     }
   }
 
   return (
-    <div className="w-80 min-w-80 bg-card border-l border-border p-4 space-y-4 overflow-y-auto">
-      <div className="flex items-center justify-between">
-        <h2 className="text-base font-semibold flex items-center gap-2">
-          <Settings className="w-5 h-5" />
-          LLM Configuration
-        </h2>
-      </div>
+    <div className="space-y-4">{/* Remove wrapper div, will be handled by parent */}
 
       <div className="space-y-4">
+        {/* System Model Selector */}
+        <SystemModelSelector />
+
         {/* Provider Selection */}
         <div className="space-y-2">
           <Label htmlFor="provider">Provider</Label>
-          <Select
-            id="provider"
+          <CustomSelect
             value={selectedProvider.name}
-            onChange={(e) => handleProviderChange(e.target.value)}
-          >
-            {MODEL_PROVIDERS.map((provider) => (
-              <option key={provider.name} value={provider.name}>
-                {provider.name}
-              </option>
-            ))}
-          </Select>
+            placeholder="Select Provider"
+            options={MODEL_PROVIDERS.map(provider => ({
+              value: provider.name,
+              label: provider.name
+            }))}
+            onChange={(value) => handleProviderChange(value)}
+            size="md"
+          />
         </div>
 
         {/* API Endpoint */}
@@ -241,10 +398,10 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
           </div>
         )}
 
-        {/* Model Selection */}
+        {/* Available Models Selection */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <Label htmlFor="model">Model</Label>
+            <Label htmlFor="models">Available Models</Label>
             <Button
               variant="ghost"
               size="sm"
@@ -254,17 +411,19 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
               <Settings className="w-3 h-3" />
             </Button>
           </div>
-          <Select
-            id="model"
-            value={config.model}
-            onChange={(e) => handleConfigChange('model', e.target.value)}
-          >
+          <div className="border border-border rounded-md p-3 max-h-40 overflow-y-auto">
             {getCurrentModels().map((model) => (
-              <option key={model} value={model}>
-                {model}
-              </option>
+              <label key={model} className="flex items-center space-x-2 cursor-pointer py-1">
+                <input
+                  type="checkbox"
+                  checked={selectedModels.includes(model)}
+                  onChange={() => handleModelToggle(model)}
+                  className="rounded border-border"
+                />
+                <span className="text-sm">{model}</span>
+              </label>
             ))}
-          </Select>
+          </div>
         </div>
 
         {/* System Prompt */}
@@ -284,15 +443,6 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
 
         {/* Advanced Parameters */}
         <div className="pt-4 border-t border-border">
-          <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="flex items-center justify-between w-full text-left font-medium hover:text-primary transition-colors"
-          >
-            <span>Advanced Parameters</span>
-            {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-          </button>
-
-          {isExpanded && (
             <div className="space-y-4 mt-4">
             
             <Slider
@@ -343,7 +493,6 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
               onChange={(e) => handleConfigChange('presencePenalty', parseFloat(e.target.value))}
             />
             </div>
-          )}
         </div>
       </div>
 

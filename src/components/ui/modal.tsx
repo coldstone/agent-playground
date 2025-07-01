@@ -58,9 +58,9 @@ export function Modal({
       />
       
       {/* Modal */}
-      <div className={`relative bg-background border border-border rounded-lg shadow-lg w-full mx-4 max-h-[90vh] overflow-hidden ${sizeClasses[size]}`}>
+      <div className={`relative bg-background border border-border rounded-lg shadow-lg w-full mx-4 max-h-[90vh] flex flex-col ${sizeClasses[size]}`}>
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-border">
+        <div className="flex items-center justify-between p-4 border-b border-border flex-shrink-0">
           <h2 className="text-lg font-semibold">{title}</h2>
           {showCloseButton && (
             <Button
@@ -73,9 +73,9 @@ export function Modal({
             </Button>
           )}
         </div>
-        
+
         {/* Content */}
-        <div className="overflow-y-auto max-h-[calc(90vh-80px)]">
+        <div className="flex-1 overflow-hidden flex flex-col">
           {children}
         </div>
       </div>
@@ -90,7 +90,7 @@ interface ModalFooterProps {
 
 export function ModalFooter({ children, className = '' }: ModalFooterProps) {
   return (
-    <div className={`flex items-center justify-end gap-2 p-4 border-t border-border bg-muted/50 ${className}`}>
+    <div className={`flex items-center justify-end gap-2 p-4 border-t border-border bg-muted/50 flex-shrink-0 ${className}`}>
       {children}
     </div>
   )
@@ -103,7 +103,7 @@ interface ModalBodyProps {
 
 export function ModalBody({ children, className = '' }: ModalBodyProps) {
   return (
-    <div className={`p-4 ${className}`}>
+    <div className={`flex-1 overflow-y-auto p-4 ${className}`}>
       {children}
     </div>
   )

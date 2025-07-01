@@ -16,6 +16,7 @@ interface ToolCallDisplayProps {
   onProvideResult: (toolCallId: string, result: string) => void
   onMarkFailed: (toolCallId: string, error: string) => void
   isStreaming?: boolean
+  onScrollToBottom?: () => void
 }
 
 export function ToolCallDisplay({
@@ -24,7 +25,8 @@ export function ToolCallDisplay({
   tool,
   onProvideResult,
   onMarkFailed,
-  isStreaming = false
+  isStreaming = false,
+  onScrollToBottom
 }: ToolCallDisplayProps) {
   const [result, setResult] = useState('')
   const [error, setError] = useState('')
@@ -47,6 +49,8 @@ export function ToolCallDisplay({
       onProvideResult(toolCall.id, result.trim())
       setResult('')
       setIsProvidingResult(false)
+      // 触发滚动到底部
+      onScrollToBottom?.()
     }
   }
 
@@ -55,6 +59,8 @@ export function ToolCallDisplay({
       onMarkFailed(toolCall.id, error.trim())
       setError('')
       setIsProvidingError(false)
+      // 触发滚动到底部
+      onScrollToBottom?.()
     }
   }
 
@@ -148,10 +154,14 @@ export function ToolCallDisplay({
           ? proxyResult.data
           : JSON.stringify(proxyResult.data, null, 2)
         onProvideResult(toolCall.id, resultText)
+        // 触发滚动到底部
+        onScrollToBottom?.()
       } else {
         // Error - mark as failed
         const errorText = proxyResult.error || proxyResult.message || 'HTTP request failed'
         onMarkFailed(toolCall.id, errorText)
+        // 触发滚动到底部
+        onScrollToBottom?.()
       }
     } catch (error) {
       console.error('HTTP request failed:', error)
@@ -371,7 +381,11 @@ export function ToolCallDisplay({
             <div className="flex gap-2">
               <Button
                 size="sm"
-                onClick={() => setIsProvidingResult(true)}
+                onClick={() => {
+                  setIsProvidingResult(true)
+                  // 触发滚动到底部
+                  onScrollToBottom?.()
+                }}
                 className="flex items-center gap-2"
               >
                 <Play className="w-3 h-3" />
@@ -380,7 +394,11 @@ export function ToolCallDisplay({
               <Button
                 size="sm"
                 variant="destructive"
-                onClick={() => setIsProvidingError(true)}
+                onClick={() => {
+                  setIsProvidingError(true)
+                  // 触发滚动到底部
+                  onScrollToBottom?.()
+                }}
                 className="flex items-center gap-2"
               >
                 <X className="w-3 h-3" />

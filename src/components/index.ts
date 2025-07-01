@@ -13,5 +13,8 @@ export * from './modals'
 // Configuration components
 export * from './config'
 
+// Layout components
+export * from './layout'
+
 // UI components
 export * from './ui'

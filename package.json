@@ -1,6 +1,6 @@
 {
   "name": "agent-playground",
-  "version": "0.1.1",
+  "version": "0.2.1",
   "description": "A comprehensive playground for testing AI agents and models with support for multiple LLM providers",
   "main": "dist/index.js",
   "bin": {
@@ -11,7 +11,8 @@
     "build": "next build",
     "start": "next start -p 3001",
     "lint": "next lint",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "docker:test": "./scripts/test-docker.sh"
   },
   "keywords": [
     "ai",
@@ -38,22 +39,30 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "react": "^18",
-    "react-dom": "^18",
-    "next": "14.0.4",
-    "lucide-react": "^0.294.0",
+    "@radix-ui/react-select": "^2.2.5",
+    "class-variance-authority": "^0.7.0",
     "clsx": "^2.0.0",
-    "class-variance-authority": "^0.7.0"
+    "lucide-react": "^0.294.0",
+    "next": "14.0.4",
+    "react": "^18",
+    "react-dnd": "^16.0.1",
+    "react-dnd-html5-backend": "^16.0.1",
+    "react-dom": "^18",
+    "react-markdown": "^10.1.0",
+    "rehype-highlight": "^7.0.2",
+    "rehype-katex": "^7.0.1",
+    "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0"
   },
   "devDependencies": {
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
-    "typescript": "^5",
-    "tailwindcss": "^3.3.0",
     "autoprefixer": "^10.0.1",
-    "postcss": "^8",
     "eslint": "^8",
-    "eslint-config-next": "14.0.4"
+    "eslint-config-next": "14.0.4",
+    "postcss": "^8",
+    "tailwindcss": "^3.3.0",
+    "typescript": "^5"
   }
 }

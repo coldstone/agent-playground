@@ -1,14 +1,15 @@
-import { Agent, Tool, ChatSession } from '@/types'
+import { Agent, Tool, ChatSession, AvailableModel } from '@/types'
 import { ProviderCustomConfig } from '../providers'
 
 const DB_NAME = 'agent-playground'
-const DB_VERSION = 2
+const DB_VERSION = 3
 
 // Store names
 const AGENTS_STORE = 'agents'
 const TOOLS_STORE = 'tools'
 const SESSIONS_STORE = 'sessions'
 const PROVIDER_CONFIGS_STORE = 'provider-configs'
+const AVAILABLE_MODELS_STORE = 'available-models'
 
 export class IndexedDBManager {
   private static instance: IndexedDBManager
@@ -75,6 +76,12 @@ export class IndexedDBManager {
         // Create provider configs store
         if (!db.objectStoreNames.contains(PROVIDER_CONFIGS_STORE)) {
           const providerConfigsStore = db.createObjectStore(PROVIDER_CONFIGS_STORE, { keyPath: 'providerId' })
+        }
+
+        // Create available models store
+        if (!db.objectStoreNames.contains(AVAILABLE_MODELS_STORE)) {
+          const availableModelsStore = db.createObjectStore(AVAILABLE_MODELS_STORE, { keyPath: 'id' })
+          availableModelsStore.createIndex('provider', 'provider', { unique: false })
         }
       }
     })
@@ -340,6 +347,49 @@ export class IndexedDBManager {
           req.onerror = () => rej(req.error)
         })
       ]).then(() => resolve()).catch(reject)
+    })
+  }
+
+  // Available Models operations
+  async saveAvailableModel(model: AvailableModel): Promise<void> {
+    return this.add(AVAILABLE_MODELS_STORE, model)
+  }
+
+  async getAvailableModel(id: string): Promise<AvailableModel | null> {
+    return this.get(AVAILABLE_MODELS_STORE, id)
+  }
+
+  async getAllAvailableModels(): Promise<AvailableModel[]> {
+    return this.getAll(AVAILABLE_MODELS_STORE)
+  }
+
+  async updateAvailableModel(model: AvailableModel): Promise<void> {
+    return this.update(AVAILABLE_MODELS_STORE, model)
+  }
+
+  async deleteAvailableModel(id: string): Promise<void> {
+    return this.delete(AVAILABLE_MODELS_STORE, id)
+  }
+
+  async deleteAvailableModelsByProvider(provider: string): Promise<void> {
+    const db = await this.ensureDB()
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([AVAILABLE_MODELS_STORE], 'readwrite')
+      const store = transaction.objectStore(AVAILABLE_MODELS_STORE)
+      const index = store.index('provider')
+      const request = index.openCursor(IDBKeyRange.only(provider))
+
+      request.onsuccess = (event) => {
+        const cursor = (event.target as IDBRequest).result
+        if (cursor) {
+          cursor.delete()
+          cursor.continue()
+        } else {
+          resolve()
+        }
+      }
+
+      request.onerror = () => reject(request.error)
     })
   }
 }

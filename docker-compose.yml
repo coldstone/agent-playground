@@ -1,0 +1,43 @@
+services:
+  agent-playground:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: agent-playground:latest
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - HOSTNAME=0.0.0.0
+      - NEXT_TELEMETRY_DISABLED=1
+    env_file:
+      - .env.docker
+    restart: unless-stopped
+    container_name: agent-playground
+    healthcheck:
+      test: ["CMD", "node", "docker-healthcheck.js"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Alternative service using pre-built image from Docker Hub
+  # Uncomment this section and comment out the above service to use pre-built image
+  # agent-playground-hub:
+  #   image: coldstone/agent-playground:latest
+  #   ports:
+  #     - "3001:3001"
+  #   environment:
+  #     - NODE_ENV=production
+  #     - PORT=3001
+  #     - HOSTNAME=0.0.0.0
+  #     - NEXT_TELEMETRY_DISABLED=1
+  #   restart: unless-stopped
+  #   container_name: agent-playground
+  #   healthcheck:
+  #     test: ["CMD", "node", "docker-healthcheck.js"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 40s
