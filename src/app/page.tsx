@@ -52,6 +52,7 @@ export default function HomePage() {
 
   const [reasoningDuration, setReasoningDuration] = useState<number | null>(null)
   const [scrollToBottomTrigger, setScrollToBottomTrigger] = useState(0)
+  const [scrollToTopTrigger, setScrollToTopTrigger] = useState(0)
   const [forceScrollTrigger, setForceScrollTrigger] = useState<number>()
   const [showAIMessageBox, setShowAIMessageBox] = useState(false)
   const abortControllerRef = useRef<AbortController | null>(null)
@@ -810,7 +811,7 @@ export default function HomePage() {
       return
     }
 
-    setForceScrollTrigger(Date.now())
+    setScrollToBottomTrigger(prev => prev + 1)
 
     // Create a new session if none exists or if current session is not in sessions list (temporary session)
     let sessionId = currentSessionId
@@ -1676,10 +1677,34 @@ export default function HomePage() {
       }
     }
 
-    // Trigger scroll to bottom after session switch
+    // 直接跳转到底部 - 每次切换会话都直接显示底部，不使用滚动动画
     setTimeout(() => {
-      setScrollToBottomTrigger(prev => prev + 1)
-    }, 100)
+      setForceScrollTrigger(Date.now())
+    }, 50)
+
+    // 聚焦到输入框 - 除非有待处理的Tool Call
+    setTimeout(() => {
+      // 需要延迟检查，因为会话切换后状态可能还没更新
+      const sessionToCheck = sessions.find(s => s.id === sessionId)
+      if (sessionToCheck) {
+        const lastMessage = sessionToCheck.messages[sessionToCheck.messages.length - 1]
+        let hasPending = false
+
+        if (lastMessage?.role === 'assistant') {
+          const agentMessage = lastMessage as AgentMessage
+          if (agentMessage.toolCalls && agentMessage.toolCalls.length > 0) {
+            hasPending = agentMessage.toolCalls.some(toolCall => {
+              const execution = agentMessage.toolCallExecutions?.find(exec => exec.toolCall.id === toolCall.id)
+              return !execution || execution.status === 'pending'
+            })
+          }
+        }
+
+        if (!hasPending) {
+          chatInputRef.current?.focus()
+        }
+      }
+    }, 200)
   }
 
   // Agent selection with session update
@@ -1706,6 +1731,31 @@ export default function HomePage() {
         }
       }
     }
+  }
+
+  // 处理滚动到底部
+  const handleScrollToBottom = () => {
+    setScrollToBottomTrigger(prev => prev + 1)
+  }
+
+  // 检查是否有待处理的Tool Call
+  const hasPendingToolCalls = () => {
+    if (!currentSession?.messages) return false
+
+    // 检查最后一条AI消息是否有待处理的Tool Call
+    const lastMessage = currentSession.messages[currentSession.messages.length - 1]
+    if (lastMessage?.role === 'assistant') {
+      const agentMessage = lastMessage as AgentMessage
+      if (agentMessage.toolCalls && agentMessage.toolCalls.length > 0) {
+        // 检查是否有Tool Call没有对应的execution或者execution状态为pending
+        return agentMessage.toolCalls.some(toolCall => {
+          const execution = agentMessage.toolCallExecutions?.find(exec => exec.toolCall.id === toolCall.id)
+          return !execution || execution.status === 'pending'
+        })
+      }
+    }
+
+    return false
   }
 
   // Tool selection with session update for no-agent mode
@@ -2281,6 +2331,7 @@ export default function HomePage() {
               currentAgent={currentAgentWithTools}
               tools={tools}
               scrollToBottomTrigger={scrollToBottomTrigger}
+              scrollToTopTrigger={scrollToTopTrigger}
               forceScrollTrigger={forceScrollTrigger}
               onProvideToolResult={handleProvideToolResult}
               onMarkToolFailed={handleMarkToolFailed}
@@ -2289,6 +2340,7 @@ export default function HomePage() {
               onEditMessage={handleEditMessage}
               onToggleReasoningExpansion={toggleReasoningExpansion}
               onToggleStreamingReasoningExpansion={() => setIsStreamingReasoningExpanded(!isStreamingReasoningExpanded)}
+              onScrollToBottom={handleScrollToBottom}
             />
 
             {/* Input */}
@@ -2297,7 +2349,8 @@ export default function HomePage() {
               onSendMessage={handleSendMessage}
               isLoading={isLoading}
               onStop={handleStop}
-              disabled={!isConfigured}
+              disabled={!isConfigured || hasPendingToolCalls()}
+              disabledReason={hasPendingToolCalls() ? "Please respond to the tool calls above..." : undefined}
               currentAgent={currentAgentWithTools}
               tools={tools}
               selectedToolIds={selectedToolIds}

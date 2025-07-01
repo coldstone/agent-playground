@@ -28,6 +28,7 @@ interface ChatMessagesProps {
   currentAgent?: AgentWithTools | null
   tools?: Tool[]
   scrollToBottomTrigger?: number // Add trigger to force scroll to bottom
+  scrollToTopTrigger?: number // Add trigger to force scroll to top
   forceScrollTrigger?: number // Add trigger for user message send
   onProvideToolResult?: (toolCallId: string, result: string) => void
   onMarkToolFailed?: (toolCallId: string, error: string) => void
@@ -36,6 +37,7 @@ interface ChatMessagesProps {
   onEditMessage?: (messageId: string, newContent: string) => void
   onToggleReasoningExpansion?: (messageId: string) => void
   onToggleStreamingReasoningExpansion?: () => void
+  onScrollToBottom?: () => void
 }
 
 export function ChatMessages({
@@ -53,6 +55,7 @@ export function ChatMessages({
   currentAgent,
   tools = [],
   scrollToBottomTrigger,
+  scrollToTopTrigger,
   forceScrollTrigger,
   onProvideToolResult,
   onMarkToolFailed,
@@ -60,17 +63,46 @@ export function ChatMessages({
   onDeleteMessage,
   onEditMessage,
   onToggleReasoningExpansion,
-  onToggleStreamingReasoningExpansion
+  onToggleStreamingReasoningExpansion,
+  onScrollToBottom
 }: ChatMessagesProps) {
   const containerRef = useRef<HTMLDivElement>(null)
+  const prevToolCallsLengthRef = useRef(0)
+
+  // 监听streamingToolCalls变化，当Tool Call卡片出现时立即滚动到底部
+  useEffect(() => {
+    if (streamingToolCalls && streamingToolCalls.length > 0) {
+      // 当从没有tool calls变为有tool calls，或者tool calls数量增加时，触发滚动
+      if (prevToolCallsLengthRef.current === 0 || streamingToolCalls.length > prevToolCallsLengthRef.current) {
+        onScrollToBottom?.()
+      }
+      prevToolCallsLengthRef.current = streamingToolCalls.length
+    } else {
+      prevToolCallsLengthRef.current = 0
+    }
+  }, [streamingToolCalls, onScrollToBottom])
+
+  // 监听scrollToTopTrigger变化，滚动到顶部
+  useEffect(() => {
+    if (scrollToTopTrigger && scrollToTopTrigger > 0) {
+      const container = containerRef.current
+      if (container) {
+        container.scrollTo({
+          top: 0,
+          behavior: 'smooth'
+        })
+      }
+    }
+  }, [scrollToTopTrigger])
 
   // 使用智能滚动控制
   const { isAutoScrollEnabled, isUserScrolling } = useSmartScroll({
-    dependencies: [messages, streamingContent, streamingReasoningContent, scrollToBottomTrigger],
+    dependencies: [messages, streamingContent, streamingReasoningContent],
     containerRef,
     threshold: 100,
     isStreaming: !!(streamingContent || streamingReasoningContent || isLoading),
-    forceScrollTrigger
+    forceScrollTrigger,
+    scrollToBottomTrigger
   })
 
   const displayMessages = messages.filter(msg => msg.role !== 'system')
@@ -123,6 +155,7 @@ export function ChatMessages({
               onDeleteMessage={onDeleteMessage}
               onEditMessage={onEditMessage}
               onToggleReasoningExpansion={onToggleReasoningExpansion}
+              onScrollToBottom={onScrollToBottom}
             />
           ))}
           

@@ -15,6 +15,7 @@ interface ChatInputProps {
   isLoading: boolean
   onStop?: () => void
   disabled?: boolean
+  disabledReason?: string
   currentAgent?: { name: string } | null
   tools?: Tool[]
   selectedToolIds?: string[]
@@ -30,6 +31,7 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(function ChatI
   isLoading,
   onStop,
   disabled,
+  disabledReason,
   currentAgent,
   tools = [],
   selectedToolIds = [],
@@ -93,7 +95,12 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(function ChatI
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={!hasAvailableModels ? "Please configure LLM first..." : !hasValidCurrentModel ? "Please select a model..." : "Type your message..."}
+            placeholder={
+              !hasAvailableModels ? "Please configure LLM first..." :
+              !hasValidCurrentModel ? "Please select a model..." :
+              disabledReason ? disabledReason :
+              "Type your message..."
+            }
             disabled={disabled || isLoading || !hasValidCurrentModel}
             className="min-h-[60px] max-h-[200px] resize-none"
             rows={1}

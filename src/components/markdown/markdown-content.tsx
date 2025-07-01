@@ -19,6 +19,47 @@ interface MarkdownContentProps {
   className?: string
 }
 
+// 检测是否为实际代码的辅助函数
+const isActualCode = (content: string, language: string): boolean => {
+  // 如果有明确的编程语言标识，认为是代码
+  const programmingLanguages = [
+    'javascript', 'js', 'typescript', 'ts', 'python', 'py', 'java', 'c', 'cpp', 'csharp', 'cs',
+    'php', 'ruby', 'go', 'rust', 'swift', 'kotlin', 'scala', 'html', 'css', 'scss', 'sass',
+    'xml', 'json', 'yaml', 'yml', 'sql', 'bash', 'sh', 'powershell', 'dockerfile', 'makefile',
+    'r', 'matlab', 'perl', 'lua', 'dart', 'elixir', 'erlang', 'haskell', 'clojure', 'scheme',
+    'lisp', 'assembly', 'asm', 'vhdl', 'verilog', 'solidity', 'graphql', 'jsx', 'tsx', 'vue',
+    'svelte', 'angular', 'react', 'nodejs', 'express', 'django', 'flask', 'spring', 'laravel'
+  ]
+
+  if (programmingLanguages.includes(language.toLowerCase())) {
+    return true
+  }
+
+  // 如果语言是 'text', 'plain', 'txt' 或为空，检查内容特征
+  const textLanguages = ['text', 'plain', 'txt', '']
+  if (textLanguages.includes(language.toLowerCase())) {
+    // 检查是否包含代码特征
+    const codePatterns = [
+      /function\s+\w+\s*\(/,           // 函数定义
+      /class\s+\w+/,                  // 类定义
+      /require\s*\(/,                 // require 语句
+      /def\s+\w+\s*\(/,              // Python 函数定义
+      /\w+\s*=\s*function/,          // 函数赋值
+      /\w+\s*:\s*function/,          // 对象方法
+      /console\.log\s*\(/,           // console.log
+      /print\s*\(/,                  // print 函数
+      /if\s*\(.+\)\s*{/,            // if 语句
+      /for\s*\(.+\)\s*{/,           // for 循环
+      /while\s*\(.+\)\s*{/,         // while 循环
+    ]
+
+    return codePatterns.some(pattern => pattern.test(content))
+  }
+
+  // 其他情况默认认为是代码
+  return true
+}
+
 const MarkdownContentComponent = function MarkdownContent({ content, className = '' }: MarkdownContentProps) {
   const [copiedCode, setCopiedCode] = useState<string | null>(null)
 
@@ -79,6 +120,9 @@ const MarkdownContentComponent = function MarkdownContent({ content, className =
             // 检查是否是 SVG 代码
             const isSvg = language === 'svg' || (language === 'xml' && codeString.trim().startsWith('<svg'))
 
+            // 检查是否为实际代码
+            const isCode = isActualCode(codeString, language)
+
             return !inline ? (
               <div className="relative group my-4">
                 <div className="flex items-center justify-between bg-gray-800 text-gray-300 px-3 py-1.5 text-xs rounded-t-lg">
@@ -103,7 +147,9 @@ const MarkdownContentComponent = function MarkdownContent({ content, className =
                     )}
                   </button>
                 </div>
-                <pre className="bg-gray-900 text-gray-100 p-3 rounded-b-lg overflow-x-auto m-0 text-xs">
+                <pre className={`bg-gray-900 text-gray-100 p-3 rounded-b-lg m-0 text-xs ${
+                  isCode ? 'overflow-x-auto' : 'whitespace-pre-wrap break-words overflow-wrap-anywhere'
+                }`}>
                   <code className={className} {...props}>
                     {children}
                   </code>

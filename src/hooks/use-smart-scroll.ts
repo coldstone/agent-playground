@@ -20,9 +20,13 @@ interface UseSmartScrollOptions {
    */
   isStreaming?: boolean
   /**
-   * 强制滚动到底部的触发器
+   * 强制滚动到底部的触发器（立即跳转，无动画）
    */
   forceScrollTrigger?: number
+  /**
+   * 平滑滚动到底部的触发器（用于用户发送消息）
+   */
+  scrollToBottomTrigger?: number
 }
 
 export function useSmartScroll({
@@ -30,7 +34,8 @@ export function useSmartScroll({
   containerRef,
   threshold = 100,
   isStreaming = false,
-  forceScrollTrigger
+  forceScrollTrigger,
+  scrollToBottomTrigger
 }: UseSmartScrollOptions) {
   const [isAutoScrollEnabled, setIsAutoScrollEnabled] = useState(true)
   const [isUserScrolling, setIsUserScrolling] = useState(false)
@@ -38,6 +43,7 @@ export function useSmartScroll({
   const lastScrollTopRef = useRef(0)
   const scrollDebounceRef = useRef<NodeJS.Timeout>()
   const isScrollingToBottomRef = useRef(false)
+  const wasStreamingRef = useRef(false)
 
   // 检查是否接近底部
   const isNearBottom = useCallback(() => {
@@ -100,13 +106,18 @@ export function useSmartScroll({
 
     // 检查滚动方向和位置
     if (scrollDirection === 'up') {
-      // 用户向上滚动，禁用自动滚动
-      setIsAutoScrollEnabled(false)
+      // 用户向上滚动，只有当滚动距离足够大时才禁用自动滚动
+      // 这样可以避免微小的滚动变化影响自动跟随
+      const { scrollTop, scrollHeight, clientHeight } = container
+      const distanceFromBottom = scrollHeight - scrollTop - clientHeight
+      if (distanceFromBottom > threshold) {
+        setIsAutoScrollEnabled(false)
+      }
     } else if (scrollDirection === 'down' && isNearBottom()) {
       // 用户向下滚动且接近底部，启用自动滚动
       setIsAutoScrollEnabled(true)
     }
-  }, [isNearBottom, containerRef])
+  }, [isNearBottom, containerRef, threshold])
 
   // 监听滚动事件
   useEffect(() => {
@@ -128,20 +139,59 @@ export function useSmartScroll({
 
   // 当依赖项变化时，如果启用了自动滚动，则滚动到底部
   useEffect(() => {
+    // 检查是否从流式输出状态变为非流式输出状态
+    const justStoppedStreaming = wasStreamingRef.current && !isStreaming
+    wasStreamingRef.current = isStreaming
+
+    // 如果刚刚停止流式输出且自动滚动已启用，确保保持在底部
+    if (justStoppedStreaming && isAutoScrollEnabled) {
+      // 使用非平滑滚动确保立即到达底部，避免跳动
+      const container = containerRef.current
+      if (container) {
+        container.scrollTo({
+          top: container.scrollHeight,
+          behavior: 'auto'
+        })
+      }
+      return
+    }
+
     if (isAutoScrollEnabled && !isUserScrolling) {
       // 始终使用smooth滚动，避免切换滚动模式导致的跳动
       scrollToBottom(true)
     }
-  }, [...dependencies, isAutoScrollEnabled, isUserScrolling])
+  }, [...dependencies, isAutoScrollEnabled, isUserScrolling, isStreaming])
 
-  // 处理强制滚动触发器（用户发送消息时）
+  // 处理强制滚动触发器（会话切换时立即跳转）
   useEffect(() => {
     if (forceScrollTrigger !== undefined) {
       // 强制启用自动滚动并立即滚动到底部
       setIsAutoScrollEnabled(true)
       setIsUserScrolling(false)
 
-      // 立即滚动到底部，不使用防抖
+      // 清除之前记录的滚动位置，进入自动跟随模式
+      lastScrollTopRef.current = 0
+
+      // 立即滚动到底部，不使用防抖和动画
+      const container = containerRef.current
+      if (container) {
+        // 直接设置scrollTop，实现立即跳转
+        container.scrollTop = container.scrollHeight
+      }
+    }
+  }, [forceScrollTrigger, containerRef])
+
+  // 处理平滑滚动触发器（用户发送消息时）
+  useEffect(() => {
+    if (scrollToBottomTrigger !== undefined && scrollToBottomTrigger > 0) {
+      // 强制启用自动滚动并平滑滚动到底部
+      setIsAutoScrollEnabled(true)
+      setIsUserScrolling(false)
+
+      // 清除之前记录的滚动位置，进入自动跟随模式
+      lastScrollTopRef.current = 0
+
+      // 平滑滚动到底部
       const container = containerRef.current
       if (container) {
         container.scrollTo({
@@ -150,7 +200,7 @@ export function useSmartScroll({
         })
       }
     }
-  }, [forceScrollTrigger, containerRef])
+  }, [scrollToBottomTrigger, containerRef])
 
   // 初始化时滚动到底部
   useEffect(() => {

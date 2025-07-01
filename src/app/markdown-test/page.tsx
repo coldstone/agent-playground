@@ -215,7 +215,39 @@ not as inline code
 **API服务商推荐：**
 - 第一个选择
 - 第二个选择
-- 第三个选择`
+- 第三个选择
+
+### 纯文本代码块自动换行测试
+
+这里测试纯文本代码块的自动换行功能：
+
+\`\`\`text
+这是一段很长的纯文本内容，应该会自动换行而不是出现水平滚动条。这段文字故意写得很长，用来测试当内容超出容器宽度时是否能够正确地自动换行显示，而不是像代码那样保持原有的格式并出现滚动条。
+\`\`\`
+
+\`\`\`plain
+另一段测试文本：Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+\`\`\`
+
+\`\`\`
+无语言标识的纯文本块：这是一段没有指定语言的文本内容，系统应该检测到这不是代码，因此应该启用自动换行功能。这样用户就可以更好地阅读长文本内容，而不需要水平滚动。
+\`\`\`
+
+对比：真正的代码应该保持水平滚动：
+
+\`\`\`javascript
+function veryLongFunctionNameThatShouldNotWrapBecauseItIsActualCode() {
+  const veryLongVariableName = "this should maintain horizontal scroll";
+  return veryLongVariableName.split('').map(char => char.toUpperCase()).join('');
+}
+\`\`\`
+
+\`\`\`
+function detectThisAsCode() {
+  console.log("This should be detected as code and maintain horizontal scroll");
+  return "because it has code patterns";
+}
+\`\`\``
 
 export default function MarkdownTestPage() {
   return (

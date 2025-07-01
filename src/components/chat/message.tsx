@@ -23,6 +23,7 @@ interface MessageProps {
   onDeleteMessage?: (messageId: string) => void
   onEditMessage?: (messageId: string, newContent: string) => void
   onToggleReasoningExpansion?: (messageId: string) => void
+  onScrollToBottom?: () => void
 }
 
 export function Message({
@@ -37,7 +38,8 @@ export function Message({
   onRetryMessage,
   onDeleteMessage,
   onEditMessage,
-  onToggleReasoningExpansion
+  onToggleReasoningExpansion,
+  onScrollToBottom
 }: MessageProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [editContent, setEditContent] = useState(message.content)
@@ -352,6 +354,7 @@ export function Message({
                     tool={tool}
                     onProvideResult={onProvideToolResult || (() => {})}
                     onMarkFailed={onMarkToolFailed || (() => {})}
+                    onScrollToBottom={onScrollToBottom}
                   />
                 )
               })}
