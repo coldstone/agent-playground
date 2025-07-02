@@ -39,6 +39,7 @@ export function useSmartScroll({
 }: UseSmartScrollOptions) {
   const [isAutoScrollEnabled, setIsAutoScrollEnabled] = useState(true)
   const [isUserScrolling, setIsUserScrolling] = useState(false)
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false)
   const scrollTimeoutRef = useRef<NodeJS.Timeout>()
   const lastScrollTopRef = useRef(0)
   const scrollDebounceRef = useRef<NodeJS.Timeout>()
@@ -91,6 +92,12 @@ export function useSmartScroll({
     const scrollDirection = currentScrollTop > lastScrollTopRef.current ? 'down' : 'up'
     lastScrollTopRef.current = currentScrollTop
 
+    // 检查是否接近底部
+    const nearBottom = isNearBottom()
+
+    // 更新滚动到底部按钮的显示状态
+    setShowScrollToBottom(!nearBottom)
+
     // 设置用户正在滚动的状态
     setIsUserScrolling(true)
 
@@ -113,7 +120,7 @@ export function useSmartScroll({
       if (distanceFromBottom > threshold) {
         setIsAutoScrollEnabled(false)
       }
-    } else if (scrollDirection === 'down' && isNearBottom()) {
+    } else if (scrollDirection === 'down' && nearBottom) {
       // 用户向下滚动且接近底部，启用自动滚动
       setIsAutoScrollEnabled(true)
     }
@@ -143,20 +150,13 @@ export function useSmartScroll({
     const justStoppedStreaming = wasStreamingRef.current && !isStreaming
     wasStreamingRef.current = isStreaming
 
-    // 如果刚刚停止流式输出且自动滚动已启用，确保保持在底部
-    if (justStoppedStreaming && isAutoScrollEnabled) {
-      // 使用非平滑滚动确保立即到达底部，避免跳动
-      const container = containerRef.current
-      if (container) {
-        container.scrollTo({
-          top: container.scrollHeight,
-          behavior: 'auto'
-        })
-      }
+    // 如果刚刚停止流式输出，不做任何滚动操作，保持当前位置
+    if (justStoppedStreaming) {
       return
     }
 
-    if (isAutoScrollEnabled && !isUserScrolling) {
+    // 只有在流式输出过程中且启用了自动滚动时才滚动
+    if (isStreaming && isAutoScrollEnabled && !isUserScrolling) {
       // 始终使用smooth滚动，避免切换滚动模式导致的跳动
       scrollToBottom(true)
     }
@@ -168,6 +168,7 @@ export function useSmartScroll({
       // 强制启用自动滚动并立即滚动到底部
       setIsAutoScrollEnabled(true)
       setIsUserScrolling(false)
+      setShowScrollToBottom(false)
 
       // 清除之前记录的滚动位置，进入自动跟随模式
       lastScrollTopRef.current = 0
@@ -187,6 +188,7 @@ export function useSmartScroll({
       // 强制启用自动滚动并平滑滚动到底部
       setIsAutoScrollEnabled(true)
       setIsUserScrolling(false)
+      setShowScrollToBottom(false)
 
       // 清除之前记录的滚动位置，进入自动跟随模式
       lastScrollTopRef.current = 0
@@ -208,20 +210,24 @@ export function useSmartScroll({
     if (container) {
       // 初始时直接滚动到底部，不使用动画
       container.scrollTop = container.scrollHeight
+      setShowScrollToBottom(false)
     }
   }, [containerRef])
 
   return {
     isAutoScrollEnabled,
     isUserScrolling,
+    showScrollToBottom,
     scrollToBottom: () => {
       setIsAutoScrollEnabled(true)
+      setShowScrollToBottom(false)
       scrollToBottom(true)
     },
     forceScrollToBottom: () => {
       const container = containerRef.current
       if (container) {
         setIsAutoScrollEnabled(true)
+        setShowScrollToBottom(false)
         isScrollingToBottomRef.current = true
         container.scrollTo({
           top: container.scrollHeight,

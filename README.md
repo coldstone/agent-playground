@@ -1,4 +1,4 @@
-# ![](public/favicon-32x32.png) Agent Playground
+# Agent Playground 🤖
 
 [![Agent Playground](https://img.shields.io/badge/Agent-Playground-blue.svg)](https://github.com/coldstone/agent-playground)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -16,6 +16,7 @@ A comprehensive development and debugging platform for AI Agents and Tools. Agen
 - **Agent Management**: Create and configure multiple AI agents with custom instructions
 - **Agent Templates**: Pre-built agent templates for common use cases
 - **AI-Powered Generation**: Generate agent instructions using AI assistance
+- **Multi-Language Support**: Generate instructions in user's preferred language
 
 ### 🛠️ Advanced Tool System
 - **Custom Tool Creation**: Build tools with JSON schema definitions
@@ -39,13 +40,15 @@ A comprehensive development and debugging platform for AI Agents and Tools. Agen
 - **Tool Call Execution**: Watch agents use tools in real-time
 - **Token Usage Tracking**: Monitor API costs and usage statistics
 - **Model Information**: Display provider and model info for each response
-- **Message Management**: Markdown supported and copy, edit, retry, and delete messages
+- **Message Management**: Edit, retry, and delete messages
 - **Session Management**: Multiple chat sessions with auto-save
 
 ### 🔧 Developer-Friendly Features
 - **Local Storage**: All data stored locally in browser (IndexedDB)
 - **Import/Export**: Backup and share agent/tool configurations
 - **Hot Reload**: Instant updates during development
+- **Error Handling**: Comprehensive error messages and debugging info
+- **Responsive Design**: Works on desktop and mobile devices
 
 ### 🐳 Docker Support
 - **Easy Deployment**: Docker Compose for instant setup

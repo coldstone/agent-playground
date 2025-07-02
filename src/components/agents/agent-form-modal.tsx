@@ -12,6 +12,7 @@ import { useSystemModel } from '@/hooks/use-system-model'
 import { InstructionGenerator, ToolGenerator } from '@/lib/generators'
 import { ToolFormModal } from '@/components/tools/tool-form-modal'
 import { ToolGeneratorModal } from '@/components/tools/tool-generator-modal'
+import { useToast } from '@/components/ui/toast'
 
 interface AgentFormModalProps {
   isOpen: boolean
@@ -40,6 +41,7 @@ export function AgentFormModal({
     selectedTools: [] as string[]
   })
 
+  const { showToast, ToastContainer } = useToast()
 
   const [showAIPrompt, setShowAIPrompt] = useState(false)
   const [aiPrompt, setAiPrompt] = useState('')
@@ -135,13 +137,13 @@ export function AgentFormModal({
 
   const handleGenerateTool = async (prompt: string) => {
     if (!hasSystemModel) {
-      alert('Please configure System Model first')
+      showToast('Please configure System Model first', 'error')
       return
     }
 
     const systemModelConfig = getSystemModelConfig()
     if (!systemModelConfig) {
-      alert('Please configure System Model first')
+      showToast('Please configure System Model first', 'error')
       return
     }
 
@@ -160,8 +162,8 @@ export function AgentFormModal({
       })
       setShowCreateToolModal(true)
     } catch (error) {
-      console.error('Tool generation failed:', error)
-      alert(`Failed to generate tool: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      console.warn('Tool generation failed:', error)
+      showToast(`Failed to generate tool: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error')
     } finally {
       setIsGeneratingTool(false)
     }
@@ -194,13 +196,13 @@ export function AgentFormModal({
 
   const handleAIGenerate = async (prompt: string) => {
     if (!hasSystemModel) {
-      alert('Please configure System Model first')
+      showToast('Please configure System Model first', 'error')
       return
     }
 
     const systemModelConfig = getSystemModelConfig()
     if (!systemModelConfig) {
-      alert('Please configure System Model first')
+      showToast('Please configure System Model first', 'error')
       return
     }
 
@@ -235,8 +237,8 @@ export function AgentFormModal({
         setAiPrompt('')
       }
     } catch (error) {
-      console.error('Failed to generate instruction:', error)
-      alert('Failed to generate instruction. Please try again.')
+      console.warn('Failed to generate instruction:', error)
+      showToast('Failed to generate instruction. Please try again.', 'error')
     } finally {
       setIsGenerating(false)
     }
@@ -580,6 +582,8 @@ export function AgentFormModal({
         onGenerate={handleGenerateTool}
         isGenerating={isGeneratingTool}
       />
+
+      <ToastContainer />
     </>
   )
 }

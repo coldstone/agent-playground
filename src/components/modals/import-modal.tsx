@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import { Agent, Tool } from '@/types'
 import { X, Upload, Bot, Wrench, AlertTriangle } from 'lucide-react'
+import { useToast } from '@/components/ui/toast'
 
 interface ImportData {
   agents: Agent[]
@@ -20,7 +21,6 @@ interface ImportModalProps {
 // Helper function to merge headers, preserving existing values
 const mergeHeaders = (existingHeaders: { key: string; value: string }[], importHeaders: { key: string; value: string }[]) => {
   const existingHeaderMap = new Map(existingHeaders.map(h => [h.key, h.value]))
-  const importHeaderKeys = new Set(importHeaders.map(h => h.key))
 
   // Start with import headers structure
   const mergedHeaders = importHeaders.map(importHeader => ({
@@ -32,10 +32,10 @@ const mergeHeaders = (existingHeaders: { key: string; value: string }[], importH
 }
 
 export function ImportModal({ isOpen, onClose, onImport, existingAgents, existingTools }: ImportModalProps) {
+  const { showToast, ToastContainer } = useToast()
   const [importData, setImportData] = useState<ImportData | null>(null)
   const [selectedAgents, setSelectedAgents] = useState<Set<string>>(new Set())
   const [selectedTools, setSelectedTools] = useState<Set<string>>(new Set())
-  const [error, setError] = useState<string | null>(null)
 
   // Reset state when modal opens
   useEffect(() => {
@@ -43,7 +43,6 @@ export function ImportModal({ isOpen, onClose, onImport, existingAgents, existin
       setImportData(null)
       setSelectedAgents(new Set())
       setSelectedTools(new Set())
-      setError(null)
     }
   }, [isOpen])
 
@@ -86,13 +85,14 @@ export function ImportModal({ isOpen, onClose, onImport, existingAgents, existin
         
         // Validate the data structure
         if (!data.agents || !data.tools || !Array.isArray(data.agents) || !Array.isArray(data.tools)) {
-          throw new Error('Invalid file format. Expected agents and tools arrays.')
+          showToast('Invalid file format. Expected agents and tools arrays.', 'error')
+          return
         }
 
         setImportData(data)
-        setError(null)
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to parse file')
+        const errorMessage = err instanceof Error ? err.message : 'Failed to parse file'
+        showToast(errorMessage, 'error')
         setImportData(null)
       }
     }
@@ -211,11 +211,6 @@ export function ImportModal({ isOpen, onClose, onImport, existingAgents, existin
                   className="hidden"
                 />
               </label>
-              {error && (
-                <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
-                  {error}
-                </div>
-              )}
             </div>
           ) : (
             <div className="space-y-6">
@@ -328,6 +323,7 @@ export function ImportModal({ isOpen, onClose, onImport, existingAgents, existin
           </div>
         )}
       </div>
+      <ToastContainer />
     </div>
   )
 }

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Sparkles, Loader2 } from 'lucide-react'
+import { useToast } from '@/components/ui/toast'
 
 interface ToolGeneratorModalProps {
   isOpen: boolean
@@ -21,6 +22,7 @@ export function ToolGeneratorModal({
   isGenerating
 }: ToolGeneratorModalProps) {
   const [prompt, setPrompt] = useState('')
+  const { showToast, ToastContainer } = useToast()
 
   const handleGenerate = async () => {
     if (!prompt.trim()) return
@@ -30,7 +32,8 @@ export function ToolGeneratorModal({
       setPrompt('')
       onClose()
     } catch (error) {
-      console.error('Tool generation failed:', error)
+      console.warn('Tool generation failed:', error)
+      showToast(`Tool generation failed. ${error instanceof Error ? error.message : ''}`, 'error')
     }
   }
 
@@ -42,11 +45,10 @@ export function ToolGeneratorModal({
   }
 
   const examplePrompts = [
-    "Create a tool to get current weather information for any city. It should accept a location parameter and optionally a temperature unit (celsius or fahrenheit).",
     "Create a tool to search the web for information. It should accept a search query and optionally the number of results to return (1-10).",
-    "Create a tool to perform mathematical calculations. It should accept a mathematical expression as a string and return the result.",
     "Create a tool to translate text between languages. It should accept the text to translate, source language, and target language.",
-    "Create a tool to generate QR codes. It should accept the text/URL to encode and optionally the size of the QR code."
+    "Create a tool to generate QR codes. It should accept the text/URL to encode and optionally the size of the QR code.",
+    "Create a tool to perform mathematical calculations. It should accept a mathematical expression as a string and return the result."
   ]
 
   return (
@@ -125,6 +127,8 @@ export function ToolGeneratorModal({
           )}
         </Button>
       </ModalFooter>
+
+      <ToastContainer />
     </Modal>
   )
 }

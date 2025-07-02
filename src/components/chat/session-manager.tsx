@@ -75,6 +75,7 @@ export function SessionManager({
           onClick={onNewChat}
           className="w-full"
           size="sm"
+          rounded={true}
           disabled={isNewChatDisabled}
         >
           <Plus className="w-4 h-4 mr-2" />

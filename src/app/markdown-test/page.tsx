@@ -132,6 +132,52 @@ npm run dev
 That's all for now!
 `
 
+const problematicMarkdown = `当然！说唱音乐发展至今衍生出**无数子流派**，不同地区、年代和文化背景催生了独特的声音。以下是**最全面的说唱风格指南**，从经典到地下，从地域到融合流派，尽量涵盖所有重要类型。
+
+---
+
+## **1. 经典/主流说唱风格**
+这些风格奠定了hip-hop的基础，影响后续所有流派。
+
+### **(1) Boom Bap**
+- **发源**：1980~90年代纽约（黄金时代）
+- **特点**：爵士/放克采样 + 厚重的鼓点（"boom bap"拟声词）
+- **代表**：Nas（《Illmatic》）、Wu-Tang Clan、MF DOOM
+
+### **(2) Gangsta Rap（匪帮说唱）**
+- **发源**：1980~90年代洛杉矶（反映街头暴力）
+- **特点**：硬核歌词（帮派、犯罪、警察冲突） + 合成器beat
+- **代表**：N.W.A、Ice-T、2Pac、Snoop Dogg
+`
+
+const headingTestMarkdown = `# 标题测试
+
+## 普通标题
+这是普通标题下的内容。
+
+## **完整粗体标题**
+这是完整粗体标题下的内容。
+
+## **部分粗体** 普通文字
+这是混合标题下的内容。
+
+## 普通文字 **部分粗体**
+这是另一种混合标题下的内容。
+
+## **1. 带数字的粗体标题**
+这是带数字的粗体标题下的内容。
+
+## **经典/主流说唱风格**
+这是原始问题的简化版本。
+
+## **1. 测试** 后面跟文字
+这应该正常渲染。
+
+## **1. 测试**
+1. 这里是列表项
+2. 另一个列表项
+`
+
 export default function MarkdownTestPage() {
   return (
     <div className="min-h-screen bg-background p-8">
@@ -151,11 +197,27 @@ export default function MarkdownTestPage() {
           <div className="space-y-4">
             <h2 className="text-xl font-semibold">Streaming Content</h2>
             <div className="border rounded-lg p-4 bg-card group">
-              <StreamingContent 
-                content={testMarkdown} 
+              <StreamingContent
+                content={testMarkdown}
                 isStreaming={false}
               />
             </div>
+          </div>
+        </div>
+
+        {/* Problematic Markdown Test */}
+        <div className="space-y-4">
+          <h2 className="text-xl font-semibold text-red-600">问题测试：标题渲染问题</h2>
+          <div className="border rounded-lg p-4 bg-card group">
+            <MessageContent content={problematicMarkdown} />
+          </div>
+        </div>
+
+        {/* Heading Test */}
+        <div className="space-y-4">
+          <h2 className="text-xl font-semibold text-blue-600">标题格式测试</h2>
+          <div className="border rounded-lg p-4 bg-card group">
+            <MessageContent content={headingTestMarkdown} />
           </div>
         </div>
 

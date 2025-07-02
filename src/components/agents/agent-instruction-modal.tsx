@@ -5,6 +5,7 @@ import { Agent, APIConfig } from '@/types'
 import { X, BookUser, Save, Sparkles, Wand2 } from 'lucide-react'
 import { InstructionGenerator } from '@/lib/generators'
 import { useSystemModel } from '@/hooks/use-system-model'
+import { useToast } from '@/components/ui/toast'
 
 interface AgentInstructionModalProps {
   isOpen: boolean
@@ -16,6 +17,7 @@ interface AgentInstructionModalProps {
 
 export function AgentInstructionModal({ isOpen, onClose, agent, onSave, apiConfig }: AgentInstructionModalProps) {
   const { hasSystemModel, getSystemModelConfig } = useSystemModel()
+  const { showToast, ToastContainer } = useToast()
   const [instruction, setInstruction] = useState('')
   const [isSaving, setIsSaving] = useState(false)
   const [showAIGenerator, setShowAIGenerator] = useState(false)
@@ -38,6 +40,7 @@ export function AgentInstructionModal({ isOpen, onClose, agent, onSave, apiConfi
       onClose()
     } catch (error) {
       console.error('Failed to save instruction:', error)
+      showToast('Failed to save instruction. ', 'error')
     } finally {
       setIsSaving(false)
     }
@@ -57,12 +60,11 @@ export function AgentInstructionModal({ isOpen, onClose, agent, onSave, apiConfi
 
     const systemModelConfig = getSystemModelConfig()
     if (!systemModelConfig) {
-      alert('Please configure System Model first')
+      showToast('Please configure System Model first', 'error')
       return
     }
 
     setIsGenerating(true)
-    // 清空当前的 instruction 内容，准备开始打字效果
     setInstruction('')
 
     try {
@@ -71,18 +73,16 @@ export function AgentInstructionModal({ isOpen, onClose, agent, onSave, apiConfi
       let generatedContent = ''
       for await (const chunk of generator.generateInstruction(aiPrompt)) {
         generatedContent += chunk
-        // 实时更新 instruction 文本框，产生打字效果
         setInstruction(generatedContent)
       }
 
       if (generatedContent.trim()) {
-        // 生成完成后关闭 AI 生成器
         setShowAIGenerator(false)
         setAiPrompt('')
       }
     } catch (error) {
       console.error('Failed to generate instruction:', error)
-      // You could add error handling UI here
+      showToast('Failed to generate instruction.', 'error')
     } finally {
       setIsGenerating(false)
     }
@@ -249,6 +249,7 @@ export function AgentInstructionModal({ isOpen, onClose, agent, onSave, apiConfi
           </div>
         </div>
       </div>
+      <ToastContainer />
     </div>
   )
 }
