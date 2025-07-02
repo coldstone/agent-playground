@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { useRecentTags } from '@/hooks/use-recent-tags'
 import { X } from 'lucide-react'
+import { useToast } from '@/components/ui/toast'
 
 interface RecentTagsPillsProps {
   recentTags: string[]
@@ -47,26 +48,29 @@ function RecentTagsPills({ recentTags, onTagClick, onTagRemove }: RecentTagsPill
   )
 }
 
-function validateSchema(schemaStr: string): any {
+function validateSchema(schemaStr: string, showToast: (message: string, type?: "error" | "success" | "info") => void): any {
   try {
     const schema = JSON.parse(schemaStr)
     
-    // 基本结构验证
     if (!schema.type || schema.type !== 'function') {
-      throw new Error('Schema must have type: "function"')
+      showToast('JSON Schema must have type: "function"', 'error')
+      return;
     }
     
     if (!schema.function) {
-      throw new Error('Schema must have a "function" property')
+      showToast('JSON Schema must have a "function" property', 'error')
+      return;
     }
     
     if (!schema.function.name || !schema.function.description) {
-      throw new Error('Function must have name and description')
+      showToast('JSON Schema function must have name and description', 'error')
+      return;
     }
     
     return schema
   } catch (error) {
-    throw new Error(`Invalid JSON schema: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    showToast(`Invalid JSON schema: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error')
+    return;
   }
 }
 
@@ -74,7 +78,7 @@ interface ToolFormModalProps {
   isOpen: boolean
   onClose: () => void
   mode: 'create' | 'edit'
-  tool?: Tool // 编辑模式时传入要编辑的工具
+  tool?: Tool
   onToolCreate?: (tool: Tool) => Promise<Tool> | Tool | void
   onToolUpdate?: (tool: Tool) => Promise<Tool> | Tool | void
   initialData?: {
@@ -83,8 +87,7 @@ interface ToolFormModalProps {
     schema?: string
     tag?: string
   }
-  // 特殊场景的回调
-  onSuccess?: (tool: Tool) => void // 成功创建/更新后的回调，用于处理特殊逻辑如自动选中
+  onSuccess?: (tool: Tool) => void 
 }
 
 export function ToolFormModal({
@@ -98,6 +101,7 @@ export function ToolFormModal({
   onSuccess
 }: ToolFormModalProps) {
   const { recentTags, addRecentTag, removeRecentTag } = useRecentTags()
+  const { showToast, ToastContainer } = useToast()
   
   const [formData, setFormData] = useState({
     name: '',
@@ -105,7 +109,6 @@ export function ToolFormModal({
     schema: '',
     tag: ''
   })
-  const [schemaError, setSchemaError] = useState('')
 
   const getDefaultSchema = () => JSON.stringify({
     type: 'function',
@@ -122,7 +125,6 @@ export function ToolFormModal({
 
   const resetForm = () => {
     if (mode === 'edit' && tool) {
-      // 编辑模式：使用工具数据初始化
       setFormData({
         name: tool.name,
         description: tool.description,
@@ -130,7 +132,6 @@ export function ToolFormModal({
         tag: tool.tag || ''
       })
     } else {
-      // 创建模式：使用初始数据或默认值
       setFormData({
         name: initialData?.name || '',
         description: initialData?.description || '',
@@ -138,7 +139,6 @@ export function ToolFormModal({
         tag: initialData?.tag || ''
       })
     }
-    setSchemaError('')
   }
 
   useEffect(() => {
@@ -149,14 +149,13 @@ export function ToolFormModal({
 
   const handleSubmit = async () => {
     if (!formData.name.trim() || !formData.description.trim()) {
-      setSchemaError('Name and description are required')
+      showToast('Name and description are required', 'error')
       return
     }
 
-    const schema = validateSchema(formData.schema)
+    const schema = validateSchema(formData.schema, showToast)
     if (!schema) return
 
-    // Update schema function name to match tool name
     schema.function.name = formData.name
 
     try {
@@ -180,7 +179,6 @@ export function ToolFormModal({
           resultTool = newTool
         }
       } else {
-        // 编辑模式
         if (!tool) return
 
         const updatedTool: Tool = {
@@ -200,12 +198,10 @@ export function ToolFormModal({
         }
       }
 
-      // 添加标签到最近使用列表
       if (formData.tag && formData.tag.trim()) {
         addRecentTag(formData.tag.trim())
       }
 
-      // 调用成功回调
       if (onSuccess) {
         onSuccess(resultTool)
       }
@@ -213,8 +209,8 @@ export function ToolFormModal({
       onClose()
       resetForm()
     } catch (error) {
-      console.error(`Failed to ${mode} tool:`, error)
-      setSchemaError(`Failed to ${mode} tool: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      console.warn(`Failed to ${mode} tool:`, error)
+      showToast(`Failed to ${mode} tool: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error')
     }
   }
 
@@ -280,9 +276,6 @@ export function ToolFormModal({
               rows={12}
               className="font-mono text-sm"
             />
-            {schemaError && (
-              <p className="text-sm text-red-600 mt-1">{schemaError}</p>
-            )}
           </div>
         </div>
       </ModalBody>
@@ -298,11 +291,12 @@ export function ToolFormModal({
           {submitText}
         </Button>
       </ModalFooter>
+
+      <ToastContainer />
     </Modal>
   )
 }
 
-// 保持向后兼容的接口
 interface ToolCreateModalProps {
   isOpen: boolean
   onClose: () => void

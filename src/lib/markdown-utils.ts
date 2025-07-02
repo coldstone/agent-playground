@@ -26,15 +26,32 @@ function escapeBrackets(text: string): string {
  * Fix bold text followed by list issue (both ordered and unordered)
  */
 function fixBoldList(text: string): string {
-  // 匹配粗体后直接跟有序列表的情况：**text**\n1. 或 **text**1.
-  // 在1.前面添加一个换行符
-  let processedText = text.replace(/(\*\*[^*]+\*\*)\s*\n?(\d+\.\s)/g, '$1\n\n$2')
+  // 先按行分割文本
+  const lines = text.split('\n')
+  const processedLines: string[] = []
 
-  // 匹配粗体后直接跟无序列表的情况：**text**\n- 或 **text**-
-  // 在-前面添加一个换行符
-  processedText = processedText.replace(/(\*\*[^*]+\*\*)\s*\n?(-\s)/g, '$1\n\n$2')
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
 
-  return processedText
+    // 如果当前行是标题（以#开头），直接保留，不进行处理
+    if (line.match(/^\s*#{1,6}\s/)) {
+      processedLines.push(line)
+      continue
+    }
+
+    // 对非标题行进行粗体+列表的修复处理
+    let processedLine = line
+
+    // 匹配粗体后直接跟有序列表的情况：**text**1.
+    processedLine = processedLine.replace(/(\*\*[^*]+\*\*)(\d+\.\s)/g, '$1\n\n$2')
+
+    // 匹配粗体后直接跟无序列表的情况：**text**-
+    processedLine = processedLine.replace(/(\*\*[^*]+\*\*)(-\s)/g, '$1\n\n$2')
+
+    processedLines.push(processedLine)
+  }
+
+  return processedLines.join('\n')
 }
 
 /**

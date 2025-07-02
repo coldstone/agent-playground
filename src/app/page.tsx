@@ -10,6 +10,7 @@ import { AccordionPanel } from '@/components/config'
 import { ChatMessages, ChatInput, ChatInputRef, ChatControls, SessionManager, NewChatOverlay } from '@/components/chat'
 import { AgentFormModal } from '@/components/agents'
 import { useSystemModel } from '@/hooks/use-system-model'
+import { useToast } from '@/components/ui/toast'
 
 
 import { ExportModal, ImportModal, SystemPromptModal } from '@/components/modals'
@@ -42,7 +43,9 @@ export default function HomePage() {
 
   const [showExportModal, setShowExportModal] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
-  const [showNewChatOverlay, setShowNewChatOverlay] = useState(true) // Start with overlay visible
+  const [showNewChatOverlay, setShowNewChatOverlay] = useState(true) 
+
+  const { showToast, ToastContainer } = useToast()
 
   // System Model hook for AI generation
   const { getSystemModelConfig } = useSystemModel()
@@ -136,11 +139,11 @@ export default function HomePage() {
           const currentModel = JSON.parse(currentModelStr)
           const currentModelKey = `${currentModel.provider}-${currentModel.model}`
           if (!validModelIds.has(currentModelKey)) {
-            console.log('Current model is no longer valid, clearing:', currentModel)
+            console.warn('Current model is no longer valid, clearing:', currentModel)
             localStorage.removeItem('agent-playground-current-model')
           }
         } catch (error) {
-          console.error('Failed to parse current model, clearing:', error)
+          console.warn('Failed to parse current model, clearing:', error)
           localStorage.removeItem('agent-playground-current-model')
         }
       }
@@ -156,12 +159,12 @@ export default function HomePage() {
             localStorage.removeItem('agent-playground-system-model')
           }
         } catch (error) {
-          console.error('Failed to parse system model, clearing:', error)
+          console.warn('Failed to parse system model, clearing:', error)
           localStorage.removeItem('agent-playground-system-model')
         }
       }
     } catch (error) {
-      console.error('Failed to validate and cleanup models:', error)
+      console.warn('Failed to validate and cleanup models:', error)
     }
   }
 
@@ -348,8 +351,11 @@ export default function HomePage() {
         const remainingSessions = sessions.filter(s => s.id !== sessionId)
         setCurrentSessionId(remainingSessions.length > 0 ? remainingSessions[0].id : null)
       }
+      showToast('Session deleted.', 'success')
     } catch (error) {
+      showToast('Failed to delete session.', 'error')
       console.error('Failed to delete session:', error)
+
     }
   }
 
@@ -365,6 +371,7 @@ export default function HomePage() {
         s.id === sessionId ? updatedSession : s
       ))
     } catch (error) {
+      showToast('Failed to rename session.', 'error')
       console.error('Failed to rename session:', error)
     }
   }
@@ -393,8 +400,8 @@ export default function HomePage() {
 
       return newAgent.id
     } catch (error) {
+      showToast('Failed to create agent.', 'error')
       console.error('Failed to create agent:', error)
-      throw error
     }
   }
 
@@ -410,8 +417,8 @@ export default function HomePage() {
         agent.id === agentId ? newAgent : agent
       ))
     } catch (error) {
+      showToast('Failed to update agent.', 'error')
       console.error('Failed to update agent:', error)
-      throw error
     }
   }
 
@@ -420,7 +427,6 @@ export default function HomePage() {
       await updateAgent(agentId, { systemPrompt: instruction })
     } catch (error) {
       console.error('Failed to update agent instruction:', error)
-      throw error
     }
   }
 
@@ -429,7 +435,6 @@ export default function HomePage() {
       await updateAgent(agentId, { tools: toolIds })
     } catch (error) {
       console.error('Failed to update agent tools:', error)
-      throw error
     }
   }
 
@@ -441,8 +446,8 @@ export default function HomePage() {
         setCurrentAgentId(null)
       }
     } catch (error) {
+      showToast('Failed to delete agent.', 'error')
       console.error('Failed to delete agent:', error)
-      throw error
     }
   }
 
@@ -458,6 +463,7 @@ export default function HomePage() {
         await dbManager.saveAgent(updatedAgent)
       }
     } catch (error) {
+      showToast('Failed to reorder agents.', 'error')
       console.error('Failed to reorder agents:', error)
       // Reload agents from DB on error
       try {
@@ -484,8 +490,8 @@ export default function HomePage() {
       setTools(prev => [...prev, newTool])
       return newTool
     } catch (error) {
+      showToast('Failed to create tool.', 'error')
       console.error('Failed to create tool:', error)
-      throw error
     }
   }
 
@@ -501,8 +507,8 @@ export default function HomePage() {
         tool.id === toolId ? newTool : tool
       ))
     } catch (error) {
+      showToast('Failed to update tool.', 'error')
       console.error('Failed to update tool:', error)
-      throw error
     }
   }
 
@@ -528,9 +534,10 @@ export default function HomePage() {
         tools: agent.tools.filter(toolIdInAgent => toolIdInAgent !== toolId),
         updatedAt: Date.now()
       })))
+      showToast('Tool deleted.', 'success')
     } catch (error) {
+      showToast('Failed to delete tool.', 'error')
       console.error('Failed to delete tool:', error)
-      throw error
     }
   }
 
@@ -556,10 +563,10 @@ export default function HomePage() {
       setAgents(loadedAgents)
       setTools(loadedTools)
 
-      console.log(`Imported ${importAgents.length} agents and ${importTools.length} tools`)
+      showToast(`Imported ${importAgents.length} agents and ${importTools.length} tools`, 'success')
     } catch (error) {
+      showToast('Failed to import data.', 'error')
       console.error('Failed to import data:', error)
-      throw error
     }
   }
 
@@ -712,8 +719,8 @@ export default function HomePage() {
           usage: usage || undefined,
           reasoningContent: reasoningContent || undefined,
           reasoningDuration: localReasoningDuration || undefined,
-          provider: config.provider,
-          model: config.model
+          provider: currentConfig.provider,
+          model: currentConfig.model
         }
 
         // Clear streaming states after creating the message
@@ -878,7 +885,7 @@ export default function HomePage() {
             try {
               const systemModelConfig = getSystemModelConfig()
               if (!systemModelConfig) {
-                console.log('No system model configured, skipping title generation')
+                console.warn('No system model configured, skipping title generation')
                 return
               }
 
@@ -912,6 +919,7 @@ export default function HomePage() {
         }, 100)
       }
     } catch (error) {
+      showToast('Failed to save user message.', 'error')
       console.error('Failed to save user message:', error)
       return
     }
@@ -1076,8 +1084,8 @@ export default function HomePage() {
           usage: usage || undefined,
           reasoningContent: reasoningContent || undefined,
           reasoningDuration: localReasoningDuration || undefined,
-          provider: config.provider,
-          model: config.model
+          provider: currentConfig.provider,
+          model: currentConfig.model
         }
 
         // Clear streaming states after creating the message
@@ -1190,6 +1198,7 @@ export default function HomePage() {
     if ((streamingContent.trim() || streamingReasoningContent.trim()) && currentSessionId) {
       const session = sessions.find(s => s.id === currentSessionId)
       if (session) {
+        const currentConfig = getCurrentModelConfig()
         const partialMessage: AgentMessage = {
           id: generateId(),
           role: 'assistant',
@@ -1199,8 +1208,8 @@ export default function HomePage() {
           timestamp: Date.now(),
           // Mark as incomplete/stopped
           incomplete: true,
-          provider: config.provider,
-          model: config.model
+          provider: currentConfig.provider,
+          model: currentConfig.model
         }
 
         const updatedSession = {
@@ -1248,6 +1257,7 @@ export default function HomePage() {
         s.id === currentSessionId ? updatedSession : s
       ))
     } catch (error) {
+      showToast('Failed to save system prompt.', 'error')
       console.error('Failed to save system prompt:', error)
     }
   }
@@ -1492,8 +1502,8 @@ export default function HomePage() {
               usage: usage || undefined,
               reasoningContent: reasoningContent || undefined,
               reasoningDuration: localReasoningDuration || undefined,
-              provider: config.provider,
-              model: config.model
+              provider: currentConfig.provider,
+              model: currentConfig.model
             }
 
             // Clear streaming states after creating the message
@@ -1532,6 +1542,7 @@ export default function HomePage() {
           }, 100)
 
         } catch (error) {
+          showToast('Failed to retry message.', 'error')
           console.error('Failed to retry message:', error)
 
           // Don't show error message if request was aborted (user clicked stop)
@@ -1650,6 +1661,7 @@ export default function HomePage() {
         s.id === currentSessionId ? updatedSession : s
       ))
     } catch (error) {
+      showToast('Failed to delete message.', 'error')
       console.error('Failed to delete message:', error)
     }
   }
@@ -2097,8 +2109,8 @@ export default function HomePage() {
           usage: usage || undefined,
           reasoningContent: reasoningContent || undefined,
           reasoningDuration: localReasoningDuration || undefined,
-          provider: config.provider,
-          model: config.model
+          provider: currentConfig.provider,
+          model: currentConfig.model
         }
 
         // Clear streaming states after creating the message
@@ -2132,6 +2144,7 @@ export default function HomePage() {
       setIsStreamingReasoningExpanded(false)
 
     } catch (error) {
+      showToast('Failed to edit message.', 'error')
       console.error('Failed to edit message:', error)
 
       // Don't show error message if request was aborted (user clicked stop)
@@ -2409,6 +2422,8 @@ export default function HomePage() {
         initialPrompt={currentSession?.systemPrompt || config.systemPrompt}
         onSave={handleSystemPromptSave}
       />
+
+      <ToastContainer />
     </div>
   )
 }

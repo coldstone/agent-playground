@@ -9,6 +9,7 @@ import { ToolGeneratorModal } from '@/components/tools/tool-generator-modal'
 import { ToolFormModal } from '@/components/tools/tool-form-modal'
 import { ToolGenerator } from '@/lib/generators'
 import { useSystemModel } from '@/hooks/use-system-model'
+import { useToast } from '@/components/ui/toast'
 
 import { formatTimestamp } from '@/lib/utils'
 import {
@@ -40,6 +41,7 @@ export const ToolsPanel = forwardRef<ToolsPanelRef, ToolsPanelProps>(({
   onToolDelete
 }, ref) => {
   const { hasSystemModel, getSystemModelConfig } = useSystemModel()
+  const { showToast, ToastContainer } = useToast()
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showGeneratorModal, setShowGeneratorModal] = useState(false)
@@ -87,13 +89,13 @@ export const ToolsPanel = forwardRef<ToolsPanelRef, ToolsPanelProps>(({
 
   const handleGenerateTool = async (prompt: string) => {
     if (!hasSystemModel) {
-      alert('Please configure System Model first')
+      showToast('Please configure System Model first', 'error')
       return
     }
 
     const systemModelConfig = getSystemModelConfig()
     if (!systemModelConfig) {
-      alert('Please configure System Model first')
+      showToast('Please configure System Model first', 'error')
       return
     }
 
@@ -115,8 +117,8 @@ export const ToolsPanel = forwardRef<ToolsPanelRef, ToolsPanelProps>(({
       setShowGeneratorModal(false)
       setShowCreateModal(true)
     } catch (error) {
-      console.error('Tool generation failed:', error)
-      alert(`Failed to generate tool: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      console.warn('Tool generation failed:', error)
+      showToast(`Failed to generate tool: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error')
     } finally {
       setIsGenerating(false)
     }
@@ -366,6 +368,7 @@ export const ToolsPanel = forwardRef<ToolsPanelRef, ToolsPanelProps>(({
           </div>
         </div>
       )}
+      <ToastContainer />
     </>
   )
 })

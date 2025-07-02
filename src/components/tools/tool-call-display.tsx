@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { formatTimestamp } from '@/lib/utils'
 import { Wrench as ToolIcon, Play, Check, X, Clock, AlertCircle, Globe, Send } from 'lucide-react'
+import { useToast } from '@/components/ui/toast'
 
 interface ToolCallDisplayProps {
   toolCall: ToolCall
@@ -28,6 +29,7 @@ export function ToolCallDisplay({
   isStreaming = false,
   onScrollToBottom
 }: ToolCallDisplayProps) {
+  const { showToast, ToastContainer } = useToast()
   const [result, setResult] = useState('')
   const [error, setError] = useState('')
   const [isProvidingResult, setIsProvidingResult] = useState(false)
@@ -82,7 +84,9 @@ export function ToolCallDisplay({
       try {
         parsedArguments = JSON.parse(toolCall.function.arguments)
       } catch (e) {
-        throw new Error('Invalid arguments format')
+        const errorMessage = 'Invalid arguments format'
+        showToast(errorMessage, 'error')
+        return
       }
 
       // Replace parameters in URL and headers
@@ -164,7 +168,7 @@ export function ToolCallDisplay({
         onScrollToBottom?.()
       }
     } catch (error) {
-      console.error('HTTP request failed:', error)
+      showToast('HTTP request failed.', 'error')
       onMarkFailed(toolCall.id, error instanceof Error ? error.message : 'Unknown error')
     } finally {
       setIsRequestingHttp(false)
@@ -225,10 +229,8 @@ export function ToolCallDisplay({
   let argumentsDisplay = toolCall.function.arguments
 
   if (isStreaming) {
-    // In streaming mode, show raw arguments with typing effect
     argumentsDisplay = toolCall.function.arguments
   } else {
-    // In normal mode, try to parse and format JSON
     try {
       parsedArguments = JSON.parse(toolCall.function.arguments)
       argumentsDisplay = JSON.stringify(parsedArguments, null, 2)
@@ -383,7 +385,6 @@ export function ToolCallDisplay({
                 size="sm"
                 onClick={() => {
                   setIsProvidingResult(true)
-                  // 触发滚动到底部
                   onScrollToBottom?.()
                 }}
                 className="flex items-center gap-2"
@@ -396,7 +397,6 @@ export function ToolCallDisplay({
                 variant="destructive"
                 onClick={() => {
                   setIsProvidingError(true)
-                  // 触发滚动到底部
                   onScrollToBottom?.()
                 }}
                 className="flex items-center gap-2"
@@ -461,6 +461,7 @@ export function ToolCallDisplay({
           )}
         </div>
       </div>
+      <ToastContainer />
     </div>
   )
 }

@@ -8,6 +8,7 @@ import { ToolFormModal } from '@/components/tools/tool-form-modal'
 import { ToolGeneratorModal } from '@/components/tools/tool-generator-modal'
 import { useSystemModel } from '@/hooks/use-system-model'
 import { ToolGenerator } from '@/lib/generators'
+import { useToast } from '@/components/ui/toast'
 
 interface AgentToolsModalProps {
   isOpen: boolean
@@ -20,6 +21,7 @@ interface AgentToolsModalProps {
 
 export function AgentToolsModal({ isOpen, onClose, agent, allTools, onSave, onToolCreate }: AgentToolsModalProps) {
   const { hasSystemModel, getSystemModelConfig } = useSystemModel()
+  const { showToast, ToastContainer } = useToast()
   const [selectedToolIds, setSelectedToolIds] = useState<Set<string>>(new Set())
   const [initialSelectedToolIds, setInitialSelectedToolIds] = useState<Set<string>>(new Set())
   const [isSaving, setIsSaving] = useState(false)
@@ -93,13 +95,13 @@ export function AgentToolsModal({ isOpen, onClose, agent, allTools, onSave, onTo
 
   const handleGenerateTool = async (prompt: string) => {
     if (!hasSystemModel) {
-      alert('Please configure System Model first')
+      showToast('Please configure System Model first', 'error')
       return
     }
 
     const systemModelConfig = getSystemModelConfig()
     if (!systemModelConfig) {
-      alert('Please configure System Model first')
+      showToast('Please configure System Model first', 'error')
       return
     }
 
@@ -121,7 +123,7 @@ export function AgentToolsModal({ isOpen, onClose, agent, allTools, onSave, onTo
       setShowCreateToolModal(true)
     } catch (error) {
       console.error('Tool generation failed:', error)
-      alert(`Failed to generate tool: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      showToast(`Failed to generate tool: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error')
     } finally {
       setIsGeneratingTool(false)
     }
@@ -347,6 +349,7 @@ export function AgentToolsModal({ isOpen, onClose, agent, allTools, onSave, onTo
         onGenerate={handleGenerateTool}
         isGenerating={isGeneratingTool}
       />
+      <ToastContainer />
     </div>
   )
 }
