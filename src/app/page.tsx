@@ -55,7 +55,6 @@ export default function HomePage() {
 
   const [reasoningDuration, setReasoningDuration] = useState<number | null>(null)
   const [scrollToBottomTrigger, setScrollToBottomTrigger] = useState(0)
-  const [scrollToTopTrigger, setScrollToTopTrigger] = useState(0)
   const [forceScrollTrigger, setForceScrollTrigger] = useState<number>()
   const [showAIMessageBox, setShowAIMessageBox] = useState(false)
   const [showScrollToBottom, setShowScrollToBottom] = useState(false)
@@ -382,7 +381,7 @@ export default function HomePage() {
 
 
   // Agent management functions
-  const createAgent = async (agentData: Omit<Agent, 'id' | 'createdAt' | 'updatedAt'>) => {
+  const createAgent = async (agentData: Omit<Agent, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
     const newAgent: Agent = {
       ...agentData,
       id: generateId(),
@@ -403,6 +402,7 @@ export default function HomePage() {
     } catch (error) {
       showToast('Failed to create agent.', 'error')
       console.error('Failed to create agent:', error)
+      throw error // Re-throw the error to maintain the Promise<string> return type
     }
   }
 
@@ -477,7 +477,7 @@ export default function HomePage() {
   }
 
   // Tool management functions
-  const createTool = async (toolData: Omit<Tool, 'id' | 'createdAt' | 'updatedAt'> | Tool) => {
+  const createTool = async (toolData: Omit<Tool, 'id' | 'createdAt' | 'updatedAt'> | Tool): Promise<Tool> => {
     // If toolData already has an id, we need to replace it with a new one
     const newTool: Tool = {
       ...toolData,
@@ -493,6 +493,7 @@ export default function HomePage() {
     } catch (error) {
       showToast('Failed to create tool.', 'error')
       console.error('Failed to create tool:', error)
+      throw error // Re-throw the error to maintain the Promise<Tool> return type
     }
   }
 
@@ -2359,7 +2360,6 @@ export default function HomePage() {
               currentAgent={currentAgentWithTools}
               tools={tools}
               scrollToBottomTrigger={scrollToBottomTrigger}
-              scrollToTopTrigger={scrollToTopTrigger}
               forceScrollTrigger={forceScrollTrigger}
               onProvideToolResult={handleProvideToolResult}
               onMarkToolFailed={handleMarkToolFailed}
