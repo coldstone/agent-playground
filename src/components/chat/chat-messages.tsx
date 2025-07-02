@@ -30,6 +30,8 @@ interface ChatMessagesProps {
   scrollToBottomTrigger?: number // Add trigger to force scroll to bottom
   scrollToTopTrigger?: number // Add trigger to force scroll to top
   forceScrollTrigger?: number // Add trigger for user message send
+  onShowScrollToBottomChange?: (show: boolean) => void // Callback for scroll to bottom button visibility
+  onScrollToBottomClick?: () => void // Callback for scroll to bottom button click
   onProvideToolResult?: (toolCallId: string, result: string) => void
   onMarkToolFailed?: (toolCallId: string, error: string) => void
   onRetryMessage?: (messageId: string) => void
@@ -64,7 +66,9 @@ export function ChatMessages({
   onEditMessage,
   onToggleReasoningExpansion,
   onToggleStreamingReasoningExpansion,
-  onScrollToBottom
+  onScrollToBottom,
+  onShowScrollToBottomChange,
+  onScrollToBottomClick
 }: ChatMessagesProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const prevToolCallsLengthRef = useRef(0)
@@ -96,7 +100,7 @@ export function ChatMessages({
   }, [scrollToTopTrigger])
 
   // 使用智能滚动控制
-  const { isAutoScrollEnabled, isUserScrolling } = useSmartScroll({
+  const { isAutoScrollEnabled, isUserScrolling, showScrollToBottom, scrollToBottom } = useSmartScroll({
     dependencies: [messages, streamingContent, streamingReasoningContent],
     containerRef,
     threshold: 100,
@@ -104,6 +108,17 @@ export function ChatMessages({
     forceScrollTrigger,
     scrollToBottomTrigger
   })
+
+  // 通知父组件滚动到底部按钮的显示状态
+  React.useEffect(() => {
+    onShowScrollToBottomChange?.(showScrollToBottom)
+  }, [showScrollToBottom, onShowScrollToBottomChange])
+
+  // 处理滚动到底部点击
+  const handleScrollToBottomClick = React.useCallback(() => {
+    scrollToBottom()
+    onScrollToBottomClick?.()
+  }, [scrollToBottom, onScrollToBottomClick])
 
   const displayMessages = messages.filter(msg => msg.role !== 'system')
 

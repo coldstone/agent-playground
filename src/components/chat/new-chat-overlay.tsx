@@ -159,7 +159,8 @@ export function NewChatOverlay({
               onClick={handleSend}
               disabled={!message.trim() || !hasValidCurrentModel}
               size="sm"
-              className="h-8"
+              className="h-8 w-28"
+              rounded={true}
             >
               <Send className="w-4 h-4 mr-2" />
               Send

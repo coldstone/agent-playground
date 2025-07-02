@@ -5,11 +5,12 @@ export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link'
   size?: 'default' | 'xs' | 'sm' | 'lg' | 'icon'
+  rounded?: boolean // Add rounded prop for full border radius
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = 'default', size = 'default', ...props }, ref) => {
-    const baseClasses = "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
+  ({ className, variant = 'default', size = 'default', rounded = false, ...props }, ref) => {
+    const baseClasses = `inline-flex items-center justify-center whitespace-nowrap ${rounded ? 'rounded-full' : 'rounded-md'} text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50`
     
     const variants = {
       default: "bg-primary text-primary-foreground hover:bg-primary/90",
@@ -22,9 +23,9 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     
     const sizes = {
       default: "h-10 px-4 py-2",
-      xs: "h-4 rounded-md px-2",
-      sm: "h-9 rounded-md px-3",
-      lg: "h-11 rounded-md px-8",
+      xs: "h-4 px-2",
+      sm: "h-9 px-3",
+      lg: "h-11 px-8",
       icon: "h-10 w-10",
     }
 

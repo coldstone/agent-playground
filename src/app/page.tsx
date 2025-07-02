@@ -58,6 +58,7 @@ export default function HomePage() {
   const [scrollToTopTrigger, setScrollToTopTrigger] = useState(0)
   const [forceScrollTrigger, setForceScrollTrigger] = useState<number>()
   const [showAIMessageBox, setShowAIMessageBox] = useState(false)
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false)
   const abortControllerRef = useRef<AbortController | null>(null)
   const chatInputRef = useRef<ChatInputRef>(null)
   const aiMessageTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -1750,6 +1751,20 @@ export default function HomePage() {
     setScrollToBottomTrigger(prev => prev + 1)
   }
 
+  // 处理滚动到底部按钮显示状态变化
+  const handleShowScrollToBottomChange = (show: boolean) => {
+    setShowScrollToBottom(show)
+  }
+
+  // 处理滚动到底部按钮点击
+  const handleScrollToBottomClick = () => {
+    setScrollToBottomTrigger(prev => prev + 1)
+    // 滚动完成后自动隐藏按钮
+    setTimeout(() => {
+      setShowScrollToBottom(false)
+    }, 300) // 等待滚动动画完成
+  }
+
   // 检查是否有待处理的Tool Call
   const hasPendingToolCalls = () => {
     if (!currentSession?.messages) return false
@@ -2354,6 +2369,8 @@ export default function HomePage() {
               onToggleReasoningExpansion={toggleReasoningExpansion}
               onToggleStreamingReasoningExpansion={() => setIsStreamingReasoningExpanded(!isStreamingReasoningExpanded)}
               onScrollToBottom={handleScrollToBottom}
+              onShowScrollToBottomChange={handleShowScrollToBottomChange}
+              onScrollToBottomClick={handleScrollToBottomClick}
             />
 
             {/* Input */}
@@ -2424,6 +2441,26 @@ export default function HomePage() {
       />
 
       <ToastContainer />
+
+      {/* Scroll to bottom button - fixed position */}
+      {showScrollToBottom && (
+        <div className="fixed bottom-40 left-1/2 transform -translate-x-1/2 z-50">
+          <button
+            onClick={handleScrollToBottomClick}
+            className="w-10 h-10 bg-white/50 backdrop-blur-sm border border-gray-200 rounded-full shadow-lg hover:bg-white hover:shadow-xl transition-all duration-200 flex items-center justify-center group"
+            aria-label="Scroll to the bottom"
+          >
+            <svg
+              className="w-5 h-5 text-gray-600 group-hover:text-gray-800 transition-colors"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+            </svg>
+          </button>
+        </div>
+      )}
     </div>
   )
 }
