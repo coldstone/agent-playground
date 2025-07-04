@@ -159,7 +159,10 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
       [field]: value
     }
 
-    // Auto-save configurations
+    // 立即更新配置状态，避免光标跳转
+    onConfigChange(newConfig)
+
+    // Auto-save configurations (异步执行，不阻塞UI更新)
     if (isClient) {
       try {
         if (field === 'apiKey' && selectedProvider.requiresApiKey) {
@@ -211,8 +214,6 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
         console.error('Failed to save config:', error)
       }
     }
-
-    onConfigChange(newConfig)
   }
 
   const saveProviderConfig = async (updates: Partial<ProviderCustomConfig>) => {
