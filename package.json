@@ -12,7 +12,8 @@
     "start": "next start -p 3001",
     "lint": "next lint",
     "prepublishOnly": "npm run build",
-    "docker:test": "./scripts/test-docker.sh"
+    "docker:test": "./scripts/test-docker.sh",
+    "zip": "rm -f ../agent-playground.zip && zip -r ../agent-playground.zip . -x \"*.DS_Store\" -x \".git/*\" -x \".next/*\" -x \"node_modules/*\""
   },
   "keywords": [
     "ai",
