@@ -1872,10 +1872,9 @@ export default function HomePage() {
       const apiKeys = apiKeysStr ? JSON.parse(apiKeysStr) : {}
       const apiKey = apiKeys[provider.name] || ''
 
-      // Get endpoints from localStorage (for custom endpoints)
-      const endpointsStr = localStorage.getItem('agent-playground-api-endpoints')
-      const endpoints = endpointsStr ? JSON.parse(endpointsStr) : {}
-      const endpoint = endpoints[provider.name] || provider.endpoint
+      // Get endpoint from current config (which is updated by API config panel)
+      // The API config panel updates the config state directly, so we should use that
+      const endpoint = config.provider === provider.name ? config.endpoint : provider.endpoint
 
       // Create config with selected model's provider settings
       return {
@@ -2444,7 +2443,7 @@ export default function HomePage() {
 
       {/* Scroll to bottom button - fixed position */}
       {showScrollToBottom && (
-        <div className="fixed bottom-40 left-1/2 transform -translate-x-1/2 z-50">
+        <div className="fixed bottom-40 left-1/2 transform -translate-x-1/2 z-10">
           <button
             onClick={handleScrollToBottomClick}
             className="w-10 h-10 bg-white/50 backdrop-blur-sm border border-gray-200 rounded-full shadow-lg hover:bg-white hover:shadow-xl transition-all duration-200 flex items-center justify-center group"
