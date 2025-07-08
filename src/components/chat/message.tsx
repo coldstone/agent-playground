@@ -10,6 +10,66 @@ import { Textarea } from '@/components/ui/textarea'
 import { Tooltip } from '@/components/ui/tooltip'
 import { User, Bot, Settings, Wrench, RefreshCw, Trash2, Edit2, Check, X, Atom, Brain, Cpu, Zap, Text, Code, Copy } from 'lucide-react'
 
+// Code block component for displaying tool results
+function CodeBlock({ content, language = 'json' }: { content: string; language?: string }) {
+  const [copied, setCopied] = useState(false)
+
+  const copyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(content)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (err) {
+      console.error('Failed to copy text: ', err)
+    }
+  }
+
+  // Try to format JSON content
+  const formatContent = (text: string) => {
+    if (language === 'json') {
+      try {
+        const parsed = JSON.parse(text)
+        return JSON.stringify(parsed, null, 2)
+      } catch {
+        return text
+      }
+    }
+    return text
+  }
+
+  const formattedContent = formatContent(content)
+
+  return (
+    <div className="relative group">
+      <div className="flex items-center justify-between bg-gray-800 text-gray-300 px-3 py-1.5 text-xs rounded-t-lg">
+        <span className="font-mono text-xs uppercase tracking-wide">
+          {language}
+        </span>
+        <button
+          onClick={copyToClipboard}
+          className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-700 hover:bg-gray-600 transition-colors opacity-0 group-hover:opacity-100"
+          title="Copy content"
+        >
+          {copied ? (
+            <>
+              <Check size={12} />
+              <span className="text-xs">Copied</span>
+            </>
+          ) : (
+            <>
+              <Copy size={12} />
+              <span className="text-xs">Copy</span>
+            </>
+          )}
+        </button>
+      </div>
+      <pre className="bg-gray-900 text-gray-100 p-3 rounded-b-lg m-0 text-xs overflow-x-auto whitespace-pre-wrap break-words">
+        <code>{formattedContent}</code>
+      </pre>
+    </div>
+  )
+}
+
 interface MessageProps {
   message: MessageType | AgentMessage
   tools?: Tool[]
@@ -207,20 +267,14 @@ export function Message({
               </Button>
             )}
 
-            {/* Retry button for all non-user messages */}
-            {message.role !== 'user' && onRetryMessage && (
+            {/* Retry button for assistant messages only (not tool results) */}
+            {message.role === 'assistant' && onRetryMessage && (
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => onRetryMessage(message.id)}
                 className="h-6 w-6 p-0 flex items-center justify-center flex-shrink-0"
-                title={
-                  message.role === 'assistant'
-                    ? (message.error ? "Retry failed request" : "Regenerate response")
-                    : message.role === 'tool'
-                    ? "Retry tool execution"
-                    : "Retry"
-                }
+                title={message.error ? "Retry failed request" : "Regenerate response"}
               >
                 <RefreshCw className="w-3 h-3 flex-shrink-0" />
               </Button>
@@ -319,7 +373,10 @@ export function Message({
               </div>
             )}
 
-            {showMarkdown ? (
+            {/* Tool Result messages use code block display */}
+            {isTool ? (
+              <CodeBlock content={message.content} language="json" />
+            ) : showMarkdown ? (
               <MessageContent
                 content={message.content}
                 className="min-w-0"
