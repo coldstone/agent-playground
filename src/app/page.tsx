@@ -1264,6 +1264,71 @@ export default function HomePage() {
     }
   }
 
+  // Check if all tool calls in the last assistant message are completed
+  const checkAllToolCallsCompleted = (session: ChatSession): boolean => {
+    const lastMessage = session.messages[session.messages.length - 1]
+    if (lastMessage?.role === 'assistant') {
+      const agentMessage = lastMessage as AgentMessage
+      if (agentMessage.toolCalls && agentMessage.toolCalls.length > 0) {
+        // Check if all tool calls have completed or failed executions
+        return agentMessage.toolCalls.every(toolCall => {
+          const execution = agentMessage.toolCallExecutions?.find(exec => exec.toolCall.id === toolCall.id)
+          return execution && (execution.status === 'completed' || execution.status === 'failed')
+        })
+      }
+    }
+    return false
+  }
+
+  // Process all completed tool calls and send them to AI
+  const processAllToolResults = async (session: ChatSession) => {
+    const lastMessage = session.messages[session.messages.length - 1] as AgentMessage
+    if (!lastMessage?.toolCalls || !lastMessage?.toolCallExecutions) return
+
+    // Create tool messages for all completed tool calls
+    const toolMessages: Message[] = []
+
+    for (const toolCall of lastMessage.toolCalls) {
+      const execution = lastMessage.toolCallExecutions.find(exec => exec.toolCall.id === toolCall.id)
+      if (execution && (execution.status === 'completed' || execution.status === 'failed')) {
+        const content = execution.status === 'completed'
+          ? execution.result || ''
+          : `Error: ${execution.error || 'Unknown error'}`
+
+        const toolMessage: Message = {
+          id: generateId(),
+          role: 'tool',
+          content,
+          timestamp: Date.now(),
+          tool_call_id: toolCall.id,
+          name: toolCall.function.name
+        }
+        toolMessages.push(toolMessage)
+      }
+    }
+
+    if (toolMessages.length === 0) return
+
+    // Update session with all tool result messages
+    const sessionWithToolResults = {
+      ...session,
+      messages: [...session.messages, ...toolMessages],
+      updatedAt: Date.now()
+    }
+
+    try {
+      await dbManager.saveSession(sessionWithToolResults)
+      setSessions(prev => prev.map(s =>
+        s.id === currentSessionId ? sessionWithToolResults : s
+      ))
+
+      // Continue conversation with AI after all tool results
+      await continueConversationAfterTool(sessionWithToolResults)
+    } catch (error) {
+      console.error('Failed to save tool results and continue conversation:', error)
+    }
+  }
+
   // Tool execution handlers
   const handleProvideToolResult = async (toolCallId: string, result: string) => {
     if (!currentSessionId) return
@@ -1295,47 +1360,14 @@ export default function HomePage() {
       setSessions(prev => prev.map(s =>
         s.id === currentSessionId ? updatedSession : s
       ))
+
+      // Check if all tool calls are now completed
+      if (checkAllToolCallsCompleted(updatedSession)) {
+        // Process all tool results and send to AI
+        await processAllToolResults(updatedSession)
+      }
     } catch (error) {
       console.error('Failed to save tool result:', error)
-    }
-
-    // Find the actual function name from the tool call
-    let functionName = 'tool_result'
-    const lastMessage = session.messages[session.messages.length - 1] as AgentMessage
-    if (lastMessage?.toolCalls) {
-      const toolCall = lastMessage.toolCalls.find(tc => tc.id === toolCallId)
-      if (toolCall?.function?.name) {
-        functionName = toolCall.function.name
-      }
-    }
-
-    // Add tool result message according to OpenAI API format
-    const toolMessage: Message = {
-      id: generateId(),
-      role: 'tool',
-      content: result,
-      timestamp: Date.now(),
-      tool_call_id: toolCallId,
-      name: functionName
-    }
-
-    // Update session with tool result message
-    const sessionWithToolResult = {
-      ...updatedSession,
-      messages: [...updatedSession.messages, toolMessage],
-      updatedAt: Date.now()
-    }
-
-    try {
-      await dbManager.saveSession(sessionWithToolResult)
-      setSessions(prev => prev.map(s =>
-        s.id === currentSessionId ? sessionWithToolResult : s
-      ))
-
-      // Continue conversation with AI after tool result
-      await continueConversationAfterTool(sessionWithToolResult)
-    } catch (error) {
-      console.error('Failed to save tool result and continue conversation:', error)
     }
   }
 
@@ -2243,47 +2275,14 @@ export default function HomePage() {
       setSessions(prev => prev.map(s =>
         s.id === currentSessionId ? updatedSession : s
       ))
+
+      // Check if all tool calls are now completed
+      if (checkAllToolCallsCompleted(updatedSession)) {
+        // Process all tool results and send to AI
+        await processAllToolResults(updatedSession)
+      }
     } catch (error) {
       console.error('Failed to save tool error:', error)
-    }
-
-    // Find the actual function name from the tool call
-    let functionName = 'tool_error'
-    const lastMessage = session.messages[session.messages.length - 1] as AgentMessage
-    if (lastMessage?.toolCalls) {
-      const toolCall = lastMessage.toolCalls.find(tc => tc.id === toolCallId)
-      if (toolCall?.function?.name) {
-        functionName = toolCall.function.name
-      }
-    }
-
-    // Add tool error message according to OpenAI API format
-    const toolMessage: Message = {
-      id: generateId(),
-      role: 'tool',
-      content: `Error: ${error}`,
-      timestamp: Date.now(),
-      tool_call_id: toolCallId,
-      name: functionName
-    }
-
-    // Update session with tool error message
-    const sessionWithToolError = {
-      ...updatedSession,
-      messages: [...updatedSession.messages, toolMessage],
-      updatedAt: Date.now()
-    }
-
-    try {
-      await dbManager.saveSession(sessionWithToolError)
-      setSessions(prev => prev.map(s =>
-        s.id === currentSessionId ? sessionWithToolError : s
-      ))
-
-      // Continue conversation with AI after tool failure
-      await continueConversationAfterTool(sessionWithToolError)
-    } catch (error) {
-      console.error('Failed to save tool error and continue conversation:', error)
     }
   }
 

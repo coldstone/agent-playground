@@ -2,7 +2,7 @@ import { Agent, Tool, ChatSession, AvailableModel } from '@/types'
 import { ProviderCustomConfig } from '../providers'
 
 const DB_NAME = 'agent-playground'
-const DB_VERSION = 3
+const DB_VERSION = 5
 
 // Store names
 const AGENTS_STORE = 'agents'

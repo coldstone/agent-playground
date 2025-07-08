@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { formatTimestamp } from '@/lib/utils'
-import { Wrench as ToolIcon, Play, Check, X, Clock, AlertCircle, Globe, Send } from 'lucide-react'
+import { Wrench as ToolIcon, Play, Check, X, Clock, AlertCircle, Globe, Send, Copy } from 'lucide-react'
 import { useToast } from '@/components/ui/toast'
 
 interface ToolCallDisplayProps {
@@ -19,6 +19,8 @@ interface ToolCallDisplayProps {
   isStreaming?: boolean
   onScrollToBottom?: () => void
 }
+
+
 
 export function ToolCallDisplay({
   toolCall,
