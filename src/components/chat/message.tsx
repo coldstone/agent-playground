@@ -8,11 +8,12 @@ import { MessageContent } from '@/components/markdown'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Tooltip } from '@/components/ui/tooltip'
-import { User, Bot, Settings, Wrench, RefreshCw, Trash2, Edit2, Check, X, Atom, Brain, Cpu, Zap, Text, Code, Copy } from 'lucide-react'
+import { User, Bot, Settings, Wrench, RefreshCw, Trash2, Edit2, Check, X, Atom, Brain, Cpu, Zap, Text, Code, Copy, ChevronDown, ChevronUp } from 'lucide-react'
 
 // Code block component for displaying tool results
 function CodeBlock({ content, language = 'json' }: { content: string; language?: string }) {
   const [copied, setCopied] = useState(false)
+  const [isExpanded, setIsExpanded] = useState(false)
 
   const copyToClipboard = async () => {
     try {
@@ -42,9 +43,28 @@ function CodeBlock({ content, language = 'json' }: { content: string; language?:
   return (
     <div className="relative group">
       <div className="flex items-center justify-between bg-gray-800 text-gray-300 px-3 py-1.5 text-xs rounded-t-lg">
-        <span className="font-mono text-xs uppercase tracking-wide">
-          {language}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-xs uppercase tracking-wide">
+            {language}
+          </span>
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-700 hover:bg-gray-600 transition-colors"
+            title={isExpanded ? "Collapse code block" : "Expand code block"}
+          >
+            {isExpanded ? (
+              <>
+                <ChevronUp size={12} />
+                <span className="text-xs">Collapse</span>
+              </>
+            ) : (
+              <>
+                <ChevronDown size={12} />
+                <span className="text-xs">Expand</span>
+              </>
+            )}
+          </button>
+        </div>
         <button
           onClick={copyToClipboard}
           className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-700 hover:bg-gray-600 transition-colors opacity-0 group-hover:opacity-100"
@@ -63,9 +83,11 @@ function CodeBlock({ content, language = 'json' }: { content: string; language?:
           )}
         </button>
       </div>
-      <pre className="bg-gray-900 text-gray-100 p-3 rounded-b-lg m-0 text-xs overflow-x-auto whitespace-pre-wrap break-words">
-        <code>{formattedContent}</code>
-      </pre>
+      {isExpanded && (
+        <pre className="bg-gray-900 text-gray-100 p-3 rounded-b-lg m-0 text-xs overflow-x-auto whitespace-pre-wrap break-words">
+          <code>{formattedContent}</code>
+        </pre>
+      )}
     </div>
   )
 }
@@ -386,6 +408,21 @@ export function Message({
               <pre className="whitespace-pre-wrap text-gray-700 dark:text-gray-300 font-mono text-sm leading-relaxed min-w-0 overflow-x-auto">
                 {message.content}
               </pre>
+            )}
+
+            {/* Error message display - show below content for assistant messages */}
+            {message.role === 'assistant' && message.error && (
+              <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-start gap-2">
+                  <X className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-red-800 mb-1">发生错误</div>
+                    <div className="text-sm text-red-700 whitespace-pre-wrap break-words">
+                      {message.error}
+                    </div>
+                  </div>
+                </div>
+              </div>
             )}
           </>
         )}
