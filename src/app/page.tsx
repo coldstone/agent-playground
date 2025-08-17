@@ -256,9 +256,18 @@ export default function HomePage() {
         setTools(loadedTools)
 
         // Don't auto-load previous session - always start with new chat overlay
-        // Clear any saved session state
+        // Clear any saved session state but keep agent selection
         localStorage.removeItem('agent-playground-current-session')
-        localStorage.removeItem('agent-playground-current-agent')
+        
+        // Load previously selected agent for the new chat overlay
+        const savedAgentId = localStorage.getItem('agent-playground-current-agent')
+        if (savedAgentId && loadedAgents.some(agent => agent.id === savedAgentId)) {
+          setCurrentAgentId(savedAgentId)
+        } else {
+          // Clear invalid agent selection
+          setCurrentAgentId(null)
+          localStorage.removeItem('agent-playground-current-agent')
+        }
 
 
 
@@ -283,11 +292,7 @@ export default function HomePage() {
     }
   }, [currentSessionId])
 
-  useEffect(() => {
-    if (currentAgentId) {
-      localStorage.setItem('agent-playground-current-agent', currentAgentId)
-    }
-  }, [currentAgentId])
+  // Note: Agent selection persistence is now handled directly in handleAgentSelect
 
   // Reset active conversation state when session changes
   useEffect(() => {
@@ -308,13 +313,25 @@ export default function HomePage() {
   const createNewSession = async () => {
     // Clear current session and show the new chat overlay
     setCurrentSessionId(null)
-    setCurrentAgentId(null)
+    
+    // Restore previously selected agent from localStorage
+    const savedAgentId = localStorage.getItem('agent-playground-current-agent')
+    if (savedAgentId && agents.some(agent => agent.id === savedAgentId)) {
+      setCurrentAgentIdInternal(savedAgentId)
+    } else {
+      // Clear invalid agent selection or set to null if no saved agent
+      setCurrentAgentIdInternal(null)
+      if (savedAgentId) {
+        localStorage.removeItem('agent-playground-current-agent')
+      }
+    }
+    
     setShowNewChatOverlay(true)
   }
 
   const handleOverlaySendMessage = async (content: string, agentId: string | null, toolIds?: string[]) => {
-    // Set the current agent (but don't create session yet)
-    setCurrentAgentId(agentId)
+    // Set the current agent and save to localStorage for persistence
+    handleAgentSelect(agentId)
 
     // Set selected tools for no-agent mode
     if (!agentId && toolIds) {
@@ -395,7 +412,7 @@ export default function HomePage() {
 
       // Auto-select the newly created agent if we're in new chat overlay
       if (showNewChatOverlay) {
-        setCurrentAgentId(newAgent.id)
+        handleAgentSelect(newAgent.id)
       }
 
       return newAgent.id
@@ -444,7 +461,7 @@ export default function HomePage() {
       await dbManager.deleteAgent(agentId)
       setAgents(prev => prev.filter(agent => agent.id !== agentId))
       if (currentAgentId === agentId) {
-        setCurrentAgentId(null)
+        handleAgentSelect(null)
       }
     } catch (error) {
       showToast('Failed to delete agent.', 'error')
@@ -1700,19 +1717,20 @@ export default function HomePage() {
     }
   }
 
-  // Session selection with agent switching
+  // Session selection with agent switching  
   const handleSessionSelect = (sessionId: string) => {
     setCurrentSessionId(sessionId)
 
     // Hide the new chat overlay when selecting a session
     setShowNewChatOverlay(false)
 
-    // Auto-switch to the agent used in this session
+    // Auto-switch to the agent used in this session (but don't save to localStorage)
     const session = sessions.find(s => s.id === sessionId)
     if (session) {
       // If session has an agentId, switch to that agent
       // If session has no agentId (undefined), clear agent selection
-      setCurrentAgentId(session.agentId || null)
+      // Use internal function to avoid saving to localStorage
+      setCurrentAgentIdInternal(session.agentId || null)
 
       // For no-agent mode sessions, restore tool selection
       if (!session.agentId && session.toolIds) {
@@ -1753,9 +1771,16 @@ export default function HomePage() {
     }, 200)
   }
 
-  // Agent selection with session update
+  // Manual agent selection (saves to localStorage)
   const handleAgentSelect = async (agentId: string | null) => {
     setCurrentAgentId(agentId)
+    
+    // Save to localStorage for persistence across page refreshes
+    if (agentId) {
+      localStorage.setItem('agent-playground-current-agent', agentId)
+    } else {
+      localStorage.removeItem('agent-playground-current-agent')
+    }
 
     // Update current session's agentId
     if (currentSessionId) {
@@ -1777,6 +1802,11 @@ export default function HomePage() {
         }
       }
     }
+  }
+
+  // Internal agent selection (does not save to localStorage)
+  const setCurrentAgentIdInternal = (agentId: string | null) => {
+    setCurrentAgentId(agentId)
   }
 
   // 处理滚动到底部
@@ -2322,7 +2352,7 @@ export default function HomePage() {
             currentAgentId={currentAgentId}
             onSendMessage={handleOverlaySendMessage}
             onCreateAgent={() => setShowAgentModal(true)}
-            onAgentSelect={setCurrentAgentId}
+            onAgentSelect={handleAgentSelect}
             shouldFocus={showNewChatOverlay}
             tools={tools}
           />
