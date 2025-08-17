@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Message as MessageType, AgentMessage, Tool } from '@/types'
+import { Message as MessageType, AgentMessage, Tool, Agent, Authorization } from '@/types'
 import { formatTimestamp } from '@/lib/utils'
 import { ToolCallDisplay } from '@/components/tools'
 import { MessageContent } from '@/components/markdown'
@@ -95,6 +95,8 @@ function CodeBlock({ content, language = 'json' }: { content: string; language?:
 interface MessageProps {
   message: MessageType | AgentMessage
   tools?: Tool[]
+  agent?: Agent
+  authorizations?: Authorization[]
   isReasoningExpanded?: boolean
   isInActiveConversation?: boolean
   reasoningDuration?: number | null
@@ -111,6 +113,8 @@ interface MessageProps {
 export function Message({
   message,
   tools = [],
+  agent,
+  authorizations = [],
   isReasoningExpanded = false,
   isInActiveConversation = false,
   reasoningDuration,
@@ -446,6 +450,8 @@ export function Message({
                     toolCall={toolCall}
                     execution={execution}
                     tool={tool}
+                    agent={agent}
+                    authorizations={authorizations}
                     onProvideResult={onProvideToolResult || (() => {})}
                     onMarkFailed={onMarkToolFailed || (() => {})}
                     onScrollToBottom={onScrollToBottom}

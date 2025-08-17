@@ -1,12 +1,13 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react'
-import { ToolCall, ToolCallExecution, Tool, HTTPRequestConfig } from '@/types'
+import { ToolCall, ToolCallExecution, Tool, HTTPRequestConfig, Authorization, Agent } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { formatTimestamp } from '@/lib/utils'
+import { getMergedHeaders, getEffectiveAuthorization, migrateAgentTools } from '@/lib/authorization'
 import { Wrench as ToolIcon, Play, Check, X, Clock, AlertCircle, Globe, Send, Copy, ChevronDown, ChevronUp } from 'lucide-react'
 import { useToast } from '@/components/ui/toast'
 
@@ -14,6 +15,8 @@ interface ToolCallDisplayProps {
   toolCall: ToolCall
   execution?: ToolCallExecution
   tool?: Tool
+  agent?: Agent
+  authorizations?: Authorization[]
   onProvideResult: (toolCallId: string, result: string) => void
   onMarkFailed: (toolCallId: string, error: string) => void
   isStreaming?: boolean
@@ -67,6 +70,8 @@ export function ToolCallDisplay({
   toolCall,
   execution,
   tool,
+  agent,
+  authorizations = [],
   onProvideResult,
   onMarkFailed,
   isStreaming = false,
@@ -81,13 +86,20 @@ export function ToolCallDisplay({
   const [httpHeaders, setHttpHeaders] = useState<{ key: string; value: string }[]>([])
   const [httpUrl, setHttpUrl] = useState('')
 
-  // Initialize HTTP configuration when tool changes
+  // Initialize HTTP configuration when tool or authorization changes
   useEffect(() => {
     if (tool?.httpRequest) {
-      setHttpHeaders([...tool.httpRequest.headers])
+      // Get effective authorization for this tool
+      const toolBindings = agent ? migrateAgentTools(agent) : []
+      const binding = toolBindings.find(b => b.toolId === tool.id)
+      const effectiveAuth = getEffectiveAuthorization(tool, authorizations, binding)
+      
+      // Merge tool headers with authorization headers
+      const mergedHeaders = getMergedHeaders(tool, effectiveAuth)
+      setHttpHeaders(mergedHeaders)
       setHttpUrl(tool.httpRequest.url)
     }
-  }, [tool])
+  }, [tool, agent, authorizations])
 
   const handleProvideResult = () => {
     if (result.trim()) {

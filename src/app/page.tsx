@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react'
-import { APIConfig, Message, ChatSession, Agent, Tool, AgentMessage, ToolCall } from '@/types'
+import { APIConfig, Message, ChatSession, Agent, Tool, AgentMessage, ToolCall, Authorization } from '@/types'
 import { DEFAULT_CONFIG, MODEL_PROVIDERS, generateId } from '@/lib'
 import { OpenAIClient } from '@/lib/clients'
 import { TitleGenerator } from '@/lib/generators'
@@ -36,6 +36,7 @@ export default function HomePage() {
   const [agents, setAgents] = useState<Agent[]>([])
   const [currentAgentId, setCurrentAgentId] = useState<string | null>(null)
   const [tools, setTools] = useState<Tool[]>([])
+  const [authorizations, setAuthorizations] = useState<Authorization[]>([])
   const [dbManager] = useState(() => IndexedDBManager.getInstance())
 
   const [isMounted, setIsMounted] = useState(false)
@@ -245,15 +246,17 @@ export default function HomePage() {
         }
 
         // Load all data in parallel
-        const [loadedSessions, loadedAgents, loadedTools] = await Promise.all([
+        const [loadedSessions, loadedAgents, loadedTools, loadedAuthorizations] = await Promise.all([
           dbManager.getAllSessions(),
           dbManager.getAllAgents(),
-          dbManager.getAllTools()
+          dbManager.getAllTools(),
+          dbManager.getAllAuthorizations()
         ])
 
         setSessions(loadedSessions)
         setAgents(loadedAgents)
         setTools(loadedTools)
+        setAuthorizations(loadedAuthorizations)
 
         // Don't auto-load previous session - always start with new chat overlay
         // Clear any saved session state but keep agent selection
@@ -466,6 +469,41 @@ export default function HomePage() {
     } catch (error) {
       showToast('Failed to delete agent.', 'error')
       console.error('Failed to delete agent:', error)
+    }
+  }
+
+  // Authorization management functions
+  const createAuthorization = async (authorization: Authorization) => {
+    try {
+      await dbManager.saveAuthorization(authorization)
+      setAuthorizations(prev => [...prev, authorization])
+      return authorization.id
+    } catch (error) {
+      showToast('Failed to create authorization.', 'error')
+      console.error('Failed to create authorization:', error)
+      throw error
+    }
+  }
+
+  const updateAuthorization = async (authorization: Authorization) => {
+    try {
+      await dbManager.saveAuthorization(authorization)
+      setAuthorizations(prev => prev.map(auth => auth.id === authorization.id ? authorization : auth))
+    } catch (error) {
+      showToast('Failed to update authorization.', 'error')
+      console.error('Failed to update authorization:', error)
+      throw error
+    }
+  }
+
+  const deleteAuthorization = async (authorizationId: string) => {
+    try {
+      await dbManager.deleteAuthorization(authorizationId)
+      setAuthorizations(prev => prev.filter(auth => auth.id !== authorizationId))
+    } catch (error) {
+      showToast('Failed to delete authorization.', 'error')
+      console.error('Failed to delete authorization:', error)
+      throw error
     }
   }
 
@@ -2363,6 +2401,7 @@ export default function HomePage() {
               agents={agents}
               currentAgentId={currentAgentId}
               tools={tools}
+              authorizations={authorizations}
               hasMessages={!!(currentSession?.messages.length)}
               apiConfig={config}
               onAgentSelect={handleAgentSelect}
@@ -2387,6 +2426,7 @@ export default function HomePage() {
               formatReasoningDuration={formatReasoningDuration}
               currentAgent={currentAgentWithTools}
               tools={tools}
+              authorizations={authorizations}
               scrollToBottomTrigger={scrollToBottomTrigger}
               forceScrollTrigger={forceScrollTrigger}
               onProvideToolResult={handleProvideToolResult}
@@ -2423,6 +2463,7 @@ export default function HomePage() {
         config={config}
         agents={agents}
         tools={tools}
+        authorizations={authorizations}
         onConfigChange={setConfig}
         onAgentCreate={() => setShowAgentModal(true)}
         onAgentUpdate={updateAgent}
@@ -2431,6 +2472,9 @@ export default function HomePage() {
         onToolCreate={createTool}
         onToolUpdate={(tool: Tool) => updateTool(tool.id, tool)}
         onToolDelete={deleteTool}
+        onAuthorizationCreate={createAuthorization}
+        onAuthorizationUpdate={updateAuthorization}
+        onAuthorizationDelete={deleteAuthorization}
         onExport={() => setShowExportModal(true)}
         onImport={() => setShowImportModal(true)}
       />
@@ -2440,6 +2484,7 @@ export default function HomePage() {
         isOpen={showAgentModal}
         onClose={() => setShowAgentModal(false)}
         tools={tools}
+        authorizations={authorizations}
         onAgentCreate={createAgent}
         onToolCreate={createTool}
       />

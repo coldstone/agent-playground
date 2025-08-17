@@ -1,18 +1,20 @@
 'use client'
 
 import React, { useState, useRef } from 'react'
-import { APIConfig, Tool, Agent } from '@/types'
+import { APIConfig, Tool, Agent, Authorization } from '@/types'
 import { APIConfigPanel } from './api-config'
 import { AgentsPanel } from './agents-panel'
 import { ToolsPanel, ToolsPanelRef } from './tools-panel'
+import { AuthorizationsPanel, AuthorizationsPanelRef } from './authorizations-panel'
 import { useSystemModel } from '@/hooks/use-system-model'
-import { Settings, Wrench, ChevronDown, ChevronUp, Sparkles, Plus, Download, Upload, Bot } from 'lucide-react'
+import { Settings, Wrench, ChevronDown, ChevronUp, Sparkles, Plus, Download, Upload, Bot, AlertTriangle, Key } from 'lucide-react'
 
 
 interface AccordionPanelProps {
   config: APIConfig
   agents: Agent[]
   tools: Tool[]
+  authorizations: Authorization[]
   onConfigChange: (config: APIConfig) => void
   onAgentCreate: () => void
   onAgentUpdate: (agentId: string, updates: Partial<Agent>) => void
@@ -21,16 +23,20 @@ interface AccordionPanelProps {
   onToolCreate: (tool: Tool) => void
   onToolUpdate: (tool: Tool) => void
   onToolDelete: (toolId: string) => void
+  onAuthorizationCreate: (authorization: Authorization) => Promise<string>
+  onAuthorizationUpdate: (authorization: Authorization) => Promise<void>
+  onAuthorizationDelete: (authorizationId: string) => Promise<void>
   onExport: () => void
   onImport: () => void
 }
 
-type PanelType = 'agents' | 'tools' | 'llm' | 'export' | null
+type PanelType = 'agents' | 'tools' | 'authorizations' | 'llm' | 'export' | null
 
 export function AccordionPanel({
   config,
   agents,
   tools,
+  authorizations,
   onConfigChange,
   onAgentCreate,
   onAgentUpdate,
@@ -39,6 +45,9 @@ export function AccordionPanel({
   onToolCreate,
   onToolUpdate,
   onToolDelete,
+  onAuthorizationCreate,
+  onAuthorizationUpdate,
+  onAuthorizationDelete,
   onExport,
   onImport
 }: AccordionPanelProps) {
@@ -53,6 +62,7 @@ export function AccordionPanel({
 
   const [activePanel, setActivePanel] = useState<PanelType>(getInitialPanel())
   const toolsPanelRef = useRef<ToolsPanelRef>(null)
+  const authorizationsPanelRef = useRef<AuthorizationsPanelRef>(null)
   const { hasSystemModel } = useSystemModel()
 
   const togglePanel = (panel: PanelType) => {
@@ -101,6 +111,7 @@ export function AccordionPanel({
                 <AgentsPanel
                   agents={agents}
                   tools={tools}
+                  authorizations={authorizations}
                   onAgentUpdate={onAgentUpdate}
                   onAgentDelete={onAgentDelete}
                   onAgentReorder={onAgentReorder}
@@ -182,6 +193,59 @@ export function AccordionPanel({
         )}
       </div>
 
+      {/* Authorization Panel */}
+      <div className={`border-b border-border ${activePanel === 'authorizations' ? 'flex-1 flex flex-col min-h-0' : ''}`}>
+        <div
+          onClick={() => togglePanel('authorizations')}
+          className="w-full p-4 flex items-center justify-between text-left hover:bg-muted/50 transition-colors cursor-pointer flex-shrink-0"
+        >
+          <div className="flex items-center gap-2">
+            <Key className="w-4 h-4" />
+            <span className="text-sm font-semibold">Authorizations</span>
+            <span className="text-sm text-muted-foreground">({authorizations.length})</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                if (activePanel !== 'authorizations') {
+                  togglePanel('authorizations')
+                }
+                setTimeout(() => {
+                  authorizationsPanelRef.current?.openCreateModal()
+                }, 0)
+              }}
+              className="h-5 w-5 flex items-center justify-center hover:bg-muted rounded transition-colors"
+              title="Create New Authorization"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+            {activePanel === 'authorizations' ? (
+              <ChevronUp className="w-4 h-4" />
+            ) : (
+              <ChevronDown className="w-4 h-4" />
+            )}
+          </div>
+        </div>
+
+        {activePanel === 'authorizations' && (
+          <div className="border-t border-border flex-1 min-h-0 overflow-hidden">
+            <div className="h-full overflow-y-auto">
+              <div className="p-4">
+                <AuthorizationsPanel
+                  ref={authorizationsPanelRef}
+                  authorizations={authorizations}
+                  tools={tools}
+                  onAuthorizationCreate={onAuthorizationCreate}
+                  onAuthorizationUpdate={onAuthorizationUpdate}
+                  onAuthorizationDelete={onAuthorizationDelete}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* LLM Configuration Panel */}
       <div className={`border-b border-border ${activePanel === 'llm' ? 'flex-1 flex flex-col min-h-0' : ''}`}>
         <div
@@ -191,6 +255,14 @@ export function AccordionPanel({
           <div className="flex items-center gap-2">
             <Settings className="w-4 h-4" />
             <span className="text-sm font-semibold">LLM Configuration</span>
+            {!hasSystemModel && (
+              <div className="relative group">
+                <AlertTriangle className="w-4 h-4 text-amber-500" />
+                <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 px-2 py-1 text-xs text-white bg-gray-900 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+                  System model not configured
+                </div>
+              </div>
+            )}
           </div>
           {activePanel === 'llm' ? (
             <ChevronUp className="w-4 h-4" />
