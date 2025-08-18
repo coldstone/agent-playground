@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: agent-playground:0.2.7
+    image: agent-playground:0.2.8
     ports:
       - "3001:3001"
     environment:
