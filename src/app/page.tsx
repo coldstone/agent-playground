@@ -56,9 +56,11 @@ export default function HomePage() {
 
   const [reasoningDuration, setReasoningDuration] = useState<number | null>(null)
   const [scrollToBottomTrigger, setScrollToBottomTrigger] = useState(0)
+  const [scrollToTopTrigger, setScrollToTopTrigger] = useState(0)
   const [forceScrollTrigger, setForceScrollTrigger] = useState<number>()
   const [showAIMessageBox, setShowAIMessageBox] = useState(false)
   const [showScrollToBottom, setShowScrollToBottom] = useState(false)
+  const [showScrollToTop, setShowScrollToTop] = useState(false)
   const abortControllerRef = useRef<AbortController | null>(null)
   const chatInputRef = useRef<ChatInputRef>(null)
   const aiMessageTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -328,6 +330,10 @@ export default function HomePage() {
         localStorage.removeItem('agent-playground-current-agent')
       }
     }
+    
+    // Hide scroll buttons when creating new chat
+    setShowScrollToBottom(false)
+    setShowScrollToTop(false)
     
     setShowNewChatOverlay(true)
   }
@@ -1857,12 +1863,26 @@ export default function HomePage() {
     setShowScrollToBottom(show)
   }
 
+  // 处理滚动到顶部按钮显示状态变化
+  const handleShowScrollToTopChange = (show: boolean) => {
+    setShowScrollToTop(show)
+  }
+
   // 处理滚动到底部按钮点击
   const handleScrollToBottomClick = () => {
     setScrollToBottomTrigger(prev => prev + 1)
     // 滚动完成后自动隐藏按钮
     setTimeout(() => {
       setShowScrollToBottom(false)
+    }, 300) // 等待滚动动画完成
+  }
+
+  // 处理滚动到顶部按钮点击
+  const handleScrollToTopClick = () => {
+    setScrollToTopTrigger(prev => prev + 1)
+    // 滚动完成后自动隐藏按钮
+    setTimeout(() => {
+      setShowScrollToTop(false)
     }, 300) // 等待滚动动画完成
   }
 
@@ -2428,6 +2448,7 @@ export default function HomePage() {
               tools={tools}
               authorizations={authorizations}
               scrollToBottomTrigger={scrollToBottomTrigger}
+              scrollToTopTrigger={scrollToTopTrigger}
               forceScrollTrigger={forceScrollTrigger}
               onProvideToolResult={handleProvideToolResult}
               onMarkToolFailed={handleMarkToolFailed}
@@ -2439,6 +2460,8 @@ export default function HomePage() {
               onScrollToBottom={handleScrollToBottom}
               onShowScrollToBottomChange={handleShowScrollToBottomChange}
               onScrollToBottomClick={handleScrollToBottomClick}
+              onShowScrollToTopChange={handleShowScrollToTopChange}
+              onScrollToTopClick={handleScrollToTopClick}
             />
 
             {/* Input */}
@@ -2514,6 +2537,26 @@ export default function HomePage() {
       />
 
       <ToastContainer />
+
+      {/* Scroll to top button - fixed position at top */}
+      {showScrollToTop && !showNewChatOverlay && (
+        <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-10">
+          <button
+            onClick={handleScrollToTopClick}
+            className="w-10 h-10 bg-white/50 backdrop-blur-sm border border-gray-200 rounded-full shadow-lg hover:bg-white hover:shadow-xl transition-all duration-200 flex items-center justify-center group"
+            aria-label="Scroll to the top"
+          >
+            <svg
+              className="w-5 h-5 text-gray-600 group-hover:text-gray-800 transition-colors"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+            </svg>
+          </button>
+        </div>
+      )}
 
       {/* Scroll to bottom button - fixed position */}
       {showScrollToBottom && (
