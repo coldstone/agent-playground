@@ -51,11 +51,24 @@ export function AccordionPanel({
   onExport,
   onImport
 }: AccordionPanelProps) {
-  // Determine initial panel based on current model configuration
+  // Determine initial panel based on priority: LLM config > remembered panel > default LLM
   const getInitialPanel = (): PanelType => {
     if (typeof window !== 'undefined') {
       const currentModel = localStorage.getItem('agent-playground-current-model')
-      return currentModel ? 'tools' : 'llm'
+      
+      // Priority 1: If LLM not configured, always show LLM panel
+      if (!currentModel) {
+        return 'llm'
+      }
+      
+      // Priority 2: If LLM is configured, check for remembered panel
+      const rememberedPanel = localStorage.getItem('agent-playground-active-panel') as PanelType
+      if (rememberedPanel && ['agents', 'tools', 'authorizations', 'llm', 'export'].includes(rememberedPanel)) {
+        return rememberedPanel
+      }
+      
+      // Priority 3: Default to LLM if no remembered panel
+      return 'llm'
     }
     return 'llm'
   }
@@ -68,6 +81,11 @@ export function AccordionPanel({
   const togglePanel = (panel: PanelType) => {
     // 总是切换到点击的面板，实现互斥效果
     setActivePanel(panel)
+    
+    // Remember user's panel choice
+    if (typeof window !== 'undefined' && panel) {
+      localStorage.setItem('agent-playground-active-panel', panel)
+    }
   }
 
   return (
