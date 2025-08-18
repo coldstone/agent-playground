@@ -63,8 +63,6 @@ function ResultDisplay({ content }: { content: string }) {
   )
 }
 
-
-
 export function ToolCallDisplay({
   toolCall,
   execution,
