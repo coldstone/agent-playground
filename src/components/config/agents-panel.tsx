@@ -3,7 +3,7 @@
 import React, { useState, useCallback } from 'react'
 import { DndProvider, useDrag, useDrop } from 'react-dnd'
 import { HTML5Backend } from 'react-dnd-html5-backend'
-import { Agent, Tool } from '@/types'
+import { Agent, Tool, Authorization } from '@/types'
 import { AgentFormModal } from '@/components/agents/agent-form-modal'
 import { AgentInstructionModal, AgentToolsModal } from '@/components/agents'
 import { Trash2, Edit2, Bot, BookUser, Wrench as ToolIcon, GripVertical } from 'lucide-react'
@@ -16,6 +16,7 @@ const ItemTypes = {
 interface AgentsPanelProps {
   agents: Agent[]
   tools: Tool[]
+  authorizations: Authorization[]
   onAgentUpdate: (agentId: string, updates: Partial<Agent>) => void
   onAgentDelete: (agentId: string) => void
   onAgentReorder: (agents: Agent[]) => void
@@ -169,6 +170,7 @@ function DraggableAgentCard({
 export function AgentsPanel({
   agents,
   tools,
+  authorizations,
   onAgentUpdate,
   onAgentDelete,
   onAgentReorder,
@@ -287,6 +289,7 @@ export function AgentsPanel({
         onClose={() => setEditingAgent(null)}
         agent={editingAgent}
         tools={tools}
+        authorizations={authorizations}
         onAgentUpdate={onAgentUpdate}
       />
 
@@ -340,6 +343,7 @@ export function AgentsPanel({
           }}
           agent={selectedAgent}
           allTools={tools}
+          authorizations={authorizations}
           onSave={handleToolsUpdate}
           onToolCreate={onToolCreate}
         />

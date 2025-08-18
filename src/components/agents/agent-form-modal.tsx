@@ -1,15 +1,17 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Agent, Tool } from '@/types'
+import { Agent, Tool, Authorization, AgentToolBinding } from '@/types'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
-import { Sparkles, Tag, Check, ChevronLeft, ChevronRight, Plus } from 'lucide-react'
+import { CustomSelect } from '@/components/ui/custom-select'
+import { Sparkles, Tag, Check, ChevronLeft, ChevronRight, Plus, Key } from 'lucide-react'
 import { useSystemModel } from '@/hooks/use-system-model'
 import { InstructionGenerator, ToolGenerator } from '@/lib/generators'
+import { migrateAgentTools, getAvailableAuthorizations, getEffectiveAuthorization } from '@/lib/authorization'
 import { ToolFormModal } from '@/components/tools/tool-form-modal'
 import { ToolGeneratorModal } from '@/components/tools/tool-generator-modal'
 import { useToast } from '@/components/ui/toast'
@@ -19,6 +21,7 @@ interface AgentFormModalProps {
   onClose: () => void
   agent?: Agent | null // undefined for create, Agent for edit
   tools: Tool[]
+  authorizations: Authorization[]
   onAgentCreate?: (agent: Omit<Agent, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string>
   onAgentUpdate?: (agentId: string, updates: Partial<Agent>) => void | Promise<void>
   onToolCreate?: (tool: Tool) => Promise<Tool> | Tool | void
@@ -29,6 +32,7 @@ export function AgentFormModal({
   onClose,
   agent,
   tools,
+  authorizations,
   onAgentCreate,
   onAgentUpdate,
   onToolCreate
@@ -38,7 +42,7 @@ export function AgentFormModal({
     name: '',
     description: '',
     systemPrompt: '',
-    selectedTools: [] as string[]
+    toolBindings: [] as AgentToolBinding[]
   })
 
   const { showToast, ToastContainer } = useToast()
@@ -70,7 +74,7 @@ export function AgentFormModal({
           name: agent.name,
           description: agent.description,
           systemPrompt: agent.systemPrompt,
-          selectedTools: agent.tools || []
+          toolBindings: migrateAgentTools(agent)
         })
         setCurrentStep(1) // Edit mode always starts at step 1
       } else {
@@ -89,7 +93,7 @@ export function AgentFormModal({
       name: '',
       description: '',
       systemPrompt: '',
-      selectedTools: []
+      toolBindings: []
     })
     setShowAIPrompt(false)
     setAiPrompt('')
@@ -124,13 +128,16 @@ export function AgentFormModal({
     // Auto-select the newly created tool
     setFormData(prev => {
       // Check if tool is already selected to avoid duplicates
-      if (prev.selectedTools.includes(tool.id)) {
+      if (prev.toolBindings.some(binding => binding.toolId === tool.id)) {
         return prev
       }
-      const newSelectedTools = [...prev.selectedTools, tool.id]
+      const newBinding: AgentToolBinding = {
+        toolId: tool.id,
+        authorizationId: undefined // No authorization selected by default
+      }
       return {
         ...prev,
-        selectedTools: newSelectedTools
+        toolBindings: [...prev.toolBindings, newBinding]
       }
     })
   }
@@ -185,7 +192,8 @@ export function AgentFormModal({
           name: formData.name.trim(),
           description: formData.description.trim(),
           systemPrompt: formData.systemPrompt.trim(),
-          tools: formData.selectedTools
+          tools: formData.toolBindings.map(binding => binding.toolId), // Legacy support
+          toolBindings: formData.toolBindings
         })
       }
       onClose()
@@ -245,11 +253,37 @@ export function AgentFormModal({
   }
 
   const handleToolToggle = (toolId: string) => {
+    setFormData(prev => {
+      const existingBindingIndex = prev.toolBindings.findIndex(binding => binding.toolId === toolId)
+      
+      if (existingBindingIndex >= 0) {
+        // Remove tool if it exists
+        return {
+          ...prev,
+          toolBindings: prev.toolBindings.filter((_, index) => index !== existingBindingIndex)
+        }
+      } else {
+        // Add tool with no authorization selected by default
+        const newBinding: AgentToolBinding = {
+          toolId,
+          authorizationId: undefined
+        }
+        return {
+          ...prev,
+          toolBindings: [...prev.toolBindings, newBinding]
+        }
+      }
+    })
+  }
+
+  const handleAuthorizationChange = (toolId: string, authorizationId: string | undefined) => {
     setFormData(prev => ({
       ...prev,
-      selectedTools: prev.selectedTools.includes(toolId)
-        ? prev.selectedTools.filter(id => id !== toolId)
-        : [...prev.selectedTools, toolId]
+      toolBindings: prev.toolBindings.map(binding =>
+        binding.toolId === toolId
+          ? { ...binding, authorizationId: authorizationId || undefined }
+          : binding
+      )
     }))
   }
 
@@ -354,7 +388,7 @@ export function AgentFormModal({
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <Label>Tools ({formData.selectedTools.length})</Label>
+                    <Label>Tools ({formData.toolBindings.length})</Label>
                   </div>
                   <div className="flex gap-2">
                     <Button
@@ -452,34 +486,73 @@ export function AgentFormModal({
                       }
 
                       return (
-                        <div className="space-y-2">
-                          {filteredTools.map((tool) => (
-                            <label key={tool.id} className="flex items-start space-x-2 cursor-pointer p-2 rounded hover:bg-muted/50 transition-colors">
-                              <input
-                                type="checkbox"
-                                checked={formData.selectedTools.includes(tool.id)}
-                                onChange={() => handleToolToggle(tool.id)}
-                                className="rounded border-border mt-0.5"
-                              />
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-sm font-medium">{tool.name}</span>
-                                  {tool.tag && (
-                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs bg-muted text-muted-foreground">
-                                      <Tag className="w-2.5 h-2.5" />
-                                      {tool.tag}
-                                    </span>
-                                  )}
-                                  {formData.selectedTools.includes(tool.id) && (
-                                    <Check className="w-3 h-3 text-green-600" />
-                                  )}
-                                </div>
-                                {tool.description && (
-                                  <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{tool.description}</p>
+                        <div className="space-y-3">
+                          {filteredTools.map((tool) => {
+                            const isSelected = formData.toolBindings.some(binding => binding.toolId === tool.id)
+                            const binding = formData.toolBindings.find(binding => binding.toolId === tool.id)
+                            const availableAuths = getAvailableAuthorizations(tool, authorizations)
+                            const effectiveAuth = binding ? getEffectiveAuthorization(tool, authorizations, binding) : null
+                            
+                            return (
+                              <div key={tool.id} className="p-3 border rounded-lg space-y-2">
+                                {/* Tool Selection */}
+                                <label className="flex items-start space-x-2 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => handleToolToggle(tool.id)}
+                                    className="rounded border-border mt-0.5"
+                                  />
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-sm font-medium">{tool.name}</span>
+                                      {tool.tag && (
+                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs bg-muted text-muted-foreground">
+                                          <Tag className="w-2.5 h-2.5" />
+                                          {tool.tag}
+                                        </span>
+                                      )}
+                                      {isSelected && (
+                                        <Check className="w-3 h-3 text-green-600" />
+                                      )}
+                                    </div>
+                                    {tool.description && (
+                                      <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{tool.description}</p>
+                                    )}
+                                  </div>
+                                </label>
+
+                                {/* Authorization Selection */}
+                                {isSelected && (
+                                  <div className="ml-6 pl-3 border-l-2 border-gray-200">
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <Key className="w-3 h-3 text-gray-500" />
+                                      <Label className="text-xs">Authorization</Label>
+                                    </div>
+                                    <CustomSelect
+                                      value={binding?.authorizationId || ''}
+                                      onChange={(value) => handleAuthorizationChange(tool.id, value || undefined)}
+                                      options={[
+                                        { value: '', label: 'Use Default' },
+                                        ...availableAuths.map(auth => ({
+                                          value: auth.id,
+                                          label: `${auth.name}${auth.isDefaultInTag && (auth.tag === tool.tag || (!auth.tag && !tool.tag)) ? ' (Default)' : ''}`
+                                        }))
+                                      ]}
+                                      placeholder="Select authorization"
+                                      size="xs"
+                                    />
+                                    {effectiveAuth && (
+                                      <p className="text-xs text-gray-500 mt-1">
+                                        Using: {effectiveAuth.name}
+                                        {effectiveAuth !== authorizations.find(a => a.id === binding?.authorizationId) && ' (Auto-selected)'}
+                                      </p>
+                                    )}
+                                  </div>
                                 )}
                               </div>
-                            </label>
-                          ))}
+                            )
+                          })}
                         </div>
                       )
                     })()}

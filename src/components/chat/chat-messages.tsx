@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useRef } from 'react'
-import { Message as MessageType, AgentMessage, ToolCall, Agent, Tool } from '@/types'
+import { Message as MessageType, AgentMessage, ToolCall, Agent, Tool, Authorization } from '@/types'
 import { Message } from './message'
 import { ToolCallDisplay } from '@/components/tools'
 import { StreamingContent } from '@/components/markdown'
@@ -27,6 +27,7 @@ interface ChatMessagesProps {
   formatReasoningDuration?: (durationMs: number) => string
   currentAgent?: AgentWithTools | null
   tools?: Tool[]
+  authorizations?: Authorization[]
   scrollToBottomTrigger?: number // Add trigger to force scroll to bottom
   scrollToTopTrigger?: number // Add trigger to force scroll to top
   forceScrollTrigger?: number // Add trigger for user message send
@@ -56,6 +57,7 @@ export function ChatMessages({
   formatReasoningDuration,
   currentAgent,
   tools = [],
+  authorizations = [],
   scrollToBottomTrigger,
   scrollToTopTrigger,
   forceScrollTrigger,
@@ -160,6 +162,8 @@ export function ChatMessages({
               key={message.id}
               message={message}
               tools={tools}
+              agent={currentAgent ? { ...currentAgent, tools: currentAgent.tools.map(t => t.id) } : undefined}
+              authorizations={authorizations}
               isReasoningExpanded={expandedReasoningMessages.has(message.id)}
               isInActiveConversation={isInActiveConversation}
               reasoningDuration={reasoningDuration}
@@ -257,6 +261,8 @@ export function ChatMessages({
                         key={`streaming-${toolCall.id}-${index}`}
                         toolCall={toolCall}
                         execution={undefined}
+                        agent={currentAgent ? { ...currentAgent, tools: currentAgent.tools.map(t => t.id) } : undefined}
+                        authorizations={authorizations}
                         onProvideResult={() => {}}
                         onMarkFailed={() => {}}
                         isStreaming={true}

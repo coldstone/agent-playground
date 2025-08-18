@@ -1,13 +1,16 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Agent, Tool } from '@/types'
-import { X, Wrench, Save, Check, Tag, Plus, Sparkles } from 'lucide-react'
+import { Agent, Tool, Authorization, AgentToolBinding } from '@/types'
+import { X, Wrench, Save, Check, Tag, Plus, Sparkles, Key } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { CustomSelect } from '@/components/ui/custom-select'
+import { Label } from '@/components/ui/label'
 import { ToolFormModal } from '@/components/tools/tool-form-modal'
 import { ToolGeneratorModal } from '@/components/tools/tool-generator-modal'
 import { useSystemModel } from '@/hooks/use-system-model'
 import { ToolGenerator } from '@/lib/generators'
+import { migrateAgentTools, getAvailableAuthorizations, getEffectiveAuthorization } from '@/lib/authorization'
 import { useToast } from '@/components/ui/toast'
 
 interface AgentToolsModalProps {
@@ -15,15 +18,16 @@ interface AgentToolsModalProps {
   onClose: () => void
   agent: Agent | null
   allTools: Tool[]
+  authorizations: Authorization[]
   onSave: (agentId: string, toolIds: string[]) => void
   onToolCreate?: (tool: Tool) => Promise<Tool> | Tool | void
 }
 
-export function AgentToolsModal({ isOpen, onClose, agent, allTools, onSave, onToolCreate }: AgentToolsModalProps) {
+export function AgentToolsModal({ isOpen, onClose, agent, allTools, authorizations, onSave, onToolCreate }: AgentToolsModalProps) {
   const { hasSystemModel, getSystemModelConfig } = useSystemModel()
   const { showToast, ToastContainer } = useToast()
-  const [selectedToolIds, setSelectedToolIds] = useState<Set<string>>(new Set())
-  const [initialSelectedToolIds, setInitialSelectedToolIds] = useState<Set<string>>(new Set())
+  const [toolBindings, setToolBindings] = useState<AgentToolBinding[]>([])
+  const [initialToolBindings, setInitialToolBindings] = useState<AgentToolBinding[]>([])
   const [isSaving, setIsSaving] = useState(false)
   const [selectedTag, setSelectedTag] = useState<string>('all')
   const [showCreateToolModal, setShowCreateToolModal] = useState(false)
@@ -36,25 +40,41 @@ export function AgentToolsModal({ isOpen, onClose, agent, allTools, onSave, onTo
     tag: string
   } | null>(null)
 
-  // Reset selected tools when modal opens or agent changes
+  // Reset tool bindings when modal opens or agent changes
   useEffect(() => {
     if (isOpen && agent) {
-      const initialTools = new Set(agent.tools)
-      setSelectedToolIds(initialTools)
-      setInitialSelectedToolIds(initialTools)
+      const initialBindings = migrateAgentTools(agent)
+      setToolBindings(initialBindings)
+      setInitialToolBindings(initialBindings)
     }
   }, [isOpen, agent])
 
   const handleToolToggle = (toolId: string) => {
-    setSelectedToolIds(prev => {
-      const newSet = new Set(prev)
-      if (newSet.has(toolId)) {
-        newSet.delete(toolId)
+    setToolBindings(prev => {
+      const existingIndex = prev.findIndex(binding => binding.toolId === toolId)
+      
+      if (existingIndex >= 0) {
+        // Remove tool if it exists
+        return prev.filter((_, index) => index !== existingIndex)
       } else {
-        newSet.add(toolId)
+        // Add tool with no authorization selected by default
+        const newBinding: AgentToolBinding = {
+          toolId,
+          authorizationId: undefined
+        }
+        return [...prev, newBinding]
       }
-      return newSet
     })
+  }
+
+  const handleAuthorizationChange = (toolId: string, authorizationId: string | undefined) => {
+    setToolBindings(prev => 
+      prev.map(binding =>
+        binding.toolId === toolId
+          ? { ...binding, authorizationId: authorizationId || undefined }
+          : binding
+      )
+    )
   }
 
   const handleSave = async () => {
@@ -62,7 +82,9 @@ export function AgentToolsModal({ isOpen, onClose, agent, allTools, onSave, onTo
     
     setIsSaving(true)
     try {
-      await onSave(agent.id, Array.from(selectedToolIds))
+      // For now, just pass tool IDs for backward compatibility
+      // TODO: Update onSave to accept toolBindings
+      await onSave(agent.id, toolBindings.map(binding => binding.toolId))
       onClose()
     } catch (error) {
       console.error('Failed to save tools:', error)
@@ -72,7 +94,9 @@ export function AgentToolsModal({ isOpen, onClose, agent, allTools, onSave, onTo
   }
 
   const handleCancel = () => {
-    setSelectedToolIds(new Set(agent?.tools || []))
+    if (agent) {
+      setToolBindings(migrateAgentTools(agent))
+    }
     onClose()
   }
 
@@ -90,7 +114,17 @@ export function AgentToolsModal({ isOpen, onClose, agent, allTools, onSave, onTo
 
   const handleToolSuccess = (tool: Tool) => {
     // Auto-select the newly created tool
-    setSelectedToolIds(prev => new Set([...Array.from(prev), tool.id]))
+    setToolBindings(prev => {
+      // Check if tool is already selected to avoid duplicates
+      if (prev.some(binding => binding.toolId === tool.id)) {
+        return prev
+      }
+      const newBinding: AgentToolBinding = {
+        toolId: tool.id,
+        authorizationId: undefined
+      }
+      return [...prev, newBinding]
+    })
   }
 
   const handleGenerateTool = async (prompt: string) => {
@@ -133,7 +167,7 @@ export function AgentToolsModal({ isOpen, onClose, agent, allTools, onSave, onTo
 
   if (!isOpen || !agent) return null
 
-  const selectedCount = selectedToolIds.size
+  const selectedCount = toolBindings.length
 
   // 过滤工具
   const filteredTools = allTools.filter(tool => {
@@ -144,8 +178,8 @@ export function AgentToolsModal({ isOpen, onClose, agent, allTools, onSave, onTo
 
   // 排序逻辑：已保存的工具在顶部，其他工具按名称排序
   const sortedTools = [...filteredTools].sort((a, b) => {
-    const aWasInitiallySelected = initialSelectedToolIds.has(a.id)
-    const bWasInitiallySelected = initialSelectedToolIds.has(b.id)
+    const aWasInitiallySelected = initialToolBindings.some(binding => binding.toolId === a.id)
+    const bWasInitiallySelected = initialToolBindings.some(binding => binding.toolId === b.id)
 
     // 如果一个是初始选中的，另一个不是，初始选中的排在前面
     if (aWasInitiallySelected && !bWasInitiallySelected) return -1
@@ -261,45 +295,83 @@ export function AgentToolsModal({ isOpen, onClose, agent, allTools, onSave, onTo
                 <p className="text-sm">Try selecting a different category or create new tools</p>
               </div>
             ) : (
-              <div className="space-y-3">
-                {sortedTools.map(tool => (
-                  <label
-                    key={tool.id}
-                    className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
-                  >
-                    <div className="flex items-center h-5">
-                      <input
-                        type="checkbox"
-                        checked={selectedToolIds.has(tool.id)}
-                        onChange={() => handleToolToggle(tool.id)}
-                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                      />
-                    </div>
-                    <div className="flex-1 min-w-0 overflow-hidden">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <h3 className="font-medium text-gray-900 truncate">{tool.name}</h3>
-                        {tool.tag && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-600 flex-shrink-0">
-                            <Tag className="w-3 h-3" />
-                            {tool.tag}
-                          </span>
-                        )}
-                        {selectedToolIds.has(tool.id) && (
-                          <Check className="w-4 h-4 text-green-600 flex-shrink-0" />
-                        )}
-                      </div>
-                      <p className="text-sm text-gray-600 mt-1 line-clamp-2">{tool.description}</p>
-                      {tool.httpRequest && (
-                        <div className="text-xs text-blue-600 mt-1 flex items-center gap-1 min-w-0">
-                          <span className="font-medium flex-shrink-0">{tool.httpRequest.method}</span>
-                          <span className="truncate min-w-0" title={tool.httpRequest.url}>
-                            {tool.httpRequest.url}
-                          </span>
+              <div className="space-y-4">
+                {sortedTools.map(tool => {
+                  const isSelected = toolBindings.some(binding => binding.toolId === tool.id)
+                  const binding = toolBindings.find(binding => binding.toolId === tool.id)
+                  const availableAuths = getAvailableAuthorizations(tool, authorizations)
+                  const effectiveAuth = binding ? getEffectiveAuthorization(tool, authorizations, binding) : null
+                  
+                  return (
+                    <div key={tool.id} className="border border-gray-200 rounded-lg p-4 space-y-3">
+                      {/* Tool Selection */}
+                      <label className="flex items-start gap-3 cursor-pointer">
+                        <div className="flex items-center h-5">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleToolToggle(tool.id)}
+                            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0 overflow-hidden">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <h3 className="font-medium text-gray-900 truncate">{tool.name}</h3>
+                            {tool.tag && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-600 flex-shrink-0">
+                                <Tag className="w-3 h-3" />
+                                {tool.tag}
+                              </span>
+                            )}
+                            {isSelected && (
+                              <Check className="w-4 h-4 text-green-600 flex-shrink-0" />
+                            )}
+                          </div>
+                          <p className="text-sm text-gray-600 mt-1 line-clamp-2">{tool.description}</p>
+                          {tool.httpRequest && (
+                            <div className="text-xs text-blue-600 mt-1 flex items-center gap-1 min-w-0">
+                              <span className="font-medium flex-shrink-0">{tool.httpRequest.method}</span>
+                              <span className="truncate min-w-0" title={tool.httpRequest.url}>
+                                {tool.httpRequest.url}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </label>
+
+                      {/* Authorization Selection */}
+                      {isSelected && (
+                        <div className="ml-7 pl-4 border-l-2 border-gray-200 space-y-2">
+                          <div className="flex items-center gap-2">
+                            <Key className="w-4 h-4 text-gray-500" />
+                            <Label className="text-sm font-medium">Authorization</Label>
+                          </div>
+                          <CustomSelect
+                            value={binding?.authorizationId || ''}
+                            onChange={(value) => handleAuthorizationChange(tool.id, value || undefined)}
+                            options={[
+                              { value: '', label: 'Use Default' },
+                              ...availableAuths.map(auth => ({
+                                value: auth.id,
+                                label: `${auth.name}${auth.isDefaultInTag && (auth.tag === tool.tag || (!auth.tag && !tool.tag)) ? ' (Default)' : ''}`
+                              }))
+                            ]}
+                            placeholder="Select authorization"
+                            size="sm"
+                          />
+                          {effectiveAuth && (
+                            <p className="text-xs text-gray-500">
+                              Using: <span className="font-medium">{effectiveAuth.name}</span>
+                              {effectiveAuth !== authorizations.find(a => a.id === binding?.authorizationId) && (
+                                <span className="text-blue-600"> (Auto-selected)</span>
+                              )}
+                            </p>
+                          )}
                         </div>
                       )}
                     </div>
-                  </label>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>
