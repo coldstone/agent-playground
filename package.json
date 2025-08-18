@@ -13,7 +13,7 @@
     "lint": "next lint",
     "prepublishOnly": "npm run build",
     "docker:test": "./scripts/test-docker.sh",
-    "zip": "rm -f ../agent-playground.zip && zip -r ../agent-playground.zip . -x \"*.DS_Store\" -x \".git/*\" -x \".next/*\" -x \"node_modules/*\""
+    "zip": "rm -f ../agent-playground.zip && zip -r ../agent-playground.zip . -x \"*.DS_Store\" -x \".git/*\" -x \".next/*\" -x \"node_modules/*\" -x \".claude/*\" -x \".ai-todo/*\""
   },
   "keywords": [
     "ai",
