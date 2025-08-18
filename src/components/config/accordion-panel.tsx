@@ -29,7 +29,6 @@ interface AccordionPanelProps {
   onExport: () => void
   onImport: () => void
 }
-
 type PanelType = 'agents' | 'tools' | 'authorizations' | 'llm' | 'export' | null
 
 export function AccordionPanel({

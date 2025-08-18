@@ -275,7 +275,6 @@ export default function HomePage() {
         }
 
 
-
       } catch (error) {
         console.error('Failed to load data from IndexedDB:', error)
       }

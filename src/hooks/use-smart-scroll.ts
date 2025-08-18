@@ -186,7 +186,6 @@ export function useSmartScroll({
       // 强制启用自动滚动并立即滚动到底部
       setIsAutoScrollEnabled(true)
       setIsUserScrolling(false)
-      setShowScrollToBottom(false)
       setShowScrollToTop(false)
 
       // 清除之前记录的滚动位置，进入自动跟随模式

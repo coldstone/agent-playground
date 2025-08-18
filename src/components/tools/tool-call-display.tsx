@@ -22,7 +22,6 @@ interface ToolCallDisplayProps {
   isStreaming?: boolean
   onScrollToBottom?: () => void
 }
-
 // Component for displaying tool result with collapsible functionality
 function ResultDisplay({ content }: { content: string }) {
   const [isExpanded, setIsExpanded] = useState(false)

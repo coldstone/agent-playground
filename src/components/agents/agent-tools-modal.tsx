@@ -176,6 +176,13 @@ export function AgentToolsModal({ isOpen, onClose, agent, allTools, authorizatio
     return tool.tag === selectedTag
   })
 
+  // 过滤工具
+  const filteredTools = allTools.filter(tool => {
+    if (selectedTag === 'all') return true
+    if (selectedTag === 'untagged') return !tool.tag
+    return tool.tag === selectedTag
+  })
+
   // 排序逻辑：已保存的工具在顶部，其他工具按名称排序
   const sortedTools = [...filteredTools].sort((a, b) => {
     const aWasInitiallySelected = initialToolBindings.some(binding => binding.toolId === a.id)
