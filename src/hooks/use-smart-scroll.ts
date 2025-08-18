@@ -40,6 +40,7 @@ export function useSmartScroll({
   const [isAutoScrollEnabled, setIsAutoScrollEnabled] = useState(true)
   const [isUserScrolling, setIsUserScrolling] = useState(false)
   const [showScrollToBottom, setShowScrollToBottom] = useState(false)
+  const [showScrollToTop, setShowScrollToTop] = useState(false)
   const scrollTimeoutRef = useRef<NodeJS.Timeout>()
   const lastScrollTopRef = useRef(0)
   const scrollDebounceRef = useRef<NodeJS.Timeout>()
@@ -83,6 +84,17 @@ export function useSmartScroll({
     }, 16) // 约一帧的时间
   }, [isAutoScrollEnabled, containerRef])
 
+  // 滚动到顶部
+  const scrollToTop = useCallback((useSmooth = true) => {
+    const container = containerRef.current
+    if (!container) return
+
+    container.scrollTo({
+      top: 0,
+      behavior: useSmooth ? 'smooth' : 'auto'
+    })
+  }, [containerRef])
+
   // 处理用户滚动事件
   const handleScroll = useCallback(() => {
     const container = containerRef.current
@@ -94,9 +106,15 @@ export function useSmartScroll({
 
     // 检查是否接近底部
     const nearBottom = isNearBottom()
+    
+    // 检查是否远离顶部
+    const farFromTop = currentScrollTop > threshold
 
     // 更新滚动到底部按钮的显示状态
     setShowScrollToBottom(!nearBottom)
+    
+    // 更新滚动到顶部按钮的显示状态
+    setShowScrollToTop(farFromTop)
 
     // 设置用户正在滚动的状态
     setIsUserScrolling(true)
@@ -168,7 +186,7 @@ export function useSmartScroll({
       // 强制启用自动滚动并立即滚动到底部
       setIsAutoScrollEnabled(true)
       setIsUserScrolling(false)
-      setShowScrollToBottom(false)
+      setShowScrollToTop(false)
 
       // 清除之前记录的滚动位置，进入自动跟随模式
       lastScrollTopRef.current = 0
@@ -189,6 +207,7 @@ export function useSmartScroll({
       setIsAutoScrollEnabled(true)
       setIsUserScrolling(false)
       setShowScrollToBottom(false)
+      setShowScrollToTop(false)
 
       // 清除之前记录的滚动位置，进入自动跟随模式
       lastScrollTopRef.current = 0
@@ -211,6 +230,7 @@ export function useSmartScroll({
       // 初始时直接滚动到底部，不使用动画
       container.scrollTop = container.scrollHeight
       setShowScrollToBottom(false)
+      setShowScrollToTop(false)
     }
   }, [containerRef])
 
@@ -218,10 +238,15 @@ export function useSmartScroll({
     isAutoScrollEnabled,
     isUserScrolling,
     showScrollToBottom,
+    showScrollToTop,
     scrollToBottom: () => {
       setIsAutoScrollEnabled(true)
       setShowScrollToBottom(false)
       scrollToBottom(true)
+    },
+    scrollToTop: () => {
+      setShowScrollToTop(false)
+      scrollToTop(true)
     },
     forceScrollToBottom: () => {
       const container = containerRef.current

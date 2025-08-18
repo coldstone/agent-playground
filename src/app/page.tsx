@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react'
-import { APIConfig, Message, ChatSession, Agent, Tool, AgentMessage, ToolCall } from '@/types'
+import { APIConfig, Message, ChatSession, Agent, Tool, AgentMessage, ToolCall, Authorization } from '@/types'
 import { DEFAULT_CONFIG, MODEL_PROVIDERS, generateId } from '@/lib'
 import { OpenAIClient } from '@/lib/clients'
 import { TitleGenerator } from '@/lib/generators'
@@ -36,6 +36,7 @@ export default function HomePage() {
   const [agents, setAgents] = useState<Agent[]>([])
   const [currentAgentId, setCurrentAgentId] = useState<string | null>(null)
   const [tools, setTools] = useState<Tool[]>([])
+  const [authorizations, setAuthorizations] = useState<Authorization[]>([])
   const [dbManager] = useState(() => IndexedDBManager.getInstance())
 
   const [isMounted, setIsMounted] = useState(false)
@@ -55,9 +56,11 @@ export default function HomePage() {
 
   const [reasoningDuration, setReasoningDuration] = useState<number | null>(null)
   const [scrollToBottomTrigger, setScrollToBottomTrigger] = useState(0)
+  const [scrollToTopTrigger, setScrollToTopTrigger] = useState(0)
   const [forceScrollTrigger, setForceScrollTrigger] = useState<number>()
   const [showAIMessageBox, setShowAIMessageBox] = useState(false)
   const [showScrollToBottom, setShowScrollToBottom] = useState(false)
+  const [showScrollToTop, setShowScrollToTop] = useState(false)
   const abortControllerRef = useRef<AbortController | null>(null)
   const chatInputRef = useRef<ChatInputRef>(null)
   const aiMessageTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -245,21 +248,31 @@ export default function HomePage() {
         }
 
         // Load all data in parallel
-        const [loadedSessions, loadedAgents, loadedTools] = await Promise.all([
+        const [loadedSessions, loadedAgents, loadedTools, loadedAuthorizations] = await Promise.all([
           dbManager.getAllSessions(),
           dbManager.getAllAgents(),
-          dbManager.getAllTools()
+          dbManager.getAllTools(),
+          dbManager.getAllAuthorizations()
         ])
 
         setSessions(loadedSessions)
         setAgents(loadedAgents)
         setTools(loadedTools)
+        setAuthorizations(loadedAuthorizations)
 
         // Don't auto-load previous session - always start with new chat overlay
-        // Clear any saved session state
+        // Clear any saved session state but keep agent selection
         localStorage.removeItem('agent-playground-current-session')
-        localStorage.removeItem('agent-playground-current-agent')
-
+        
+        // Load previously selected agent for the new chat overlay
+        const savedAgentId = localStorage.getItem('agent-playground-current-agent')
+        if (savedAgentId && loadedAgents.some(agent => agent.id === savedAgentId)) {
+          setCurrentAgentId(savedAgentId)
+        } else {
+          // Clear invalid agent selection
+          setCurrentAgentId(null)
+          localStorage.removeItem('agent-playground-current-agent')
+        }
 
 
       } catch (error) {
@@ -283,11 +296,7 @@ export default function HomePage() {
     }
   }, [currentSessionId])
 
-  useEffect(() => {
-    if (currentAgentId) {
-      localStorage.setItem('agent-playground-current-agent', currentAgentId)
-    }
-  }, [currentAgentId])
+  // Note: Agent selection persistence is now handled directly in handleAgentSelect
 
   // Reset active conversation state when session changes
   useEffect(() => {
@@ -308,13 +317,29 @@ export default function HomePage() {
   const createNewSession = async () => {
     // Clear current session and show the new chat overlay
     setCurrentSessionId(null)
-    setCurrentAgentId(null)
+    
+    // Restore previously selected agent from localStorage
+    const savedAgentId = localStorage.getItem('agent-playground-current-agent')
+    if (savedAgentId && agents.some(agent => agent.id === savedAgentId)) {
+      setCurrentAgentIdInternal(savedAgentId)
+    } else {
+      // Clear invalid agent selection or set to null if no saved agent
+      setCurrentAgentIdInternal(null)
+      if (savedAgentId) {
+        localStorage.removeItem('agent-playground-current-agent')
+      }
+    }
+    
+    // Hide scroll buttons when creating new chat
+    setShowScrollToBottom(false)
+    setShowScrollToTop(false)
+    
     setShowNewChatOverlay(true)
   }
 
   const handleOverlaySendMessage = async (content: string, agentId: string | null, toolIds?: string[]) => {
-    // Set the current agent (but don't create session yet)
-    setCurrentAgentId(agentId)
+    // Set the current agent and save to localStorage for persistence
+    handleAgentSelect(agentId)
 
     // Set selected tools for no-agent mode
     if (!agentId && toolIds) {
@@ -395,7 +420,7 @@ export default function HomePage() {
 
       // Auto-select the newly created agent if we're in new chat overlay
       if (showNewChatOverlay) {
-        setCurrentAgentId(newAgent.id)
+        handleAgentSelect(newAgent.id)
       }
 
       return newAgent.id
@@ -444,11 +469,46 @@ export default function HomePage() {
       await dbManager.deleteAgent(agentId)
       setAgents(prev => prev.filter(agent => agent.id !== agentId))
       if (currentAgentId === agentId) {
-        setCurrentAgentId(null)
+        handleAgentSelect(null)
       }
     } catch (error) {
       showToast('Failed to delete agent.', 'error')
       console.error('Failed to delete agent:', error)
+    }
+  }
+
+  // Authorization management functions
+  const createAuthorization = async (authorization: Authorization) => {
+    try {
+      await dbManager.saveAuthorization(authorization)
+      setAuthorizations(prev => [...prev, authorization])
+      return authorization.id
+    } catch (error) {
+      showToast('Failed to create authorization.', 'error')
+      console.error('Failed to create authorization:', error)
+      throw error
+    }
+  }
+
+  const updateAuthorization = async (authorization: Authorization) => {
+    try {
+      await dbManager.saveAuthorization(authorization)
+      setAuthorizations(prev => prev.map(auth => auth.id === authorization.id ? authorization : auth))
+    } catch (error) {
+      showToast('Failed to update authorization.', 'error')
+      console.error('Failed to update authorization:', error)
+      throw error
+    }
+  }
+
+  const deleteAuthorization = async (authorizationId: string) => {
+    try {
+      await dbManager.deleteAuthorization(authorizationId)
+      setAuthorizations(prev => prev.filter(auth => auth.id !== authorizationId))
+    } catch (error) {
+      showToast('Failed to delete authorization.', 'error')
+      console.error('Failed to delete authorization:', error)
+      throw error
     }
   }
 
@@ -1700,19 +1760,20 @@ export default function HomePage() {
     }
   }
 
-  // Session selection with agent switching
+  // Session selection with agent switching  
   const handleSessionSelect = (sessionId: string) => {
     setCurrentSessionId(sessionId)
 
     // Hide the new chat overlay when selecting a session
     setShowNewChatOverlay(false)
 
-    // Auto-switch to the agent used in this session
+    // Auto-switch to the agent used in this session (but don't save to localStorage)
     const session = sessions.find(s => s.id === sessionId)
     if (session) {
       // If session has an agentId, switch to that agent
       // If session has no agentId (undefined), clear agent selection
-      setCurrentAgentId(session.agentId || null)
+      // Use internal function to avoid saving to localStorage
+      setCurrentAgentIdInternal(session.agentId || null)
 
       // For no-agent mode sessions, restore tool selection
       if (!session.agentId && session.toolIds) {
@@ -1753,9 +1814,16 @@ export default function HomePage() {
     }, 200)
   }
 
-  // Agent selection with session update
+  // Manual agent selection (saves to localStorage)
   const handleAgentSelect = async (agentId: string | null) => {
     setCurrentAgentId(agentId)
+    
+    // Save to localStorage for persistence across page refreshes
+    if (agentId) {
+      localStorage.setItem('agent-playground-current-agent', agentId)
+    } else {
+      localStorage.removeItem('agent-playground-current-agent')
+    }
 
     // Update current session's agentId
     if (currentSessionId) {
@@ -1779,6 +1847,11 @@ export default function HomePage() {
     }
   }
 
+  // Internal agent selection (does not save to localStorage)
+  const setCurrentAgentIdInternal = (agentId: string | null) => {
+    setCurrentAgentId(agentId)
+  }
+
   // 处理滚动到底部
   const handleScrollToBottom = () => {
     setScrollToBottomTrigger(prev => prev + 1)
@@ -1789,12 +1862,26 @@ export default function HomePage() {
     setShowScrollToBottom(show)
   }
 
+  // 处理滚动到顶部按钮显示状态变化
+  const handleShowScrollToTopChange = (show: boolean) => {
+    setShowScrollToTop(show)
+  }
+
   // 处理滚动到底部按钮点击
   const handleScrollToBottomClick = () => {
     setScrollToBottomTrigger(prev => prev + 1)
     // 滚动完成后自动隐藏按钮
     setTimeout(() => {
       setShowScrollToBottom(false)
+    }, 300) // 等待滚动动画完成
+  }
+
+  // 处理滚动到顶部按钮点击
+  const handleScrollToTopClick = () => {
+    setScrollToTopTrigger(prev => prev + 1)
+    // 滚动完成后自动隐藏按钮
+    setTimeout(() => {
+      setShowScrollToTop(false)
     }, 300) // 等待滚动动画完成
   }
 
@@ -2322,7 +2409,7 @@ export default function HomePage() {
             currentAgentId={currentAgentId}
             onSendMessage={handleOverlaySendMessage}
             onCreateAgent={() => setShowAgentModal(true)}
-            onAgentSelect={setCurrentAgentId}
+            onAgentSelect={handleAgentSelect}
             shouldFocus={showNewChatOverlay}
             tools={tools}
           />
@@ -2333,6 +2420,7 @@ export default function HomePage() {
               agents={agents}
               currentAgentId={currentAgentId}
               tools={tools}
+              authorizations={authorizations}
               hasMessages={!!(currentSession?.messages.length)}
               apiConfig={config}
               onAgentSelect={handleAgentSelect}
@@ -2357,7 +2445,9 @@ export default function HomePage() {
               formatReasoningDuration={formatReasoningDuration}
               currentAgent={currentAgentWithTools}
               tools={tools}
+              authorizations={authorizations}
               scrollToBottomTrigger={scrollToBottomTrigger}
+              scrollToTopTrigger={scrollToTopTrigger}
               forceScrollTrigger={forceScrollTrigger}
               onProvideToolResult={handleProvideToolResult}
               onMarkToolFailed={handleMarkToolFailed}
@@ -2369,6 +2459,8 @@ export default function HomePage() {
               onScrollToBottom={handleScrollToBottom}
               onShowScrollToBottomChange={handleShowScrollToBottomChange}
               onScrollToBottomClick={handleScrollToBottomClick}
+              onShowScrollToTopChange={handleShowScrollToTopChange}
+              onScrollToTopClick={handleScrollToTopClick}
             />
 
             {/* Input */}
@@ -2393,6 +2485,7 @@ export default function HomePage() {
         config={config}
         agents={agents}
         tools={tools}
+        authorizations={authorizations}
         onConfigChange={setConfig}
         onAgentCreate={() => setShowAgentModal(true)}
         onAgentUpdate={updateAgent}
@@ -2401,6 +2494,9 @@ export default function HomePage() {
         onToolCreate={createTool}
         onToolUpdate={(tool: Tool) => updateTool(tool.id, tool)}
         onToolDelete={deleteTool}
+        onAuthorizationCreate={createAuthorization}
+        onAuthorizationUpdate={updateAuthorization}
+        onAuthorizationDelete={deleteAuthorization}
         onExport={() => setShowExportModal(true)}
         onImport={() => setShowImportModal(true)}
       />
@@ -2410,6 +2506,7 @@ export default function HomePage() {
         isOpen={showAgentModal}
         onClose={() => setShowAgentModal(false)}
         tools={tools}
+        authorizations={authorizations}
         onAgentCreate={createAgent}
         onToolCreate={createTool}
       />
@@ -2439,6 +2536,26 @@ export default function HomePage() {
       />
 
       <ToastContainer />
+
+      {/* Scroll to top button - fixed position at top */}
+      {showScrollToTop && !showNewChatOverlay && (
+        <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-10">
+          <button
+            onClick={handleScrollToTopClick}
+            className="w-10 h-10 bg-white/50 backdrop-blur-sm border border-gray-200 rounded-full shadow-lg hover:bg-white hover:shadow-xl transition-all duration-200 flex items-center justify-center group"
+            aria-label="Scroll to the top"
+          >
+            <svg
+              className="w-5 h-5 text-gray-600 group-hover:text-gray-800 transition-colors"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+            </svg>
+          </button>
+        </div>
+      )}
 
       {/* Scroll to bottom button - fixed position */}
       {showScrollToBottom && (

@@ -141,7 +141,8 @@ export interface Agent {
   name: string;
   description: string;
   systemPrompt: string;
-  tools: string[]; // Store tool IDs instead of full Tool objects
+  tools: string[]; // Store tool IDs instead of full Tool objects (legacy)
+  toolBindings?: AgentToolBinding[]; // New authorization-aware tool bindings
   order?: number; // For drag and drop ordering
   createdAt: number;
   updatedAt: number;
@@ -178,4 +179,21 @@ export interface AgentMessage extends Message {
   };
   provider?: string; // The provider used for this message (e.g., "OpenAI", "Deepseek")
   model?: string; // The model used for this message (e.g., "gpt-4o", "deepseek-chat")
+}
+
+// Authorization management
+export interface Authorization {
+  id: string;
+  name: string;
+  description?: string;
+  headers: { key: string; value: string }[];
+  tag?: string; // Tool tag association, undefined means global
+  isDefaultInTag: boolean; // Default authorization for this tag
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface AgentToolBinding {
+  toolId: string;
+  authorizationId?: string; // If not set, use default authorization
 }

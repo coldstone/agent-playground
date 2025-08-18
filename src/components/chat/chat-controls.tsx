@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Agent, Tool, APIConfig } from '@/types'
+import { Agent, Tool, APIConfig, Authorization } from '@/types'
 import { Button } from '@/components/ui/button'
 import { BookUser, Wrench as ToolIcon, Bot } from 'lucide-react'
 import { AgentInstructionModal, AgentToolsModal } from '@/components/agents'
@@ -10,6 +10,7 @@ interface ChatControlsProps {
   agents: Agent[]
   currentAgentId: string | null
   tools: Tool[]
+  authorizations: Authorization[]
   hasMessages: boolean
   apiConfig: APIConfig
   onAgentSelect: (agentId: string | null) => void
@@ -23,6 +24,7 @@ export function ChatControls({
   agents,
   currentAgentId,
   tools,
+  authorizations,
   hasMessages,
   apiConfig,
   onAgentSelect,
@@ -135,6 +137,7 @@ export function ChatControls({
             onClose={() => setShowToolsModal(false)}
             agent={currentAgent}
             allTools={tools}
+            authorizations={authorizations}
             onSave={(agentId: string, toolIds: string[]) => onAgentToolsUpdate(agentId, toolIds)}
           />
         </>

@@ -6,6 +6,11 @@
 .pnp.js
 .yarn/install-state.gz
 
+# AI vibe coding
+/.ai-todo
+CLAUDE.md
+/.claude
+
 # testing
 /coverage
 

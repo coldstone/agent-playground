@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useRef } from 'react'
-import { Message as MessageType, AgentMessage, ToolCall, Agent, Tool } from '@/types'
+import { Message as MessageType, AgentMessage, ToolCall, Agent, Tool, Authorization } from '@/types'
 import { Message } from './message'
 import { ToolCallDisplay } from '@/components/tools'
 import { StreamingContent } from '@/components/markdown'
@@ -27,11 +27,14 @@ interface ChatMessagesProps {
   formatReasoningDuration?: (durationMs: number) => string
   currentAgent?: AgentWithTools | null
   tools?: Tool[]
+  authorizations?: Authorization[]
   scrollToBottomTrigger?: number // Add trigger to force scroll to bottom
   scrollToTopTrigger?: number // Add trigger to force scroll to top
   forceScrollTrigger?: number // Add trigger for user message send
   onShowScrollToBottomChange?: (show: boolean) => void // Callback for scroll to bottom button visibility
   onScrollToBottomClick?: () => void // Callback for scroll to bottom button click
+  onShowScrollToTopChange?: (show: boolean) => void // Callback for scroll to top button visibility
+  onScrollToTopClick?: () => void // Callback for scroll to top button click
   onProvideToolResult?: (toolCallId: string, result: string) => void
   onMarkToolFailed?: (toolCallId: string, error: string) => void
   onRetryMessage?: (messageId: string) => void
@@ -56,6 +59,7 @@ export function ChatMessages({
   formatReasoningDuration,
   currentAgent,
   tools = [],
+  authorizations = [],
   scrollToBottomTrigger,
   scrollToTopTrigger,
   forceScrollTrigger,
@@ -68,7 +72,9 @@ export function ChatMessages({
   onToggleStreamingReasoningExpansion,
   onScrollToBottom,
   onShowScrollToBottomChange,
-  onScrollToBottomClick
+  onScrollToBottomClick,
+  onShowScrollToTopChange,
+  onScrollToTopClick
 }: ChatMessagesProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const prevToolCallsLengthRef = useRef(0)
@@ -100,7 +106,7 @@ export function ChatMessages({
   }, [scrollToTopTrigger])
 
   // 使用智能滚动控制
-  const { isAutoScrollEnabled, isUserScrolling, showScrollToBottom, scrollToBottom } = useSmartScroll({
+  const { isAutoScrollEnabled, isUserScrolling, showScrollToBottom, showScrollToTop, scrollToBottom, scrollToTop } = useSmartScroll({
     dependencies: [messages, streamingContent, streamingReasoningContent],
     containerRef,
     threshold: 100,
@@ -114,11 +120,22 @@ export function ChatMessages({
     onShowScrollToBottomChange?.(showScrollToBottom)
   }, [showScrollToBottom, onShowScrollToBottomChange])
 
+  // 通知父组件滚动到顶部按钮的显示状态
+  React.useEffect(() => {
+    onShowScrollToTopChange?.(showScrollToTop)
+  }, [showScrollToTop, onShowScrollToTopChange])
+
   // 处理滚动到底部点击
   const handleScrollToBottomClick = React.useCallback(() => {
     scrollToBottom()
     onScrollToBottomClick?.()
   }, [scrollToBottom, onScrollToBottomClick])
+
+  // 处理滚动到顶部点击
+  const handleScrollToTopClick = React.useCallback(() => {
+    scrollToTop()
+    onScrollToTopClick?.()
+  }, [scrollToTop, onScrollToTopClick])
 
   const displayMessages = messages.filter(msg => msg.role !== 'system')
 
@@ -160,6 +177,8 @@ export function ChatMessages({
               key={message.id}
               message={message}
               tools={tools}
+              agent={currentAgent ? { ...currentAgent, tools: currentAgent.tools.map(t => t.id) } : undefined}
+              authorizations={authorizations}
               isReasoningExpanded={expandedReasoningMessages.has(message.id)}
               isInActiveConversation={isInActiveConversation}
               reasoningDuration={reasoningDuration}
@@ -257,6 +276,8 @@ export function ChatMessages({
                         key={`streaming-${toolCall.id}-${index}`}
                         toolCall={toolCall}
                         execution={undefined}
+                        agent={currentAgent ? { ...currentAgent, tools: currentAgent.tools.map(t => t.id) } : undefined}
+                        authorizations={authorizations}
                         onProvideResult={() => {}}
                         onMarkFailed={() => {}}
                         isStreaming={true}

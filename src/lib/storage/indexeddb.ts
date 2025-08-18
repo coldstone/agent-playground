@@ -1,8 +1,8 @@
-import { Agent, Tool, ChatSession, AvailableModel } from '@/types'
+import { Agent, Tool, ChatSession, AvailableModel, Authorization } from '@/types'
 import { ProviderCustomConfig } from '../providers'
 
 const DB_NAME = 'agent-playground'
-const DB_VERSION = 5
+const DB_VERSION = 6
 
 // Store names
 const AGENTS_STORE = 'agents'
@@ -10,6 +10,7 @@ const TOOLS_STORE = 'tools'
 const SESSIONS_STORE = 'sessions'
 const PROVIDER_CONFIGS_STORE = 'provider-configs'
 const AVAILABLE_MODELS_STORE = 'available-models'
+const AUTHORIZATIONS_STORE = 'authorizations'
 
 export class IndexedDBManager {
   private static instance: IndexedDBManager
@@ -82,6 +83,14 @@ export class IndexedDBManager {
         if (!db.objectStoreNames.contains(AVAILABLE_MODELS_STORE)) {
           const availableModelsStore = db.createObjectStore(AVAILABLE_MODELS_STORE, { keyPath: 'id' })
           availableModelsStore.createIndex('provider', 'provider', { unique: false })
+        }
+
+        // Create authorizations store
+        if (!db.objectStoreNames.contains(AUTHORIZATIONS_STORE)) {
+          const authorizationsStore = db.createObjectStore(AUTHORIZATIONS_STORE, { keyPath: 'id' })
+          authorizationsStore.createIndex('name', 'name', { unique: false })
+          authorizationsStore.createIndex('tag', 'tag', { unique: false })
+          authorizationsStore.createIndex('createdAt', 'createdAt', { unique: false })
         }
       }
     })
@@ -318,12 +327,13 @@ export class IndexedDBManager {
   async clearAllData(): Promise<void> {
     const db = await this.ensureDB()
     return new Promise((resolve, reject) => {
-      const transaction = db.transaction([AGENTS_STORE, TOOLS_STORE, SESSIONS_STORE, PROVIDER_CONFIGS_STORE], 'readwrite')
+      const transaction = db.transaction([AGENTS_STORE, TOOLS_STORE, SESSIONS_STORE, PROVIDER_CONFIGS_STORE, AUTHORIZATIONS_STORE], 'readwrite')
 
       const agentsStore = transaction.objectStore(AGENTS_STORE)
       const toolsStore = transaction.objectStore(TOOLS_STORE)
       const sessionsStore = transaction.objectStore(SESSIONS_STORE)
       const providerConfigsStore = transaction.objectStore(PROVIDER_CONFIGS_STORE)
+      const authorizationsStore = transaction.objectStore(AUTHORIZATIONS_STORE)
 
       Promise.all([
         new Promise<void>((res, rej) => {
@@ -343,6 +353,11 @@ export class IndexedDBManager {
         }),
         new Promise<void>((res, rej) => {
           const req = providerConfigsStore.clear()
+          req.onsuccess = () => res()
+          req.onerror = () => rej(req.error)
+        }),
+        new Promise<void>((res, rej) => {
+          const req = authorizationsStore.clear()
           req.onsuccess = () => res()
           req.onerror = () => rej(req.error)
         })
@@ -391,5 +406,97 @@ export class IndexedDBManager {
 
       request.onerror = () => reject(request.error)
     })
+  }
+
+  // Authorization management
+  async saveAuthorization(authorization: Authorization): Promise<void> {
+    try {
+      await this.update(AUTHORIZATIONS_STORE, authorization)
+    } catch (error) {
+      console.error('Failed to save authorization:', error)
+      throw error
+    }
+  }
+
+  async getAuthorization(id: string): Promise<Authorization | null> {
+    try {
+      return await this.get<Authorization>(AUTHORIZATIONS_STORE, id)
+    } catch (error) {
+      console.error('Failed to get authorization:', error)
+      return null
+    }
+  }
+
+  async getAllAuthorizations(): Promise<Authorization[]> {
+    try {
+      return await this.getAll<Authorization>(AUTHORIZATIONS_STORE)
+    } catch (error) {
+      console.error('Failed to get all authorizations:', error)
+      return []
+    }
+  }
+
+  async deleteAuthorization(id: string): Promise<void> {
+    try {
+      await this.delete(AUTHORIZATIONS_STORE, id)
+    } catch (error) {
+      console.error('Failed to delete authorization:', error)
+      throw error
+    }
+  }
+
+  async getAuthorizationsByTag(tag?: string): Promise<Authorization[]> {
+    const db = await this.ensureDB()
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([AUTHORIZATIONS_STORE], 'readonly')
+      const store = transaction.objectStore(AUTHORIZATIONS_STORE)
+      const authorizations: Authorization[] = []
+
+      let request: IDBRequest
+      if (tag === undefined) {
+        // Get authorizations with no tag (global)
+        request = store.openCursor()
+      } else {
+        // Get authorizations with specific tag
+        const index = store.index('tag')
+        request = index.openCursor(IDBKeyRange.only(tag))
+      }
+
+      request.onsuccess = (event) => {
+        const cursor = (event.target as IDBRequest).result
+        if (cursor) {
+          const auth = cursor.value as Authorization
+          if (tag === undefined && !auth.tag) {
+            authorizations.push(auth)
+          } else if (tag !== undefined && auth.tag === tag) {
+            authorizations.push(auth)
+          }
+          cursor.continue()
+        } else {
+          resolve(authorizations)
+        }
+      }
+
+      request.onerror = () => reject(request.error)
+    })
+  }
+
+  async getDefaultAuthorizationByTag(tag?: string): Promise<Authorization | null> {
+    try {
+      const authorizations = await this.getAuthorizationsByTag(tag)
+      return authorizations.find(auth => auth.isDefaultInTag) || null
+    } catch (error) {
+      console.error('Failed to get default authorization by tag:', error)
+      return null
+    }
+  }
+
+  async getGlobalDefaultAuthorization(): Promise<Authorization | null> {
+    try {
+      return await this.getDefaultAuthorizationByTag(undefined)
+    } catch (error) {
+      console.error('Failed to get global default authorization:', error)
+      return null
+    }
   }
 }

@@ -1,31 +1,74 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
-import { ToolCall, ToolCallExecution, Tool, HTTPRequestConfig } from '@/types'
+import React, { useState, useEffect, useRef } from 'react'
+import { ToolCall, ToolCallExecution, Tool, HTTPRequestConfig, Authorization, Agent } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { formatTimestamp } from '@/lib/utils'
-import { Wrench as ToolIcon, Play, Check, X, Clock, AlertCircle, Globe, Send, Copy } from 'lucide-react'
+import { getMergedHeaders, getEffectiveAuthorization, migrateAgentTools } from '@/lib/authorization'
+import { Wrench as ToolIcon, Play, Check, X, Clock, AlertCircle, Globe, Send, Copy, ChevronDown, ChevronUp } from 'lucide-react'
 import { useToast } from '@/components/ui/toast'
 
 interface ToolCallDisplayProps {
   toolCall: ToolCall
   execution?: ToolCallExecution
   tool?: Tool
+  agent?: Agent
+  authorizations?: Authorization[]
   onProvideResult: (toolCallId: string, result: string) => void
   onMarkFailed: (toolCallId: string, error: string) => void
   isStreaming?: boolean
   onScrollToBottom?: () => void
 }
+// Component for displaying tool result with collapsible functionality
+function ResultDisplay({ content }: { content: string }) {
+  const [isExpanded, setIsExpanded] = useState(false)
+  const preRef = useRef<HTMLPreElement>(null)
+  const [needsToggle, setNeedsToggle] = useState(false)
 
-
+  useEffect(() => {
+    if (preRef.current) {
+      // Check if content height exceeds 200px
+      const scrollHeight = preRef.current.scrollHeight
+      setNeedsToggle(scrollHeight > 200)
+    }
+  }, [content])
+  
+  return (
+    <div className="mt-1 relative">
+      <div className={`relative ${!isExpanded && needsToggle ? 'max-h-[200px] overflow-hidden' : ''}`}>
+        <pre 
+          ref={preRef}
+          className="text-sm bg-white p-2 rounded border whitespace-pre-wrap break-all overflow-wrap-anywhere min-w-0 overflow-x-auto"
+        >
+          {content}
+        </pre>
+        {!isExpanded && needsToggle && (
+          <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-white to-transparent pointer-events-none" />
+        )}
+      </div>
+      {needsToggle && (
+        <div className="flex justify-center mt-2">
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="text-sm text-purple-600 hover:text-purple-800 cursor-pointer bg-transparent border-none"
+          >
+            {isExpanded ? 'Display Less' : 'Display More'}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
 
 export function ToolCallDisplay({
   toolCall,
   execution,
   tool,
+  agent,
+  authorizations = [],
   onProvideResult,
   onMarkFailed,
   isStreaming = false,
@@ -40,13 +83,20 @@ export function ToolCallDisplay({
   const [httpHeaders, setHttpHeaders] = useState<{ key: string; value: string }[]>([])
   const [httpUrl, setHttpUrl] = useState('')
 
-  // Initialize HTTP configuration when tool changes
+  // Initialize HTTP configuration when tool or authorization changes
   useEffect(() => {
     if (tool?.httpRequest) {
-      setHttpHeaders([...tool.httpRequest.headers])
+      // Get effective authorization for this tool
+      const toolBindings = agent ? migrateAgentTools(agent) : []
+      const binding = toolBindings.find(b => b.toolId === tool.id)
+      const effectiveAuth = getEffectiveAuthorization(tool, authorizations, binding)
+      
+      // Merge tool headers with authorization headers
+      const mergedHeaders = getMergedHeaders(tool, effectiveAuth)
+      setHttpHeaders(mergedHeaders)
       setHttpUrl(tool.httpRequest.url)
     }
-  }, [tool])
+  }, [tool, agent, authorizations])
 
   const handleProvideResult = () => {
     if (result.trim()) {
@@ -365,9 +415,7 @@ export function ToolCallDisplay({
             {execution?.result && (
               <div className="min-w-0">
                 <span className="text-sm font-medium">Result:</span>
-                <pre className="text-sm bg-white p-2 rounded border mt-1 whitespace-pre-wrap break-all overflow-wrap-anywhere min-w-0 overflow-x-auto">
-                  {execution.result}
-                </pre>
+                <ResultDisplay content={execution.result} />
               </div>
             )}
 
