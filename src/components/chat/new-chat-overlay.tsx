@@ -5,6 +5,7 @@ import { Agent, Tool } from '@/types'
 import { Button } from '@/components/ui/button'
 import { ModelSelector } from '@/components/ui/model-selector'
 import { ToolSelector } from '@/components/ui/tool-selector'
+import { AutoSwitch } from '@/components/ui/auto-switch'
 import { Plus, Send } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useDraftMessage } from '@/hooks/use-draft-message'
@@ -18,6 +19,8 @@ interface NewChatOverlayProps {
   onAgentSelect: (agentId: string | null) => void
   shouldFocus?: boolean
   tools?: Tool[]
+  autoMode?: boolean
+  onAutoModeChange?: (enabled: boolean) => void
 }
 
 export function NewChatOverlay({
@@ -27,7 +30,9 @@ export function NewChatOverlay({
   onCreateAgent,
   onAgentSelect,
   shouldFocus = true,
-  tools = []
+  tools = [],
+  autoMode = false,
+  onAutoModeChange
 }: NewChatOverlayProps) {
   const { message, setMessage, clearDraft } = useDraftMessage()
   const { hasAvailableModels, hasValidCurrentModel } = useAvailableModels()
@@ -146,13 +151,26 @@ export function NewChatOverlay({
           />
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-4">
-              <ModelSelector />
+              <ModelSelector 
+                autoMode={autoMode}
+                onAutoModeChange={onAutoModeChange}
+                showAutoSwitch={!!currentAgentId} // Only show auto switch in Agent mode
+              />
               {!currentAgentId && tools.length > 0 && (
-                <ToolSelector
-                  tools={tools}
-                  selectedToolIds={selectedToolIds}
-                  onToolsChange={setSelectedToolIds}
-                />
+                <>
+                  <ToolSelector
+                    tools={tools}
+                    selectedToolIds={selectedToolIds}
+                    onToolsChange={setSelectedToolIds}
+                  />
+                  {/* Auto switch in Non-Agent mode - place after tool selector */}
+                  {onAutoModeChange && (
+                    <AutoSwitch
+                      autoMode={autoMode}
+                      onAutoModeChange={onAutoModeChange}
+                    />
+                  )}
+                </>
               )}
             </div>
             <Button

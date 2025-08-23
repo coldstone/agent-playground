@@ -11,6 +11,7 @@ import { ChatMessages, ChatInput, ChatInputRef, ChatControls, SessionManager, Ne
 import { AgentFormModal } from '@/components/agents'
 import { useSystemModel } from '@/hooks/use-system-model'
 import { useToast } from '@/components/ui/toast'
+import { getMergedHeaders, getEffectiveAuthorization, migrateAgentTools } from '@/lib/authorization'
 
 
 import { ExportModal, ImportModal, SystemPromptModal } from '@/components/modals'
@@ -72,6 +73,34 @@ export default function HomePage() {
 
   // System prompt modal
   const [showSystemPromptModal, setShowSystemPromptModal] = useState(false)
+
+  // Auto mode state with localStorage persistence
+  const [autoMode, setAutoMode] = useState(false)
+  const [autoModeInitialized, setAutoModeInitialized] = useState(false)
+
+  // Initialize auto mode from localStorage on client side
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('autoMode')
+      if (saved !== null) {
+        setAutoMode(JSON.parse(saved))
+      }
+    } catch (error) {
+      console.error('Failed to load auto mode from localStorage:', error)
+    }
+    setAutoModeInitialized(true)
+  }, [])
+
+  // Save auto mode state to localStorage whenever it changes (after initialization)
+  useEffect(() => {
+    if (autoModeInitialized) {
+      try {
+        localStorage.setItem('autoMode', JSON.stringify(autoMode))
+      } catch (error) {
+        console.error('Failed to save auto mode to localStorage:', error)
+      }
+    }
+  }, [autoMode, autoModeInitialized])
 
   // 格式化思考时长
   const formatReasoningDuration = (durationMs: number) => {
@@ -305,6 +334,154 @@ export default function HomePage() {
 
   const currentSession = sessions.find(s => s.id === currentSessionId)
   const currentAgent = currentAgentId ? agents.find(a => a.id === currentAgentId) : null
+
+  // Auto execute tool calls when auto mode is enabled
+  useEffect(() => {
+    if (!autoMode || !currentSession || isLoading) return
+
+    const lastMessage = currentSession.messages[currentSession.messages.length - 1]
+    if (lastMessage?.role === 'assistant') {
+      const agentMessage = lastMessage as AgentMessage
+      if (agentMessage.toolCalls && agentMessage.toolCallExecutions) {
+        // Find pending tool calls that can be auto-executed
+        const pendingToolCalls = agentMessage.toolCalls.filter(toolCall => {
+          const execution = agentMessage.toolCallExecutions?.find(exec => exec.toolCall.id === toolCall.id)
+          return execution?.status === 'pending'
+        })
+
+        // Only execute if there are pending tool calls and we're not already executing them
+        if (pendingToolCalls.length > 0) {
+          console.log(`Auto-executing ${pendingToolCalls.length} pending tool calls:`, pendingToolCalls.map(tc => tc.function.name))
+          
+          // Execute all pending tool calls in parallel
+          const executeAllToolCalls = async () => {
+            const executePromises = pendingToolCalls.map(async (toolCall) => {
+              const tool = tools.find(t => t.name === toolCall.function.name)
+              if (tool?.httpRequest) {
+                try {
+                  console.log(`Executing tool call: ${toolCall.function.name} (${toolCall.id})`)
+                  await autoExecuteHttpToolCall(toolCall, tool)
+                  console.log(`Completed tool call: ${toolCall.function.name} (${toolCall.id})`)
+                } catch (error) {
+                  console.error('Auto execution failed:', error)
+                  await handleMarkToolFailed(toolCall.id, error instanceof Error ? error.message : 'Auto execution failed')
+                }
+              }
+            })
+
+            // Wait for all executions to complete
+            await Promise.all(executePromises)
+            console.log('All tool calls execution completed')
+          }
+
+          // Execute the function
+          executeAllToolCalls().catch(error => {
+            console.error('Failed to execute tool calls:', error)
+          })
+        }
+      }
+    }
+  }, [autoMode, currentSession?.messages, isLoading]) // Use full messages array to detect changes properly
+
+  // Auto execute HTTP tool call
+  const autoExecuteHttpToolCall = async (toolCall: ToolCall, tool: Tool) => {
+    if (!tool.httpRequest || !currentSessionId) return
+
+    try {
+      // Parse arguments
+      let parsedArguments: any = {}
+      try {
+        parsedArguments = JSON.parse(toolCall.function.arguments)
+      } catch (e) {
+        throw new Error('Invalid arguments format')
+      }
+
+      // Get effective authorization for this tool
+      const toolBindings = currentAgent ? migrateAgentTools(currentAgent) : []
+      const binding = toolBindings.find(b => b.toolId === tool.id)
+      const effectiveAuth = getEffectiveAuthorization(tool, authorizations, binding)
+      
+      // Merge tool headers with authorization headers
+      const mergedHeaders = getMergedHeaders(tool, effectiveAuth)
+      
+      // Replace parameters in URL and headers
+      let processedUrl = tool.httpRequest.url
+      const processedHeaders: { [key: string]: string } = {}
+      const remainingArguments = { ...parsedArguments }
+
+      // Replace URL parameters
+      const urlParams = processedUrl.match(/\{([^}]+)\}/g) || []
+      for (const param of urlParams) {
+        const paramName = param.slice(1, -1) // Remove { and }
+        if (remainingArguments[paramName] !== undefined) {
+          processedUrl = processedUrl.replace(param, String(remainingArguments[paramName]))
+          delete remainingArguments[paramName]
+        }
+      }
+
+      // Process headers
+      for (const header of mergedHeaders) {
+        if (header.key && header.value) {
+          let headerValue = header.value
+          const headerParams = headerValue.match(/\{([^}]+)\}/g) || []
+          for (const param of headerParams) {
+            const paramName = param.slice(1, -1)
+            if (remainingArguments[paramName] !== undefined) {
+              headerValue = headerValue.replace(param, String(remainingArguments[paramName]))
+              delete remainingArguments[paramName]
+            }
+          }
+          processedHeaders[header.key] = headerValue
+        }
+      }
+
+      // Prepare request data
+      let requestData: any = null
+      if (tool.httpRequest.method === 'GET') {
+        // For GET requests, add remaining arguments as query parameters
+        const queryParams = new URLSearchParams()
+        for (const [key, value] of Object.entries(remainingArguments)) {
+          queryParams.append(key, String(value))
+        }
+        if (queryParams.toString()) {
+          processedUrl += (processedUrl.includes('?') ? '&' : '?') + queryParams.toString()
+        }
+      } else {
+        // For other methods, use remaining arguments as request body
+        requestData = remainingArguments
+      }
+
+      // Make the request through proxy
+      const response = await fetch('/api/proxy', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          method: tool.httpRequest.method,
+          url: processedUrl,
+          headers: processedHeaders,
+          data: requestData
+        })
+      })
+
+      const proxyResult = await response.json()
+
+      if (response.ok) {
+        // Success - provide the result
+        const resultText = typeof proxyResult.data === 'string'
+          ? proxyResult.data
+          : JSON.stringify(proxyResult.data, null, 2)
+        await handleProvideToolResult(toolCall.id, resultText)
+      } else {
+        // Error - mark as failed
+        const errorText = proxyResult.error || proxyResult.message || 'HTTP request failed'
+        await handleMarkToolFailed(toolCall.id, errorText)
+      }
+    } catch (error) {
+      throw error
+    }
+  }
 
   // Get current agent with latest tool information
   const currentAgentWithTools = currentAgent ? {
@@ -658,6 +835,28 @@ export default function HomePage() {
 
       // Filter out any existing system messages from history to avoid conflicts
       const messagesWithoutSystem = sessionData.messages.filter(m => m.role !== 'system')
+
+      // Validate message sequence before sending to API
+      console.log('Validating message sequence before sending to AI:')
+      let lastAssistantMessage: AgentMessage | null = null
+      for (let i = 0; i < messagesWithoutSystem.length; i++) {
+        const msg = messagesWithoutSystem[i]
+        console.log(`Message ${i}: ${msg.role} - ${msg.role === 'tool' ? `tool_call_id: ${(msg as any).tool_call_id}` : msg.content?.substring(0, 50)}...`)
+        
+        if (msg.role === 'assistant') {
+          lastAssistantMessage = msg as AgentMessage
+        } else if (msg.role === 'tool') {
+          const toolMsg = msg as any
+          if (lastAssistantMessage && lastAssistantMessage.toolCalls) {
+            const correspondingToolCall = lastAssistantMessage.toolCalls.find(tc => tc.id === toolMsg.tool_call_id)
+            if (!correspondingToolCall) {
+              console.error(`Tool message with tool_call_id ${toolMsg.tool_call_id} has no corresponding tool call!`)
+            } else {
+              console.log(`✓ Tool message for ${correspondingToolCall.function.name} found`)
+            }
+          }
+        }
+      }
 
       // Use agent system prompt if in agent mode, otherwise use config system prompt
       // When agent is selected, ONLY use agent's system prompt, ignore config system prompt
@@ -1329,12 +1528,26 @@ export default function HomePage() {
     const lastMessage = session.messages[session.messages.length - 1]
     if (lastMessage?.role === 'assistant') {
       const agentMessage = lastMessage as AgentMessage
-      if (agentMessage.toolCalls && agentMessage.toolCalls.length > 0) {
+      if (agentMessage.toolCalls && agentMessage.toolCalls.length > 0 && agentMessage.toolCallExecutions) {
+        console.log('Checking tool completion status:', {
+          totalToolCalls: agentMessage.toolCalls.length,
+          totalExecutions: agentMessage.toolCallExecutions.length,
+          toolCalls: agentMessage.toolCalls.map(tc => ({
+            id: tc.id,
+            name: tc.function.name,
+            hasExecution: !!agentMessage.toolCallExecutions?.find(exec => exec.toolCall.id === tc.id),
+            status: agentMessage.toolCallExecutions?.find(exec => exec.toolCall.id === tc.id)?.status
+          }))
+        })
+
         // Check if all tool calls have completed or failed executions
-        return agentMessage.toolCalls.every(toolCall => {
+        const allCompleted = agentMessage.toolCalls.every(toolCall => {
           const execution = agentMessage.toolCallExecutions?.find(exec => exec.toolCall.id === toolCall.id)
           return execution && (execution.status === 'completed' || execution.status === 'failed')
         })
+
+        console.log('All tool calls completed:', allCompleted)
+        return allCompleted
       }
     }
     return false
@@ -1345,31 +1558,48 @@ export default function HomePage() {
     const lastMessage = session.messages[session.messages.length - 1] as AgentMessage
     if (!lastMessage?.toolCalls || !lastMessage?.toolCallExecutions) return
 
-    // Create tool messages for all completed tool calls
+    console.log('Processing tool results for tool calls:', lastMessage.toolCalls.map(tc => `${tc.function.name} (${tc.id})`))
+
+    // Verify all tool calls have corresponding executions with completed/failed status
+    const missingExecutions: string[] = []
+    for (const toolCall of lastMessage.toolCalls) {
+      const execution = lastMessage.toolCallExecutions.find(exec => exec.toolCall.id === toolCall.id)
+      if (!execution || (execution.status !== 'completed' && execution.status !== 'failed')) {
+        missingExecutions.push(toolCall.id)
+      }
+    }
+
+    if (missingExecutions.length > 0) {
+      console.warn('Not all tool calls have completed executions. Missing:', missingExecutions)
+      return
+    }
+
+    // Create tool messages for ALL tool calls in the SAME ORDER as they appear in toolCalls array
     const toolMessages: Message[] = []
 
     for (const toolCall of lastMessage.toolCalls) {
       const execution = lastMessage.toolCallExecutions.find(exec => exec.toolCall.id === toolCall.id)
-      if (execution && (execution.status === 'completed' || execution.status === 'failed')) {
-        const content = execution.status === 'completed'
-          ? execution.result || ''
-          : `Error: ${execution.error || 'Unknown error'}`
+      
+      // At this point we know execution exists and has completed/failed status
+      const content = execution!.status === 'completed'
+        ? execution!.result || ''
+        : `Error: ${execution!.error || 'Unknown error'}`
 
-        const toolMessage: Message = {
-          id: generateId(),
-          role: 'tool',
-          content,
-          timestamp: Date.now(),
-          tool_call_id: toolCall.id,
-          name: toolCall.function.name
-        }
-        toolMessages.push(toolMessage)
+      const toolMessage: Message = {
+        id: generateId(),
+        role: 'tool',
+        content,
+        timestamp: Date.now(),
+        tool_call_id: toolCall.id,
+        name: toolCall.function.name
       }
+      toolMessages.push(toolMessage)
+      console.log(`Created tool result message for ${toolCall.function.name} (${toolCall.id}):`, content.substring(0, 100) + '...')
     }
 
     if (toolMessages.length === 0) return
 
-    // Update session with all tool result messages
+    // Always save tool result messages to maintain complete conversation history
     const sessionWithToolResults = {
       ...session,
       messages: [...session.messages, ...toolMessages],
@@ -1381,12 +1611,12 @@ export default function HomePage() {
       setSessions(prev => prev.map(s =>
         s.id === currentSessionId ? sessionWithToolResults : s
       ))
-
-      // Continue conversation with AI after all tool results
-      await continueConversationAfterTool(sessionWithToolResults)
     } catch (error) {
-      console.error('Failed to save tool results and continue conversation:', error)
+      console.error('Failed to save tool results:', error)
     }
+
+    // Continue conversation with AI after all tool results
+    await continueConversationAfterTool(sessionWithToolResults)
   }
 
   // Tool execution handlers
@@ -2412,6 +2642,8 @@ export default function HomePage() {
             onAgentSelect={handleAgentSelect}
             shouldFocus={showNewChatOverlay}
             tools={tools}
+            autoMode={autoMode}
+            onAutoModeChange={setAutoMode}
           />
         ) : (
           <>
@@ -2461,6 +2693,7 @@ export default function HomePage() {
               onScrollToBottomClick={handleScrollToBottomClick}
               onShowScrollToTopChange={handleShowScrollToTopChange}
               onScrollToTopClick={handleScrollToTopClick}
+              autoMode={autoMode}
             />
 
             {/* Input */}
@@ -2469,12 +2702,14 @@ export default function HomePage() {
               onSendMessage={handleSendMessage}
               isLoading={isLoading}
               onStop={handleStop}
-              disabled={!isConfigured || hasPendingToolCalls()}
-              disabledReason={hasPendingToolCalls() ? "Please respond to the tool calls above..." : undefined}
+              disabled={!isConfigured || (hasPendingToolCalls() && !autoMode)}
+              disabledReason={hasPendingToolCalls() && !autoMode ? "Please respond to the tool calls above..." : undefined}
               currentAgent={currentAgentWithTools}
               tools={tools}
               selectedToolIds={selectedToolIds}
               onToolsChange={handleToolsChange}
+              autoMode={autoMode}
+              onAutoModeChange={setAutoMode}
             />
           </>
         )}

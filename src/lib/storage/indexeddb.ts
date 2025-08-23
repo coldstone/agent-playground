@@ -1,4 +1,4 @@
-import { Agent, Tool, ChatSession, AvailableModel, Authorization } from '@/types'
+import { Agent, Tool, ChatSession, AvailableModel, Authorization, Message, AgentMessage, ToolCallExecution } from '@/types'
 import { ProviderCustomConfig } from '../providers'
 
 const DB_NAME = 'agent-playground'
@@ -259,7 +259,10 @@ export class IndexedDBManager {
 
   async getSession(id: string): Promise<ChatSession | null> {
     try {
-      return await this.get<ChatSession>(SESSIONS_STORE, id)
+      const session = await this.get<any>(SESSIONS_STORE, id)
+      if (!session) return null
+      // Migrate session to ensure compatibility
+      return this.migrateSession(session)
     } catch (error) {
       console.error('Failed to get session:', error)
       return null
@@ -269,12 +272,89 @@ export class IndexedDBManager {
   async getAllSessions(): Promise<ChatSession[]> {
     try {
       const sessions = await this.getAll<ChatSession>(SESSIONS_STORE)
+      // Migrate sessions to ensure compatibility with new format
+      const migratedSessions = sessions.map(session => this.migrateSession(session))
       // Sort by updatedAt descending
-      return sessions.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+      return migratedSessions.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
     } catch (error) {
       console.error('Failed to get all sessions:', error)
       return []
     }
+  }
+
+  // Migration function to ensure compatibility with historical sessions
+  private migrateSession(session: any): ChatSession {
+    // Ensure session has all required fields
+    const migratedSession: ChatSession = {
+      id: session.id,
+      name: session.name || session.title || 'Untitled Chat', // Handle old title field
+      messages: session.messages ? session.messages.map((msg: any) => this.migrateMessage(msg)) : [],
+      createdAt: session.createdAt || Date.now(),
+      updatedAt: session.updatedAt || Date.now(),
+      agentId: session.agentId,
+      toolIds: session.toolIds,
+      systemPrompt: session.systemPrompt
+    }
+
+    return migratedSession
+  }
+
+  // Migration function for individual messages
+  private migrateMessage(message: any): Message | AgentMessage {
+    // Basic Message fields
+    const baseMessage: Message = {
+      id: message.id || this.generateId(),
+      role: message.role,
+      content: message.content || '',
+      timestamp: message.timestamp || Date.now(),
+      tool_call_id: message.tool_call_id,
+      name: message.name,
+      error: message.error,
+      canRetry: message.canRetry
+    }
+
+    // Check if this is an assistant message that might be an AgentMessage
+    if (message.role === 'assistant') {
+      const agentMessage: AgentMessage = {
+        ...baseMessage,
+        toolCalls: message.toolCalls,
+        toolCallExecutions: message.toolCallExecutions ? 
+          message.toolCallExecutions.map((exec: any) => this.migrateToolCallExecution(exec)) : 
+          // If there are toolCalls but no toolCallExecutions, create default executions
+          message.toolCalls ? message.toolCalls.map((toolCall: any) => ({
+            id: this.generateId(),
+            toolCall: toolCall,
+            status: 'completed' as const,
+            timestamp: message.timestamp || Date.now()
+          })) : undefined,
+        incomplete: message.incomplete,
+        reasoningContent: message.reasoningContent,
+        reasoningDuration: message.reasoningDuration,
+        usage: message.usage,
+        provider: message.provider,
+        model: message.model
+      }
+      return agentMessage
+    }
+
+    return baseMessage
+  }
+
+  // Migration function for ToolCallExecution
+  private migrateToolCallExecution(execution: any): ToolCallExecution {
+    return {
+      id: execution.id || this.generateId(),
+      toolCall: execution.toolCall,
+      status: execution.status || 'completed',
+      result: execution.result,
+      error: execution.error,
+      timestamp: execution.timestamp || Date.now()
+    }
+  }
+
+  // Helper function to generate IDs
+  private generateId(): string {
+    return Math.random().toString(36).substring(2) + Date.now().toString(36)
   }
 
   async deleteSession(id: string): Promise<void> {
