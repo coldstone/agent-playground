@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { formatTimestamp } from '@/lib/utils'
 import { getMergedHeaders, getEffectiveAuthorization, migrateAgentTools } from '@/lib/authorization'
-import { Wrench as ToolIcon, Play, Check, X, Clock, AlertCircle, Globe, Send, Copy, ChevronDown, ChevronUp } from 'lucide-react'
+import { Wrench as ToolIcon, Play, Check, X, Clock, AlertCircle, Globe, Send, Copy, ChevronDown, ChevronUp, Settings2 } from 'lucide-react'
 import { useToast } from '@/components/ui/toast'
 
 interface ToolCallDisplayProps {
@@ -21,6 +21,9 @@ interface ToolCallDisplayProps {
   onMarkFailed: (toolCallId: string, error: string) => void
   isStreaming?: boolean
   onScrollToBottom?: () => void
+  autoMode?: boolean
+  isCollapsed?: boolean
+  inMergedCard?: boolean
 }
 // Component for displaying tool result with collapsible functionality
 function ResultDisplay({ content }: { content: string }) {
@@ -37,11 +40,11 @@ function ResultDisplay({ content }: { content: string }) {
   }, [content])
   
   return (
-    <div className="mt-1 relative">
+    <div className="mt-0 relative">
       <div className={`relative ${!isExpanded && needsToggle ? 'max-h-[200px] overflow-hidden' : ''}`}>
         <pre 
           ref={preRef}
-          className="text-sm bg-white p-2 rounded border whitespace-pre-wrap break-all overflow-wrap-anywhere min-w-0 overflow-x-auto"
+          className="text-sm bg-transparent p-3 whitespace-pre-wrap break-all overflow-wrap-anywhere min-w-0 overflow-x-auto"
         >
           {content}
         </pre>
@@ -50,10 +53,10 @@ function ResultDisplay({ content }: { content: string }) {
         )}
       </div>
       {needsToggle && (
-        <div className="flex justify-center mt-2">
+        <div className="flex justify-center mt-4 mb-2">
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="text-sm text-purple-600 hover:text-purple-800 cursor-pointer bg-transparent border-none"
+            className="text-sm text-green-600 hover:text-green-800 cursor-pointer bg-transparent border-none"
           >
             {isExpanded ? 'Display Less' : 'Display More'}
           </button>
@@ -72,7 +75,10 @@ export function ToolCallDisplay({
   onProvideResult,
   onMarkFailed,
   isStreaming = false,
-  onScrollToBottom
+  onScrollToBottom,
+  autoMode = false,
+  isCollapsed = false,
+  inMergedCard = false
 }: ToolCallDisplayProps) {
   const { showToast, ToastContainer } = useToast()
   const [result, setResult] = useState('')
@@ -82,6 +88,7 @@ export function ToolCallDisplay({
   const [isRequestingHttp, setIsRequestingHttp] = useState(false)
   const [httpHeaders, setHttpHeaders] = useState<{ key: string; value: string }[]>([])
   const [httpUrl, setHttpUrl] = useState('')
+  const [isManuallyExpanded, setIsManuallyExpanded] = useState(false)
 
   // Initialize HTTP configuration when tool or authorization changes
   useEffect(() => {
@@ -227,41 +234,45 @@ export function ToolCallDisplay({
     }
   }
 
-  const getStatusIcon = () => {
+  const getMainStatusIcon = () => {
     if (isStreaming) {
-      return <div className="w-4 h-4 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />
+      return <div className="w-6 h-6 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />
     }
-    if (!execution) return <Clock className="w-4 h-4 text-blue-600" />
+    if (!execution) return <Clock className="w-6 h-6 text-blue-600" />
 
     switch (execution.status) {
       case 'pending':
-        return <Clock className="w-4 h-4 text-blue-600" />
+        return autoMode 
+          ? <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+          : <Clock className="w-6 h-6 text-blue-600" />
       case 'completed':
-        return <Check className="w-4 h-4 text-green-600" />
+        return <Check className="w-6 h-6 text-green-600" />
       case 'failed':
-        return <AlertCircle className="w-4 h-4 text-red-600" />
+        return <X className="w-6 h-6 text-red-600" />
       default:
-        return <Clock className="w-4 h-4 text-gray-400" />
-    }
-  }
-
-  const getStatusText = () => {
-    if (isStreaming) return 'Streaming arguments...'
-    if (!execution) return 'Waiting for execution'
-
-    switch (execution.status) {
-      case 'pending':
-        return 'Waiting for result'
-      case 'completed':
-        return 'Completed'
-      case 'failed':
-        return 'Failed'
-      default:
-        return 'Unknown'
+        return <Clock className="w-6 h-6 text-gray-400" />
     }
   }
 
   const getStatusColor = () => {
+    // In merged cards, use consistent subtle background colors
+    if (inMergedCard) {
+      if (isStreaming) return 'border-gray-200 bg-gray-50'
+      if (!execution) return 'border-gray-200 bg-gray-50'
+
+      switch (execution.status) {
+        case 'pending':
+          return 'border-gray-200 bg-gray-50'
+        case 'completed':
+          return 'border-gray-200 bg-white'
+        case 'failed':
+          return 'border-red-200 bg-red-50'
+        default:
+          return 'border-gray-200 bg-gray-50'
+      }
+    }
+
+    // Original colors for standalone tool calls
     if (isStreaming) return 'border-purple-200 bg-purple-50'
     if (!execution) return 'border-blue-200 bg-blue-50'
 
@@ -274,6 +285,27 @@ export function ToolCallDisplay({
         return 'border-red-200 bg-red-50'
       default:
         return 'border-gray-200 bg-gray-50'
+    }
+  }
+
+  const getStatusTextColor = () => {
+    if (!execution || execution.status !== 'failed') return 'text-muted-foreground'
+    return 'text-red-600'
+  }
+
+  const getStatusText = () => {
+    if (isStreaming) return 'Streaming arguments...'
+    if (!execution) return 'Waiting for execution'
+
+    switch (execution.status) {
+      case 'pending':
+        return 'Waiting for result'
+      case 'completed':
+        return execution.result ? 'Completed' : 'Completed (Legacy)'
+      case 'failed':
+        return 'Failed'
+      default:
+        return 'Unknown'
     }
   }
 
@@ -291,36 +323,93 @@ export function ToolCallDisplay({
     }
   }
 
+  // Collapsed state for auto mode
+  if (isCollapsed && !isManuallyExpanded) {
+    return (
+      <div className={`rounded-lg border p-3 ${getStatusColor()} min-w-0 w-full`}>
+        <div className="flex items-center gap-3 min-w-0">
+          {/* Left side icon */}
+          <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-white border">
+            {getMainStatusIcon()}
+          </div>
+          
+          {/* Content section */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1 text-xs text-gray-500 mb-1">
+              <span>Tool Call</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className={`text-sm font-medium ${execution?.status === 'failed' ? 'text-red-600' : 'text-purple-600'}`}>
+                {toolCall.function.name}
+              </span>
+              <span className={`text-xs ${getStatusTextColor()}`}>
+                {getStatusText()}
+                {execution && (
+                  <span className="ml-1">
+                    • {formatTimestamp(execution.timestamp)}
+                  </span>
+                )}
+              </span>
+            </div>
+          </div>
+          
+          {/* Expand button */}
+          <button
+            onClick={() => setIsManuallyExpanded(true)}
+            className="flex-shrink-0 w-6 h-6 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors"
+            title="Expand tool call"
+          >
+            <ChevronDown className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className={`rounded-lg border p-4 ${getStatusColor()} min-w-0 w-full`}>
       <div className="flex items-start gap-3 min-w-0">
         <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-white border">
-          <ToolIcon className="w-4 h-4 text-purple-600" />
+          {getMainStatusIcon()}
         </div>
 
         <div className="flex-1 space-y-3 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="font-medium text-sm text-purple-600">Tool Call</span>
-            {getStatusIcon()}
-            <span className="text-xs text-muted-foreground">{getStatusText()}</span>
-            {execution && (
-              <span className="text-xs text-muted-foreground">
-                {formatTimestamp(execution.timestamp)}
-              </span>
+          <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-1">
+              <div className="text-xs text-gray-500">Tool Call</div>
+              <div className="flex items-center gap-2">
+                <span className={`text-sm font-medium ${execution?.status === 'failed' ? 'text-red-600' : 'text-purple-600'}`}>
+                  {toolCall.function.name}
+                </span>
+                <span className={`text-xs ${getStatusTextColor()}`}>
+                  {getStatusText()}
+                  {execution && (
+                    <span className="ml-1">
+                      • {formatTimestamp(execution.timestamp)}
+                    </span>
+                  )}
+                </span>
+              </div>
+            </div>
+            {/* Collapse button for manually expanded cards */}
+            {isCollapsed && isManuallyExpanded && (
+              <button
+                onClick={() => setIsManuallyExpanded(false)}
+                className="flex-shrink-0 w-6 h-6 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors"
+                title="Collapse tool call"
+              >
+                <ChevronUp className="w-4 h-4" />
+              </button>
             )}
           </div>
 
           <div className="space-y-2">
-            <div>
-              <span className="text-sm font-medium">Function: </span>
-              <code className="text-sm bg-white px-2 py-1 rounded border">
-                {toolCall.function.name}
-              </code>
-            </div>
-
             <div className="min-w-0">
-              <span className="text-sm font-medium">Arguments:</span>
-              <pre className="text-sm bg-white p-2 rounded border mt-1 whitespace-pre-wrap break-all overflow-wrap-anywhere min-w-0 overflow-x-auto">
+              <div className="bg-purple-50 px-3 py-2 rounded-t border border-purple-200 flex items-center gap-2">
+                <Settings2 className="w-4 h-4 text-purple-600" />
+                <span className="text-sm font-medium text-purple-700">Arguments</span>
+              </div>
+              <pre className="text-sm bg-white p-3 rounded-b border border-t-0 border-purple-200 whitespace-pre-wrap break-all overflow-wrap-anywhere min-w-0 overflow-x-auto">
                 {argumentsDisplay}
                 {isStreaming && (
                   <span className="inline-block w-2 h-4 bg-purple-600 animate-pulse ml-1" />
@@ -329,13 +418,13 @@ export function ToolCallDisplay({
             </div>
 
             {tool?.httpRequest && (
-              <div className="bg-blue-50 border border-blue-200 rounded p-3 space-y-2">
-                <div className="flex items-center gap-2">
+              <div className="border border-blue-200 rounded space-y-2">
+                <div className="bg-blue-50 px-3 py-2 rounded-t border border-blue-200 flex items-center gap-2">
                   <Globe className="w-4 h-4 text-blue-600" />
-                  <span className="text-sm font-medium text-blue-600">Get Results via API</span>
+                  <span className="text-sm font-medium text-blue-700">Get Results via API</span>
                 </div>
 
-                <div className="space-y-2">
+                <div className="bg-white p-3 rounded-b border-t-0 space-y-2">
                   {/* Method, URL and Request button in one row */}
                   <div className="flex items-center gap-2">
                     {/* Method - fixed width */}
@@ -355,7 +444,7 @@ export function ToolCallDisplay({
                     </div>
 
                     {/* Request button - fixed width */}
-                    {!isStreaming && execution?.status === 'pending' && (
+                    {!isStreaming && execution?.status === 'pending' && !autoMode && (
                       <div className="flex-shrink-0">
                         {!isRequestingHttp ? (
                           <Button
@@ -414,8 +503,13 @@ export function ToolCallDisplay({
 
             {execution?.result && (
               <div className="min-w-0">
-                <span className="text-sm font-medium">Result:</span>
-                <ResultDisplay content={execution.result} />
+                <div className="bg-green-50 px-3 py-2 rounded-t border border-green-200 flex items-center gap-2">
+                  <Check className="w-4 h-4 text-green-600" />
+                  <span className="text-sm font-medium text-green-700">Result</span>
+                </div>
+                <div className="bg-white border border-t-0 border-green-200 rounded-b">
+                  <ResultDisplay content={execution.result} />
+                </div>
               </div>
             )}
 
@@ -429,7 +523,7 @@ export function ToolCallDisplay({
             )}
           </div>
 
-          {!isStreaming && execution?.status === 'pending' && !isProvidingResult && !isProvidingError && (
+          {!isStreaming && execution?.status === 'pending' && !autoMode && !isProvidingResult && !isProvidingError && (
             <div className="flex gap-2">
               <Button
                 size="sm"

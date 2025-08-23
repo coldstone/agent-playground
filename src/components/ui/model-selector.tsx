@@ -7,9 +7,12 @@ import { useAvailableModels } from '@/hooks/use-available-models'
 
 interface ModelSelectorProps {
   onConfigLLM?: () => void
+  autoMode?: boolean
+  onAutoModeChange?: (enabled: boolean) => void
+  showAutoSwitch?: boolean
 }
 
-export function ModelSelector({ onConfigLLM }: ModelSelectorProps) {
+export function ModelSelector({ onConfigLLM, autoMode = false, onAutoModeChange, showAutoSwitch = true }: ModelSelectorProps) {
   const { availableModels, hasAvailableModels } = useAvailableModels()
   const [currentModel, setCurrentModel] = useState<CurrentModel | null>(null)
   const [isOpen, setIsOpen] = useState(false)
@@ -92,39 +95,63 @@ export function ModelSelector({ onConfigLLM }: ModelSelectorProps) {
 
 
   return (
-    <div className="relative" ref={dropdownRef}>
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors border-none bg-gray-100 rounded-full"
-      >
-        <span className="truncate max-w-[240px]">
-          {getCurrentModelDisplay()}
-        </span>
-        <ChevronDown className="w-3 h-3 flex-shrink-0" />
-      </button>
+    <div className="flex items-center gap-3">
+      <div className="relative" ref={dropdownRef}>
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className="flex items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors border-none bg-gray-100 rounded-full"
+        >
+          <span className="truncate max-w-[240px]">
+            {getCurrentModelDisplay()}
+          </span>
+          <ChevronDown className="w-3 h-3 flex-shrink-0" />
+        </button>
 
-      {isOpen && hasAvailableModels && (
-        <div className="absolute bottom-full left-0 mb-1 bg-background border border-border rounded-md shadow-lg z-50 min-w-[250px] max-h-[300px] overflow-y-auto">
-          {Object.entries(groupedModels).map(([provider, models]) => (
-            <div key={provider}>
-              <div className="px-3 py-1.5 text-xs font-medium text-muted-foreground bg-muted/50 border-b border-border">
-                {provider}
+        {isOpen && hasAvailableModels && (
+          <div className="absolute bottom-full left-0 mb-1 bg-background border border-border rounded-md shadow-lg z-50 min-w-[250px] max-h-[300px] overflow-y-auto">
+            {Object.entries(groupedModels).map(([provider, models]) => (
+              <div key={provider}>
+                <div className="px-3 py-1.5 text-xs font-medium text-muted-foreground bg-muted/50 border-b border-border">
+                  {provider}
+                </div>
+                {models.map((model) => (
+                  <button
+                    key={model.id}
+                    onClick={() => handleModelSelect(model)}
+                    className={`w-full px-3 py-2 text-left text-sm hover:bg-muted transition-colors ${
+                      currentModel?.provider === model.provider && currentModel?.model === model.model
+                        ? 'bg-primary/10 text-primary'
+                        : ''
+                    }`}
+                  >
+                    {model.model}
+                  </button>
+                ))}
               </div>
-              {models.map((model) => (
-                <button
-                  key={model.id}
-                  onClick={() => handleModelSelect(model)}
-                  className={`w-full px-3 py-2 text-left text-sm hover:bg-muted transition-colors ${
-                    currentModel?.provider === model.provider && currentModel?.model === model.model
-                      ? 'bg-primary/10 text-primary'
-                      : ''
-                  }`}
-                >
-                  {model.model}
-                </button>
-              ))}
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Auto switch - only show in Agent mode */}
+      {onAutoModeChange && showAutoSwitch && (
+        <div className="flex items-center gap-2">
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={autoMode}
+              onChange={(e) => onAutoModeChange(e.target.checked)}
+              className="sr-only"
+            />
+            <div className={`w-11 h-6 rounded-full transition-colors ${
+              autoMode ? 'bg-green-500' : 'bg-gray-200'
+            }`}>
+              <div className={`w-4 h-4 bg-white rounded-full shadow transform transition-transform ${
+                autoMode ? 'translate-x-6' : 'translate-x-1'
+              } mt-1`} />
             </div>
-          ))}
+          </label>
+          <span className="text-xs text-muted-foreground">Auto</span>
         </div>
       )}
     </div>
