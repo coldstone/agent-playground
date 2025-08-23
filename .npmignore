@@ -1,11 +1,14 @@
 # Development files
-.next/
 node_modules/
 .env*
 .vscode/
 .idea/
 .ai-todo/
 .claude/
+
+# Build cache (exclude but keep built files)
+.next/cache/
+.next/trace
 
 # Build artifacts
 *.log
@@ -47,8 +50,14 @@ docker-compose.yml
 docker-healthcheck.js
 scripts/
 
-# Keep only essential files for npm package
+# Keep essential files for npm package
 !bin/
 !package.json
 !README.md
 !LICENSE
+!.next/BUILD_ID
+!.next/*.json
+!.next/*.js
+!.next/server/
+!.next/static/
+!.next/standalone/
