@@ -713,7 +713,7 @@ function MergedMessageDisplay({
                     key={`streaming-${toolCall.id}-${index}`}
                     toolCall={toolCall}
                     execution={undefined}
-                    agent={agent ? { ...agent, tools: agent.tools.map(t => t.id) } : undefined}
+                    agent={agent}
                     authorizations={authorizations}
                     onProvideResult={() => {}}
                     onMarkFailed={() => {}}
