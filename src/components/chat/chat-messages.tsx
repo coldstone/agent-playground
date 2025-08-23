@@ -106,13 +106,28 @@ export function ChatMessages({
     if (streamingToolCalls && streamingToolCalls.length > 0) {
       // 当从没有tool calls变为有tool calls，或者tool calls数量增加时，触发滚动
       if (prevToolCallsLengthRef.current === 0 || streamingToolCalls.length > prevToolCallsLengthRef.current) {
-        onScrollToBottom?.()
+        // 使用setTimeout确保Tool Call卡片DOM渲染完成
+        setTimeout(() => {
+          onScrollToBottom?.()
+        }, 100)
       }
       prevToolCallsLengthRef.current = streamingToolCalls.length
     } else {
       prevToolCallsLengthRef.current = 0
     }
   }, [streamingToolCalls, onScrollToBottom])
+
+  // 监听合并消息的流式内容变化，确保在Auto模式下流式内容开始时正确滚动
+  useEffect(() => {
+    if (autoMode && isLoading && streamingContent) {
+      // 在Auto模式下，当流式内容开始时，确保滚动到底部
+      const timer = setTimeout(() => {
+        onScrollToBottom?.()
+      }, 50)
+      
+      return () => clearTimeout(timer)
+    }
+  }, [autoMode, isLoading, streamingContent, onScrollToBottom])
 
   // 监听scrollToTopTrigger变化，滚动到顶部
   useEffect(() => {
@@ -129,7 +144,7 @@ export function ChatMessages({
 
   // 使用智能滚动控制
   const { isAutoScrollEnabled, isUserScrolling, showScrollToBottom, showScrollToTop, scrollToBottom, scrollToTop } = useSmartScroll({
-    dependencies: [messages, streamingContent, streamingReasoningContent],
+    dependencies: [messages, streamingContent, streamingReasoningContent, streamingToolCalls],
     containerRef,
     threshold: 100,
     isStreaming: !!(streamingContent || streamingReasoningContent || isLoading),

@@ -142,7 +142,8 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(function ChatI
                 onClick={handleStop}
                 variant="destructive"
                 size="sm"
-                className="h-8 px-3"
+                className="h-8 px-3 w-28"
+                rounded={true}
               >
                 <Square className="w-4 h-4 mr-1" />
                 Stop
@@ -152,7 +153,8 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(function ChatI
                 type="submit"
                 disabled={!input.trim() || disabled || !hasValidCurrentModel}
                 size="sm"
-                className="h-8 px-3"
+                className="h-8 px-3 w-28"
+                rounded={true}
               >
                 <Send className="w-4 h-4 mr-1" />
                 Send

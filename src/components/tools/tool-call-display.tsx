@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { formatTimestamp } from '@/lib/utils'
 import { getMergedHeaders, getEffectiveAuthorization, migrateAgentTools } from '@/lib/authorization'
-import { Wrench as ToolIcon, Play, Check, X, Clock, AlertCircle, Globe, Send, Copy, ChevronDown, ChevronUp } from 'lucide-react'
+import { Wrench as ToolIcon, Play, Check, X, Clock, AlertCircle, Globe, Send, Copy, ChevronDown, ChevronUp, Settings2 } from 'lucide-react'
 import { useToast } from '@/components/ui/toast'
 
 interface ToolCallDisplayProps {
@@ -40,11 +40,11 @@ function ResultDisplay({ content }: { content: string }) {
   }, [content])
   
   return (
-    <div className="mt-1 relative">
+    <div className="mt-0 relative">
       <div className={`relative ${!isExpanded && needsToggle ? 'max-h-[200px] overflow-hidden' : ''}`}>
         <pre 
           ref={preRef}
-          className="text-sm bg-white p-2 rounded border whitespace-pre-wrap break-all overflow-wrap-anywhere min-w-0 overflow-x-auto"
+          className="text-sm bg-transparent p-3 whitespace-pre-wrap break-all overflow-wrap-anywhere min-w-0 overflow-x-auto"
         >
           {content}
         </pre>
@@ -53,10 +53,10 @@ function ResultDisplay({ content }: { content: string }) {
         )}
       </div>
       {needsToggle && (
-        <div className="flex justify-center mt-2">
+        <div className="flex justify-center mt-4 mb-2">
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="text-sm text-purple-600 hover:text-purple-800 cursor-pointer bg-transparent border-none"
+            className="text-sm text-green-600 hover:text-green-800 cursor-pointer bg-transparent border-none"
           >
             {isExpanded ? 'Display Less' : 'Display More'}
           </button>
@@ -339,7 +339,7 @@ export function ToolCallDisplay({
               <span>Tool Call</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className={`text-sm font-medium ${execution?.status === 'failed' ? 'text-red-600' : 'text-gray-900'}`}>
+              <span className={`text-sm font-medium ${execution?.status === 'failed' ? 'text-red-600' : 'text-purple-600'}`}>
                 {toolCall.function.name}
               </span>
               <span className={`text-xs ${getStatusTextColor()}`}>
@@ -378,7 +378,7 @@ export function ToolCallDisplay({
             <div className="flex flex-col gap-1">
               <div className="text-xs text-gray-500">Tool Call</div>
               <div className="flex items-center gap-2">
-                <span className={`text-sm font-medium ${execution?.status === 'failed' ? 'text-red-600' : 'text-gray-900'}`}>
+                <span className={`text-sm font-medium ${execution?.status === 'failed' ? 'text-red-600' : 'text-purple-600'}`}>
                   {toolCall.function.name}
                 </span>
                 <span className={`text-xs ${getStatusTextColor()}`}>
@@ -404,16 +404,12 @@ export function ToolCallDisplay({
           </div>
 
           <div className="space-y-2">
-            <div>
-              <span className="text-sm font-medium">Function: </span>
-              <code className="text-sm bg-white px-2 py-1 rounded border">
-                {toolCall.function.name}
-              </code>
-            </div>
-
             <div className="min-w-0">
-              <span className="text-sm font-medium">Arguments:</span>
-              <pre className="text-sm bg-white p-2 rounded border mt-1 whitespace-pre-wrap break-all overflow-wrap-anywhere min-w-0 overflow-x-auto">
+              <div className="bg-purple-50 px-3 py-2 rounded-t border border-purple-200 flex items-center gap-2">
+                <Settings2 className="w-4 h-4 text-purple-600" />
+                <span className="text-sm font-medium text-purple-700">Arguments</span>
+              </div>
+              <pre className="text-sm bg-white p-3 rounded-b border border-t-0 border-purple-200 whitespace-pre-wrap break-all overflow-wrap-anywhere min-w-0 overflow-x-auto">
                 {argumentsDisplay}
                 {isStreaming && (
                   <span className="inline-block w-2 h-4 bg-purple-600 animate-pulse ml-1" />
@@ -422,13 +418,13 @@ export function ToolCallDisplay({
             </div>
 
             {tool?.httpRequest && (
-              <div className="bg-blue-50 border border-blue-200 rounded p-3 space-y-2">
-                <div className="flex items-center gap-2">
+              <div className="border border-blue-200 rounded space-y-2">
+                <div className="bg-blue-50 px-3 py-2 rounded-t border border-blue-200 flex items-center gap-2">
                   <Globe className="w-4 h-4 text-blue-600" />
-                  <span className="text-sm font-medium text-blue-600">Get Results via API</span>
+                  <span className="text-sm font-medium text-blue-700">Get Results via API</span>
                 </div>
 
-                <div className="space-y-2">
+                <div className="bg-white p-3 rounded-b border-t-0 space-y-2">
                   {/* Method, URL and Request button in one row */}
                   <div className="flex items-center gap-2">
                     {/* Method - fixed width */}
@@ -507,8 +503,13 @@ export function ToolCallDisplay({
 
             {execution?.result && (
               <div className="min-w-0">
-                <span className="text-sm font-medium">Result:</span>
-                <ResultDisplay content={execution.result} />
+                <div className="bg-green-50 px-3 py-2 rounded-t border border-green-200 flex items-center gap-2">
+                  <Check className="w-4 h-4 text-green-600" />
+                  <span className="text-sm font-medium text-green-700">Result</span>
+                </div>
+                <div className="bg-white border border-t-0 border-green-200 rounded-b">
+                  <ResultDisplay content={execution.result} />
+                </div>
               </div>
             )}
 

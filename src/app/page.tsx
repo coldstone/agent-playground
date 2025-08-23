@@ -817,6 +817,14 @@ export default function HomePage() {
     setShowAIMessageBox(false)
     hasApiResponseStartedRef.current = false
 
+    // 在Auto模式下，确保Tool Call完成后开始新回复时滚动到正确位置
+    if (autoMode) {
+      // 延迟触发滚动，确保Tool Call卡片状态更新完成
+      setTimeout(() => {
+        setScrollToBottomTrigger(prev => prev + 1)
+      }, 100)
+    }
+
     aiMessageTimeoutRef.current = setTimeout(() => {
       setShowAIMessageBox(true)
     }, 500)
