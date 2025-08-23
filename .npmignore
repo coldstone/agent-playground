@@ -4,12 +4,15 @@ node_modules/
 .env*
 .vscode/
 .idea/
+.ai-todo/
+.claude/
 
 # Build artifacts
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+*.tsbuildinfo
 
 # OS generated files
 .DS_Store
@@ -32,11 +35,19 @@ next.config.js
 tsconfig.json
 eslint.config.mjs
 
-# Build output (keep for npm package)
-!.next/standalone/
-!.next/static/
+# Screenshots and archives
+screenshot-*.png
+*.zip
+Archive.zip
 
-# Keep these for npm package
+# Docker files (not needed for npm package)
+.dockerignore
+Dockerfile
+docker-compose.yml
+docker-healthcheck.js
+scripts/
+
+# Keep only essential files for npm package
 !bin/
 !package.json
 !README.md
