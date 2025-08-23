@@ -1,6 +1,6 @@
 {
   "name": "agent-playground",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "description": "A comprehensive playground for testing AI agents and models with support for multiple LLM providers",
   "main": "dist/index.js",
   "bin": {

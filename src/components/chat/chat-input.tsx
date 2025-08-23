@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { ModelSelector } from '@/components/ui/model-selector'
 import { ToolSelector } from '@/components/ui/tool-selector'
+import { AutoSwitch } from '@/components/ui/auto-switch'
 import { Send, Square } from 'lucide-react'
 import { useDraftMessage } from '@/hooks/use-draft-message'
 import { useAvailableModels } from '@/hooks/use-available-models'
@@ -20,6 +21,8 @@ interface ChatInputProps {
   tools?: Tool[]
   selectedToolIds?: string[]
   onToolsChange?: (toolIds: string[]) => void
+  autoMode?: boolean
+  onAutoModeChange?: (enabled: boolean) => void
 }
 
 export interface ChatInputRef {
@@ -35,7 +38,9 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(function ChatI
   currentAgent,
   tools = [],
   selectedToolIds = [],
-  onToolsChange
+  onToolsChange,
+  autoMode = false,
+  onAutoModeChange
 }, ref) {
   const { message: input, setMessage: setInput, clearDraft } = useDraftMessage()
   const { hasAvailableModels, hasValidCurrentModel } = useAvailableModels()
@@ -88,7 +93,7 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(function ChatI
 
   return (
     <div className="border-t border-border bg-background p-4">
-      <form onSubmit={handleSubmit} className="flex gap-2">
+      <form onSubmit={handleSubmit} className="space-y-3">
         <div className="flex-1">
           <Textarea
             ref={textareaRef}
@@ -102,45 +107,62 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(function ChatI
               "Type your message..."
             }
             disabled={disabled || isLoading || !hasValidCurrentModel}
-            className="min-h-[60px] max-h-[200px] resize-none"
+            className="min-h-[60px] max-h-[200px] resize-none w-full"
             rows={1}
           />
         </div>
-        <div className="flex flex-col gap-2">
-          {isLoading ? (
-            <Button
-              type="button"
-              onClick={handleStop}
-              variant="destructive"
-              size="icon"
-              className="h-[60px] w-12"
-            >
-              <Square className="w-4 h-4" />
-            </Button>
-          ) : (
-            <Button
-              type="submit"
-              disabled={!input.trim() || disabled || !hasValidCurrentModel}
-              size="icon"
-              className="h-[60px] w-12"
-            >
-              <Send className="w-4 h-4" />
-            </Button>
-          )}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <ModelSelector 
+              autoMode={autoMode}
+              onAutoModeChange={onAutoModeChange}
+              showAutoSwitch={!!currentAgent} // Only show auto switch in Agent mode
+            />
+            {!currentAgent && tools.length > 0 && onToolsChange && (
+              <>
+                <ToolSelector
+                  tools={tools}
+                  selectedToolIds={selectedToolIds}
+                  onToolsChange={onToolsChange}
+                />
+                {/* Auto switch in Non-Agent mode - place after tool selector */}
+                {onAutoModeChange && (
+                  <AutoSwitch
+                    autoMode={autoMode}
+                    onAutoModeChange={onAutoModeChange}
+                  />
+                )}
+              </>
+            )}
+          </div>
+          <div className="flex gap-2">
+            {isLoading ? (
+              <Button
+                type="button"
+                onClick={handleStop}
+                variant="destructive"
+                size="sm"
+                className="h-8 px-3 w-28"
+                rounded={true}
+              >
+                <Square className="w-4 h-4 mr-1" />
+                Stop
+              </Button>
+            ) : (
+              <Button
+                type="submit"
+                disabled={!input.trim() || disabled || !hasValidCurrentModel}
+                size="sm"
+                className="h-8 px-3 w-28"
+                rounded={true}
+              >
+                <Send className="w-4 h-4 mr-1" />
+                Send
+              </Button>
+            )}
+          </div>
         </div>
       </form>
-      <div className="mt-2 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <ModelSelector />
-          {!currentAgent && tools.length > 0 && onToolsChange && (
-            <ToolSelector
-              tools={tools}
-              selectedToolIds={selectedToolIds}
-              onToolsChange={onToolsChange}
-            />
-          )}
-        </div>
-      </div>
     </div>
   )
 })

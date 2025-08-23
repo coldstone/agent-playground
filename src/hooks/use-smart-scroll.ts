@@ -57,9 +57,9 @@ export function useSmartScroll({
   }, [threshold, containerRef])
 
   // 滚动到底部（带防抖）
-  const scrollToBottom = useCallback((useSmooth = true) => {
+  const scrollToBottom = useCallback((useSmooth = true, forceScroll = false) => {
     const container = containerRef.current
-    if (!container || !isAutoScrollEnabled || isScrollingToBottomRef.current) return
+    if (!container || (!isAutoScrollEnabled && !forceScroll) || isScrollingToBottomRef.current) return
 
     // 清除之前的防抖
     if (scrollDebounceRef.current) {
@@ -68,13 +68,19 @@ export function useSmartScroll({
 
     // 防抖执行滚动
     scrollDebounceRef.current = setTimeout(() => {
-      if (!container || !isAutoScrollEnabled) return
+      if (!container || (!isAutoScrollEnabled && !forceScroll)) return
 
       isScrollingToBottomRef.current = true
 
-      container.scrollTo({
-        top: container.scrollHeight,
-        behavior: useSmooth ? 'smooth' : 'auto'
+      // 使用requestAnimationFrame确保DOM更新完成后再滚动
+      requestAnimationFrame(() => {
+        if (!container) return
+        
+        const scrollTop = container.scrollHeight - container.clientHeight
+        container.scrollTo({
+          top: Math.max(0, scrollTop),
+          behavior: useSmooth ? 'smooth' : 'auto'
+        })
       })
 
       // 滚动完成后重置标志
@@ -173,10 +179,27 @@ export function useSmartScroll({
       return
     }
 
-    // 只有在流式输出过程中且启用了自动滚动时才滚动
+    // 在流式输出过程中需要保持滚动到底部
     if (isStreaming && isAutoScrollEnabled && !isUserScrolling) {
-      // 始终使用smooth滚动，避免切换滚动模式导致的跳动
-      scrollToBottom(true)
+      // 对于流式内容，使用更短的防抖延迟来实现更流畅的跟随
+      if (scrollDebounceRef.current) {
+        clearTimeout(scrollDebounceRef.current)
+      }
+      
+      scrollDebounceRef.current = setTimeout(() => {
+        scrollToBottom(false) // 使用instant滚动，避免smooth动画与流式内容冲突
+      }, 8) // 更短的延迟，更流畅的跟随
+    }
+    // 如果内容高度发生变化但不是在流式输出，仍然需要调整滚动位置
+    else if (!isStreaming && isAutoScrollEnabled && !isUserScrolling) {
+      // 使用更长的延迟，让DOM渲染完成
+      if (scrollDebounceRef.current) {
+        clearTimeout(scrollDebounceRef.current)
+      }
+      
+      scrollDebounceRef.current = setTimeout(() => {
+        scrollToBottom(true) // 非流式状态使用smooth滚动
+      }, 50) // 给DOM更多时间渲染
     }
   }, [...dependencies, isAutoScrollEnabled, isUserScrolling, isStreaming])
 
