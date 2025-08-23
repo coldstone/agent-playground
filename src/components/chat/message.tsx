@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Message as MessageType, AgentMessage, Tool, Agent, Authorization } from '@/types'
+import { Message as MessageType, AgentMessage, Tool, Agent, Authorization, ToolCallExecution } from '@/types'
 import { formatTimestamp } from '@/lib/utils'
 import { ToolCallDisplay } from '@/components/tools'
 import { MessageContent } from '@/components/markdown'
@@ -108,6 +108,7 @@ interface MessageProps {
   onEditMessage?: (messageId: string, newContent: string) => void
   onToggleReasoningExpansion?: (messageId: string) => void
   onScrollToBottom?: () => void
+  autoMode?: boolean
 }
 
 export function Message({
@@ -125,7 +126,8 @@ export function Message({
   onDeleteMessage,
   onEditMessage,
   onToggleReasoningExpansion,
-  onScrollToBottom
+  onScrollToBottom,
+  autoMode = false
 }: MessageProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [editContent, setEditContent] = useState(message.content)
@@ -439,9 +441,21 @@ export function Message({
                 toolCall.function?.arguments && toolCall.function.arguments.trim() !== ''
               )
               .map((toolCall) => {
-                const execution = agentMessage.toolCallExecutions?.find(
+                // Handle backward compatibility: create execution if it doesn't exist
+                let execution = agentMessage.toolCallExecutions?.find(
                   exec => exec.toolCall.id === toolCall.id
                 )
+                
+                // For backward compatibility with old sessions that don't have toolCallExecutions
+                if (!execution && agentMessage.toolCalls) {
+                  execution = {
+                    id: toolCall.id + '_compat',
+                    toolCall: toolCall,
+                    status: 'completed' as const,
+                    timestamp: message.timestamp
+                  }
+                }
+                
                 const tool = tools.find(t => t.name === toolCall.function.name)
 
                 return (
@@ -455,6 +469,8 @@ export function Message({
                     onProvideResult={onProvideToolResult || (() => {})}
                     onMarkFailed={onMarkToolFailed || (() => {})}
                     onScrollToBottom={onScrollToBottom}
+                    autoMode={autoMode}
+                    isCollapsed={autoMode}
                   />
                 )
               })}
