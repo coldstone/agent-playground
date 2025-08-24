@@ -368,33 +368,31 @@ export function ChatMessages({
                 {/* Streaming reasoning content */}
                 {streamingReasoningContent && (
                   <div className="border border-gray-200 bg-gray-50 rounded-md mb-3">
-                    {!isInActiveConversation && (
-                      <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200">
-                        <div className="flex items-center gap-2">
-                          <Atom className="w-4 h-4 text-gray-400" />
-                          <span className="text-xs text-gray-600 font-medium">
-                            Thoughts
-                            {reasoningDuration && formatReasoningDuration && (
-                              <span className="text-gray-400"> ({formatReasoningDuration(reasoningDuration)})</span>
-                            )}
-                          </span>
-                        </div>
-                        <button
-                          onClick={onToggleStreamingReasoningExpansion}
-                          className="text-xs text-gray-400 hover:text-gray-600 transition-colors p-1"
-                        >
-                          {isStreamingReasoningExpanded ? (
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                            </svg>
-                          ) : (
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                            </svg>
+                    <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200">
+                      <div className="flex items-center gap-2">
+                        <Atom className="w-4 h-4 text-gray-400" />
+                        <span className="text-xs text-gray-600 font-medium">
+                          Thoughts
+                          {reasoningDuration && formatReasoningDuration && (
+                            <span className="text-gray-400"> ({formatReasoningDuration(reasoningDuration)})</span>
                           )}
-                        </button>
+                        </span>
                       </div>
-                    )}
+                      <button
+                        onClick={onToggleStreamingReasoningExpansion}
+                        className="text-xs text-gray-400 hover:text-gray-600 transition-colors p-1"
+                      >
+                        {isStreamingReasoningExpanded ? (
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                          </svg>
+                        ) : (
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
                     {(isInActiveConversation || isStreamingReasoningExpanded) && (
                       <div className="p-3">
                         <div className="text-sm text-gray-500 leading-snug">
@@ -582,6 +580,46 @@ function MergedMessageDisplay({
         {/* Render all merged messages */}
         {mergedMessage.messages.map((message: AgentMessage, index: number) => (
           <div key={message.id} className="space-y-3">
+            {/* Reasoning content - only show for assistant messages with reasoning */}
+            {message.reasoningContent && (
+              <div className="border border-gray-200 bg-gray-50 rounded-md mb-3">
+                <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200 hover:cursor-pointer"
+                    onClick={() => onToggleReasoningExpansion?.(message.id)}>
+                  <div className="flex items-center gap-2">
+                    <Atom className="w-4 h-4 text-gray-400" />
+                    <span className="text-xs text-gray-600 font-medium">
+                      Thoughts
+                      {formatReasoningDuration && message.reasoningDuration && (
+                        <span className="text-gray-400"> ({formatReasoningDuration(message.reasoningDuration)})</span>
+                      )}
+                    </span>
+                  </div>
+                  <button className="text-xs text-gray-400 hover:text-gray-600 transition-colors p-1">
+                    {expandedReasoningMessages.has(message.id) ? (
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                      </svg>
+                    ) : (
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+                {expandedReasoningMessages.has(message.id) && (
+                  <div className="p-3">
+                    <div className="text-sm text-gray-500 leading-snug">
+                      <MessageContent
+                        content={message.reasoningContent}
+                        className="min-w-0"
+                        showToggle={false}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Message content */}
             {message.content && (
               showMarkdown ? (
@@ -649,33 +687,31 @@ function MergedMessageDisplay({
             {/* Streaming reasoning content */}
             {streamingReasoningContent && (
               <div className="border border-gray-200 bg-gray-50 rounded-md mb-3">
-                {!isInActiveConversation && (
-                  <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200">
-                    <div className="flex items-center gap-2">
-                      <Atom className="w-4 h-4 text-gray-400" />
-                      <span className="text-xs text-gray-600 font-medium">
-                        Thoughts
-                        {reasoningDuration && formatReasoningDuration && (
-                          <span className="text-gray-400"> ({formatReasoningDuration(reasoningDuration)})</span>
-                        )}
-                      </span>
-                    </div>
-                    <button
-                      onClick={onToggleStreamingReasoningExpansion}
-                      className="text-xs text-gray-400 hover:text-gray-600 transition-colors p-1"
-                    >
-                      {isStreamingReasoningExpanded ? (
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                        </svg>
-                      ) : (
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
+                <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200">
+                  <div className="flex items-center gap-2">
+                    <Atom className="w-4 h-4 text-gray-400" />
+                    <span className="text-xs text-gray-600 font-medium">
+                      Thoughts
+                      {reasoningDuration && formatReasoningDuration && (
+                        <span className="text-gray-400"> ({formatReasoningDuration(reasoningDuration)})</span>
                       )}
-                    </button>
+                    </span>
                   </div>
-                )}
+                  <button
+                    onClick={onToggleStreamingReasoningExpansion}
+                    className="text-xs text-gray-400 hover:text-gray-600 transition-colors p-1"
+                  >
+                    {isStreamingReasoningExpanded ? (
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                      </svg>
+                    ) : (
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
                 {(isInActiveConversation || isStreamingReasoningExpanded) && (
                   <div className="p-3">
                     <div className="text-sm text-gray-500 leading-snug">
