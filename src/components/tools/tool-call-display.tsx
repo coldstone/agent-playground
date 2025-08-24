@@ -419,7 +419,7 @@ export function ToolCallDisplay({
 
             {tool?.httpRequest && (
               <div className="border border-blue-200 rounded space-y-2">
-                <div className="bg-blue-50 px-3 py-2 rounded-t border border-blue-200 flex items-center gap-2">
+                <div className="bg-blue-50 px-3 py-2 rounded-t border-b border-blue-200 flex items-center gap-2">
                   <Globe className="w-4 h-4 text-blue-600" />
                   <span className="text-sm font-medium text-blue-700">Get Results via API</span>
                 </div>

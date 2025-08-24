@@ -77,6 +77,7 @@ export default function HomePage() {
   // Auto mode state with localStorage persistence
   const [autoMode, setAutoMode] = useState(false)
   const [autoModeInitialized, setAutoModeInitialized] = useState(false)
+  const [isExecutingToolCalls, setIsExecutingToolCalls] = useState(false)
 
   // Initialize auto mode from localStorage on client side
   useEffect(() => {
@@ -337,7 +338,7 @@ export default function HomePage() {
 
   // Auto execute tool calls when auto mode is enabled
   useEffect(() => {
-    if (!autoMode || !currentSession || isLoading) return
+    if (!autoMode || !currentSession || isLoading || isExecutingToolCalls) return
 
     const lastMessage = currentSession.messages[currentSession.messages.length - 1]
     if (lastMessage?.role === 'assistant') {
@@ -353,35 +354,41 @@ export default function HomePage() {
         if (pendingToolCalls.length > 0) {
           console.log(`Auto-executing ${pendingToolCalls.length} pending tool calls:`, pendingToolCalls.map(tc => tc.function.name))
           
-          // Execute all pending tool calls in parallel
+          // Execute all pending tool calls sequentially (one by one)
           const executeAllToolCalls = async () => {
-            const executePromises = pendingToolCalls.map(async (toolCall) => {
-              const tool = tools.find(t => t.name === toolCall.function.name)
-              if (tool?.httpRequest) {
-                try {
-                  console.log(`Executing tool call: ${toolCall.function.name} (${toolCall.id})`)
-                  await autoExecuteHttpToolCall(toolCall, tool)
-                  console.log(`Completed tool call: ${toolCall.function.name} (${toolCall.id})`)
-                } catch (error) {
-                  console.error('Auto execution failed:', error)
-                  await handleMarkToolFailed(toolCall.id, error instanceof Error ? error.message : 'Auto execution failed')
+            setIsExecutingToolCalls(true)
+            try {
+              for (const toolCall of pendingToolCalls) {
+                const tool = tools.find(t => t.name === toolCall.function.name)
+                if (tool?.httpRequest) {
+                  try {
+                    console.log(`Executing tool call: ${toolCall.function.name} (${toolCall.id})`)
+                    await autoExecuteHttpToolCall(toolCall, tool)
+                    console.log(`Completed tool call: ${toolCall.function.name} (${toolCall.id})`)
+                    
+                    // Wait for state to settle before proceeding to next tool call
+                    await new Promise(resolve => setTimeout(resolve, 100))
+                  } catch (error) {
+                    console.error('Auto execution failed:', error)
+                    await handleMarkToolFailed(toolCall.id, error instanceof Error ? error.message : 'Auto execution failed')
+                  }
                 }
               }
-            })
-
-            // Wait for all executions to complete
-            await Promise.all(executePromises)
-            console.log('All tool calls execution completed')
+              console.log('All tool calls execution completed')
+            } finally {
+              setIsExecutingToolCalls(false)
+            }
           }
 
           // Execute the function
           executeAllToolCalls().catch(error => {
             console.error('Failed to execute tool calls:', error)
+            setIsExecutingToolCalls(false)
           })
         }
       }
     }
-  }, [autoMode, currentSession?.messages, isLoading]) // Use full messages array to detect changes properly
+  }, [autoMode, currentSession?.messages, isLoading, isExecutingToolCalls]) // Use full messages array to detect changes properly
 
   // Auto execute HTTP tool call
   const autoExecuteHttpToolCall = async (toolCall: ToolCall, tool: Tool) => {
@@ -966,6 +973,12 @@ export default function HomePage() {
         tc.function?.arguments && tc.function.arguments.trim() !== ''
       )
 
+      // 流结束后，如果有推理内容但时间还没计算，就计算时间
+      if (reasoningContent && localReasoningStartTime && !localReasoningDuration) {
+        localReasoningDuration = Date.now() - localReasoningStartTime
+        setReasoningDuration(localReasoningDuration)
+      }
+
       // 流结束后，如果有推理内容，设置为非活跃状态以显示收起/展开按钮
       if (reasoningContent) {
         setIsInActiveConversation(false)
@@ -973,8 +986,9 @@ export default function HomePage() {
 
       // Save the assistant message with tool calls only after streaming is complete
       if (assistantContent || completeToolCalls.length > 0) {
+        const messageId = generateId()
         const agentMessage: AgentMessage = {
-          id: generateId(),
+          id: messageId,
           role: 'assistant',
           content: assistantContent,
           timestamp: Date.now(),
@@ -1015,6 +1029,16 @@ export default function HomePage() {
           setSessions(prev => prev.map(s =>
             s.id === sessionData.id ? finalUpdatedSession : s
           ))
+          
+          // 在Auto模式下，确保reasoning内容默认为收起状态
+          if (autoMode && reasoningContent) {
+            setExpandedReasoningMessages(prev => {
+              const newSet = new Set(prev)
+              // 确保消息不在展开列表中（即保持收起状态）
+              newSet.delete(messageId)
+              return newSet
+            })
+          }
         } catch (error) {
           console.error('Failed to save assistant message:', error)
         }
@@ -1333,6 +1357,12 @@ export default function HomePage() {
         tc.function?.arguments && tc.function.arguments.trim() !== ''
       )
 
+      // 流结束后，如果有推理内容但时间还没计算，就计算时间
+      if (reasoningContent && localReasoningStartTime && !localReasoningDuration) {
+        localReasoningDuration = Date.now() - localReasoningStartTime
+        setReasoningDuration(localReasoningDuration)
+      }
+
       if (reasoningContent) {
         setIsInActiveConversation(false)
       }
@@ -1381,6 +1411,16 @@ export default function HomePage() {
           setSessions(prev => prev.map(s =>
             s.id === sessionId ? finalUpdatedSession : s
           ))
+          
+          // 在Auto模式下，确保reasoning内容默认为收起状态
+          if (autoMode && reasoningContent) {
+            setExpandedReasoningMessages(prev => {
+              const newSet = new Set(prev)
+              // 确保消息不在展开列表中（即保持收起状态）
+              newSet.delete(agentMessage.id)
+              return newSet
+            })
+          }
 
           // Title generation is now handled when user sends first message
         } catch (error) {
@@ -1813,6 +1853,12 @@ export default function HomePage() {
             tc.function?.arguments && tc.function.arguments.trim() !== ''
           )
 
+          // 流结束后，如果有推理内容但时间还没计算，就计算时间
+          if (reasoningContent && localReasoningStartTime && !localReasoningDuration) {
+            localReasoningDuration = Date.now() - localReasoningStartTime
+            setReasoningDuration(localReasoningDuration)
+          }
+
           if (reasoningContent) {
             setIsInActiveConversation(false)
           }
@@ -1860,6 +1906,16 @@ export default function HomePage() {
             setSessions(prev => prev.map(s =>
               s.id === currentSessionId ? finalSession : s
             ))
+            
+            // 在Auto模式下，确保reasoning内容默认为收起状态
+            if (autoMode && reasoningContent) {
+              setExpandedReasoningMessages(prev => {
+                const newSet = new Set(prev)
+                // 确保消息不在展开列表中（即保持收起状态）
+                newSet.delete(agentMessage.id)
+                return newSet
+              })
+            }
           }
 
           setIsLoading(false)
@@ -2460,6 +2516,12 @@ export default function HomePage() {
         tc.function?.arguments && tc.function.arguments.trim() !== ''
       )
 
+      // 流结束后，如果有推理内容但时间还没计算，就计算时间
+      if (reasoningContent && localReasoningStartTime && !localReasoningDuration) {
+        localReasoningDuration = Date.now() - localReasoningStartTime
+        setReasoningDuration(localReasoningDuration)
+      }
+
       if (reasoningContent) {
         setIsInActiveConversation(false)
       }
@@ -2507,6 +2569,16 @@ export default function HomePage() {
         setSessions(prev => prev.map(s =>
           s.id === currentSessionId ? finalSession : s
         ))
+        
+        // 在Auto模式下，确保reasoning内容默认为收起状态
+        if (autoMode && reasoningContent) {
+          setExpandedReasoningMessages(prev => {
+            const newSet = new Set(prev)
+            // 确保消息不在展开列表中（即保持收起状态）
+            newSet.delete(agentMessage.id)
+            return newSet
+          })
+        }
       }
 
       setIsLoading(false)
