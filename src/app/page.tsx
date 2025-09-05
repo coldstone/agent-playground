@@ -2801,11 +2801,13 @@ export default function HomePage() {
         agents={agents}
         tools={tools}
         authorizations={authorizations}
+        currentAgentId={currentAgentId}
         onConfigChange={setConfig}
         onAgentCreate={() => setShowAgentModal(true)}
         onAgentUpdate={updateAgent}
         onAgentDelete={deleteAgent}
         onAgentReorder={reorderAgents}
+        onAgentClearSelection={() => handleAgentSelect(null)}
         onToolCreate={createTool}
         onToolUpdate={(tool: Tool) => updateTool(tool.id, tool)}
         onToolDelete={deleteTool}

@@ -325,13 +325,34 @@ function AuthorizationModal({ authorization, availableTags, onSave, onCancel }: 
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <h2 className="text-lg font-semibold mb-4">
-          {authorization ? 'Edit Authorization' : 'Create Authorization'}
-        </h2>
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      {/* Backdrop */}
+      <div 
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        onClick={onCancel}
+      />
+      
+      {/* Modal */}
+      <div className="relative bg-background border border-border rounded-lg shadow-lg w-full mx-4 max-h-[90vh] flex flex-col max-w-lg">
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-border flex-shrink-0">
+          <h2 className="text-lg font-semibold">
+            {authorization ? 'Edit Authorization' : 'Create Authorization'}
+          </h2>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="h-8 w-8 flex items-center justify-center hover:bg-muted rounded transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-4">
+          <form onSubmit={handleSubmit} className="space-y-4" id="auth-form">
           {/* Name */}
           <div>
             <label className="block text-sm font-medium mb-1">Name</label>
@@ -434,23 +455,26 @@ function AuthorizationModal({ authorization, availableTags, onSave, onCancel }: 
             </div>
           </div>
 
-          {/* Actions */}
-          <div className="flex gap-2 pt-4 justify-end">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onCancel}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={!name.trim()}
-            >
-              {authorization ? 'Update' : 'Create'}
-            </Button>
-          </div>
-        </form>
+          </form>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-2 p-4 border-t border-border bg-muted/50 flex-shrink-0">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onCancel}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            form="auth-form"
+            disabled={!name.trim()}
+          >
+            {authorization ? 'Update' : 'Create'}
+          </Button>
+        </div>
       </div>
     </div>
   )

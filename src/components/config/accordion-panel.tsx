@@ -15,11 +15,13 @@ interface AccordionPanelProps {
   agents: Agent[]
   tools: Tool[]
   authorizations: Authorization[]
+  currentAgentId?: string | null
   onConfigChange: (config: APIConfig) => void
   onAgentCreate: () => void
   onAgentUpdate: (agentId: string, updates: Partial<Agent>) => void
   onAgentDelete: (agentId: string) => void
   onAgentReorder: (agents: Agent[]) => void
+  onAgentClearSelection?: () => void
   onToolCreate: (tool: Tool) => void
   onToolUpdate: (tool: Tool) => void
   onToolDelete: (toolId: string) => void
@@ -36,11 +38,13 @@ export function AccordionPanel({
   agents,
   tools,
   authorizations,
+  currentAgentId,
   onConfigChange,
   onAgentCreate,
   onAgentUpdate,
   onAgentDelete,
   onAgentReorder,
+  onAgentClearSelection,
   onToolCreate,
   onToolUpdate,
   onToolDelete,
@@ -129,9 +133,11 @@ export function AccordionPanel({
                   agents={agents}
                   tools={tools}
                   authorizations={authorizations}
+                  currentAgentId={currentAgentId}
                   onAgentUpdate={onAgentUpdate}
                   onAgentDelete={onAgentDelete}
                   onAgentReorder={onAgentReorder}
+                  onAgentClearSelection={onAgentClearSelection}
                   onToolCreate={onToolCreate}
                   apiConfig={config}
                 />

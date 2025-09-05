@@ -144,6 +144,7 @@ export interface Agent {
   tools: string[]; // Store tool IDs instead of full Tool objects (legacy)
   toolBindings?: AgentToolBinding[]; // New authorization-aware tool bindings
   order?: number; // For drag and drop ordering
+  visible?: boolean; // Controls visibility in chat overlay (defaults to true)
   createdAt: number;
   updatedAt: number;
 }
