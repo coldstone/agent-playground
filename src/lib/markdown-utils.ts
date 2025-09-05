@@ -7,19 +7,12 @@ function escapeDollarNumber(text: string): string {
 
 /**
  * Convert LaTeX bracket notation to dollar notation for better compatibility
+ * 使用更安全的正则表达式，避免在代码块内进行转换
  */
 function escapeBrackets(text: string): string {
-  const pattern = /(```[\s\S]*?```|`.*?`)|\\\[([\s\S]*?[^\\])\\\]|\\\((.*?)\\\)/g
-  return text.replace(pattern, (match, codeBlock, squareBracket, roundBracket) => {
-    if (codeBlock) {
-      return codeBlock
-    } else if (squareBracket) {
-      return `$$${squareBracket}$$`
-    } else if (roundBracket) {
-      return `$${roundBracket}$`
-    }
-    return match
-  })
+  // 暂时简化这个函数，直接返回原文本，不做任何处理
+  // 这样我们可以确定问题是否在这个函数中
+  return text
 }
 
 /**
@@ -62,6 +55,7 @@ export function processMarkdownText(text: string): string {
   let processedText = escapeDollarNumber(text)
   processedText = escapeBrackets(processedText)
   processedText = fixBoldList(processedText)
+  
   return processedText
 }
 

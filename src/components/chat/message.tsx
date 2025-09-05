@@ -134,6 +134,7 @@ export function Message({
   const [showMarkdown, setShowMarkdown] = useState(true)
   const [isCopied, setIsCopied] = useState(false)
 
+
   const isUser = message.role === 'user'
   const isSystem = message.role === 'system'
   const isTool = message.role === 'tool'
@@ -168,6 +169,7 @@ export function Message({
   const handleCopyContent = async () => {
     try {
       let contentToCopy = message.content
+
 
       // If showing markdown, copy the formatted content
       // If showing raw text, copy the raw content

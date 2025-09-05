@@ -3,6 +3,7 @@
 import React, { useState, forwardRef, useImperativeHandle } from 'react'
 import { Authorization, Tool } from '@/types'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { CustomSelect } from '@/components/ui/custom-select'
 import { generateId } from '@/lib'
 import { getToolTags } from '@/lib/authorization'
@@ -41,6 +42,8 @@ export const AuthorizationsPanel = forwardRef<AuthorizationsPanelRef, Authorizat
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [editingAuth, setEditingAuth] = useState<Authorization | null>(null)
   const [expandedAuths, setExpandedAuths] = useState<Set<string>>(new Set())
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [authorizationToDelete, setAuthorizationToDelete] = useState<Authorization | null>(null)
 
   useImperativeHandle(ref, () => ({
     openCreateModal: () => setShowCreateModal(true)
@@ -80,14 +83,26 @@ export const AuthorizationsPanel = forwardRef<AuthorizationsPanelRef, Authorizat
     setShowCreateModal(true)
   }
 
-  const handleDelete = async (authId: string) => {
-    if (confirm('Are you sure you want to delete this authorization?')) {
+  const handleDeleteClick = (auth: Authorization) => {
+    setAuthorizationToDelete(auth)
+    setShowDeleteConfirm(true)
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (authorizationToDelete) {
       try {
-        await onAuthorizationDelete(authId)
+        await onAuthorizationDelete(authorizationToDelete.id)
       } catch (error) {
         console.error('Failed to delete authorization:', error)
       }
     }
+    setShowDeleteConfirm(false)
+    setAuthorizationToDelete(null)
+  }
+
+  const handleDeleteCancel = () => {
+    setShowDeleteConfirm(false)
+    setAuthorizationToDelete(null)
   }
 
   const handleToggleDefault = async (auth: Authorization) => {
@@ -185,7 +200,7 @@ export const AuthorizationsPanel = forwardRef<AuthorizationsPanelRef, Authorizat
                         <Edit3 className="w-3 h-3 text-gray-500" />
                       </button>
                       <button
-                        onClick={() => handleDelete(auth.id)}
+                        onClick={() => handleDeleteClick(auth)}
                         className="h-6 w-6 flex items-center justify-center hover:bg-red-100 text-red-600 hover:text-red-700 rounded transition-colors"
                         title="Delete"
                       >
@@ -273,6 +288,32 @@ export const AuthorizationsPanel = forwardRef<AuthorizationsPanelRef, Authorizat
           onCancel={handleModalClose}
         />
       )}
+
+      {/* Delete Confirmation Dialog */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
+            <h3 className="text-lg font-semibold mb-2">Delete Authorization</h3>
+            <p className="text-gray-600 mb-4">
+              Are you sure you want to delete "{authorizationToDelete?.name}"? This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={handleDeleteCancel}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleDeleteConfirm}
+              >
+                Delete
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 })
@@ -356,11 +397,10 @@ function AuthorizationModal({ authorization, availableTags, onSave, onCancel }: 
           {/* Name */}
           <div>
             <label className="block text-sm font-medium mb-1">Name</label>
-            <input
+            <Input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full p-2 border rounded-md"
               placeholder="e.g., CRM Appkey"
               required
             />
@@ -386,11 +426,11 @@ function AuthorizationModal({ authorization, availableTags, onSave, onCancel }: 
             />
             
             {tag === 'custom' && (
-              <input
+              <Input
                 type="text"
                 value={customTag}
                 onChange={(e) => setCustomTag(e.target.value)}
-                className="w-full p-2 border rounded-md mt-2"
+                className="mt-2"
                 placeholder="Enter custom tag"
               />
             )}
@@ -428,18 +468,18 @@ function AuthorizationModal({ authorization, availableTags, onSave, onCancel }: 
             <div className="space-y-2">
               {headers.map((header, index) => (
                 <div key={index} className="flex gap-2">
-                  <input
+                  <Input
                     type="text"
                     value={header.key}
                     onChange={(e) => handleUpdateHeader(index, 'key', e.target.value)}
-                    className="flex-1 p-2 border rounded-md text-sm"
+                    className="flex-1 text-sm"
                     placeholder="Header name (e.g., Authorization)"
                   />
-                  <input
+                  <Input
                     type="text"
                     value={header.value}
                     onChange={(e) => handleUpdateHeader(index, 'value', e.target.value)}
-                    className="flex-1 p-2 border rounded-md text-sm"
+                    className="flex-1 text-sm"
                     placeholder="Header value (e.g., Bearer xxx)"
                   />
                   <Button

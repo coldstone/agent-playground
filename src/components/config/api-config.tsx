@@ -10,7 +10,6 @@ import { CustomSelect } from '@/components/ui/custom-select'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Slider } from '@/components/ui/slider'
-import { SystemModelSelector } from '@/components/ui/system-model-selector'
 import { StatusIndicator } from './status-indicator'
 import { Settings, Eye, EyeOff, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react'
 
@@ -324,9 +323,6 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
     <div className="space-y-4">{/* Remove wrapper div, will be handled by parent */}
 
       <div className="space-y-4">
-        {/* System Model Selector */}
-        <SystemModelSelector />
-
         {/* Provider Selection */}
         <div className="space-y-2">
           <Label htmlFor="provider">Provider</Label>
