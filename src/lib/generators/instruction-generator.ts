@@ -1,5 +1,6 @@
 import { APIConfig } from '@/types'
-import { OpenAIClient } from '@/lib/clients'
+import { createClient } from '@/lib/client-factory'
+import { devLog } from '@/lib/dev-utils'
 
 export class InstructionGenerator {
   private config: APIConfig
@@ -15,7 +16,7 @@ export class InstructionGenerator {
       throw new Error('Invalid prompt or API configuration')
     }
 
-    const client = new OpenAIClient(this.config, [], this.provider)
+    const client = createClient(this.config, [], this.provider)
 
     const systemPrompt = `You are an expert in AI Agents, proficient in the principles of various AI Agents, and possess extensive practical experience. Please assist users in generating excellent prompts for AI Agent.
 
@@ -50,7 +51,7 @@ Please generate a clear, professional system prompt that defines how this agent 
         }
       }
     } catch (error) {
-      console.error('Failed to generate instruction:', error)
+      devLog.error('Failed to generate instruction:', error)
       throw error
     }
   }

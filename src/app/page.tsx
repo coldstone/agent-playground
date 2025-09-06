@@ -1,11 +1,12 @@
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { APIConfig, Message, ChatSession, Agent, Tool, AgentMessage, ToolCall, Authorization } from '@/types'
 import { DEFAULT_CONFIG, MODEL_PROVIDERS, generateId } from '@/lib'
-import { OpenAIClient } from '@/lib/clients'
+import { createClient } from '@/lib/client-factory'
 import { TitleGenerator } from '@/lib/generators'
 import { IndexedDBManager } from '@/lib/storage'
+import { devLog } from '@/lib/dev-utils'
 import { AccordionPanel } from '@/components/config'
 import { ChatMessages, ChatInput, ChatInputRef, ChatControls, SessionManager, NewChatOverlay } from '@/components/chat'
 import { AgentFormModal } from '@/components/agents'
@@ -87,7 +88,7 @@ export default function HomePage() {
         setAutoMode(JSON.parse(saved))
       }
     } catch (error) {
-      console.error('Failed to load auto mode from localStorage:', error)
+      devLog.error('Failed to load auto mode from localStorage:', error)
     }
     setAutoModeInitialized(true)
   }, [])
@@ -98,7 +99,7 @@ export default function HomePage() {
       try {
         localStorage.setItem('autoMode', JSON.stringify(autoMode))
       } catch (error) {
-        console.error('Failed to save auto mode to localStorage:', error)
+        devLog.error('Failed to save auto mode to localStorage:', error)
       }
     }
   }, [autoMode, autoModeInitialized])
@@ -150,8 +151,21 @@ export default function HomePage() {
       const availableModels = await dbManager.getAllAvailableModels()
 
       // Find models that are no longer valid
+      // Exception: Azure OpenAI models and manually added custom models should not be validated
       const modelsToRemove: string[] = []
       availableModels.forEach(availableModel => {
+        // Don't validate Azure OpenAI deployments as they are user-defined
+        if (availableModel.provider === 'Azure OpenAI') {
+          return
+        }
+        
+        // Don't validate manually added custom models - check if the provider exists but model is not in predefined list
+        const provider = MODEL_PROVIDERS.find(p => p.name === availableModel.provider)
+        if (provider && !provider.models.includes(availableModel.model)) {
+          // This is a manually added custom model to an existing provider, keep it
+          return
+        }
+        
         if (!validModelIds.has(availableModel.id)) {
           modelsToRemove.push(availableModel.id)
         }
@@ -159,7 +173,7 @@ export default function HomePage() {
 
       // Remove invalid models from IndexedDB
       if (modelsToRemove.length > 0) {
-        console.log('Removing invalid models from IndexedDB:', modelsToRemove)
+        devLog.log('Removing invalid models from IndexedDB:', modelsToRemove)
         for (const modelId of modelsToRemove) {
           await dbManager.deleteAvailableModel(modelId)
         }
@@ -171,12 +185,14 @@ export default function HomePage() {
         try {
           const currentModel = JSON.parse(currentModelStr)
           const currentModelKey = `${currentModel.provider}-${currentModel.model}`
-          if (!validModelIds.has(currentModelKey)) {
-            console.warn('Current model is no longer valid, clearing:', currentModel)
+          
+          // Don't validate Azure OpenAI models as they are user-defined
+          if (currentModel.provider !== 'Azure OpenAI' && !validModelIds.has(currentModelKey)) {
+            devLog.warn('Current model is no longer valid, clearing:', currentModel)
             localStorage.removeItem('agent-playground-current-model')
           }
         } catch (error) {
-          console.warn('Failed to parse current model, clearing:', error)
+          devLog.warn('Failed to parse current model, clearing:', error)
           localStorage.removeItem('agent-playground-current-model')
         }
       }
@@ -188,16 +204,16 @@ export default function HomePage() {
           const systemModel = JSON.parse(systemModelStr)
           const systemModelKey = `${systemModel.provider}-${systemModel.model}`
           if (!validModelIds.has(systemModelKey)) {
-            console.log('System model is no longer valid, clearing:', systemModel)
+            devLog.log('System model is no longer valid, clearing:', systemModel)
             localStorage.removeItem('agent-playground-system-model')
           }
         } catch (error) {
-          console.warn('Failed to parse system model, clearing:', error)
+          devLog.warn('Failed to parse system model, clearing:', error)
           localStorage.removeItem('agent-playground-system-model')
         }
       }
     } catch (error) {
-      console.warn('Failed to validate and cleanup models:', error)
+      devLog.warn('Failed to validate and cleanup models:', error)
     }
   }
 
@@ -232,6 +248,8 @@ export default function HomePage() {
         const topP = llmConfig.topP || DEFAULT_CONFIG.topP
         const frequencyPenalty = llmConfig.frequencyPenalty || DEFAULT_CONFIG.frequencyPenalty
         const presencePenalty = llmConfig.presencePenalty || DEFAULT_CONFIG.presencePenalty
+        const reasoningEffort = llmConfig.reasoningEffort || DEFAULT_CONFIG.reasoningEffort
+        const verbosity = llmConfig.verbosity || DEFAULT_CONFIG.verbosity
 
         // Load API keys from localStorage
         const apiKeysStr = localStorage.getItem('agent-playground-api-keys')
@@ -253,7 +271,9 @@ export default function HomePage() {
             maxTokens,
             topP,
             frequencyPenalty,
-            presencePenalty
+            presencePenalty,
+            reasoningEffort,
+            verbosity
           }
         } else {
           finalConfig = {
@@ -266,7 +286,9 @@ export default function HomePage() {
             maxTokens,
             topP,
             frequencyPenalty,
-            presencePenalty
+            presencePenalty,
+            reasoningEffort,
+            verbosity
           }
         }
 
@@ -306,7 +328,7 @@ export default function HomePage() {
 
 
       } catch (error) {
-        console.error('Failed to load data from IndexedDB:', error)
+        devLog.error('Failed to load data from IndexedDB:', error)
       }
     }
 
@@ -336,9 +358,26 @@ export default function HomePage() {
   const currentSession = sessions.find(s => s.id === currentSessionId)
   const currentAgent = currentAgentId ? agents.find(a => a.id === currentAgentId) : null
 
+  // Calculate pending tool calls hash for dependency tracking
+  const pendingToolCallsHash = useMemo(() => {
+    if (!currentSession) return ''
+    const lastMessage = currentSession.messages[currentSession.messages.length - 1]
+    if (lastMessage?.role === 'assistant') {
+      const agentMessage = lastMessage as AgentMessage
+      if (agentMessage.toolCalls && agentMessage.toolCallExecutions) {
+        const pendingToolCalls = agentMessage.toolCalls.filter(toolCall => {
+          const execution = agentMessage.toolCallExecutions?.find(exec => exec.toolCall.id === toolCall.id)
+          return execution?.status === 'pending'
+        })
+        return pendingToolCalls.map(tc => tc.id).join(',')
+      }
+    }
+    return ''
+  }, [currentSession?.messages])
+
   // Auto execute tool calls when auto mode is enabled
   useEffect(() => {
-    if (!autoMode || !currentSession || isLoading || isExecutingToolCalls) return
+    if (!autoMode || !currentSession || isLoading || isExecutingToolCalls || !pendingToolCallsHash) return
 
     const lastMessage = currentSession.messages[currentSession.messages.length - 1]
     if (lastMessage?.role === 'assistant') {
@@ -352,7 +391,7 @@ export default function HomePage() {
 
         // Only execute if there are pending tool calls and we're not already executing them
         if (pendingToolCalls.length > 0) {
-          console.log(`Auto-executing ${pendingToolCalls.length} pending tool calls:`, pendingToolCalls.map(tc => tc.function.name))
+          devLog.log(`Auto-executing ${pendingToolCalls.length} pending tool calls:`, pendingToolCalls.map(tc => tc.function.name))
           
           // Execute all pending tool calls sequentially (one by one)
           const executeAllToolCalls = async () => {
@@ -362,19 +401,19 @@ export default function HomePage() {
                 const tool = tools.find(t => t.name === toolCall.function.name)
                 if (tool?.httpRequest) {
                   try {
-                    console.log(`Executing tool call: ${toolCall.function.name} (${toolCall.id})`)
+                    devLog.log(`Executing tool call: ${toolCall.function.name} (${toolCall.id})`)
                     await autoExecuteHttpToolCall(toolCall, tool)
-                    console.log(`Completed tool call: ${toolCall.function.name} (${toolCall.id})`)
+                    devLog.log(`Completed tool call: ${toolCall.function.name} (${toolCall.id})`)
                     
                     // Wait for state to settle before proceeding to next tool call
                     await new Promise(resolve => setTimeout(resolve, 100))
                   } catch (error) {
-                    console.error('Auto execution failed:', error)
+                    devLog.error('Auto execution failed:', error)
                     await handleMarkToolFailed(toolCall.id, error instanceof Error ? error.message : 'Auto execution failed')
                   }
                 }
               }
-              console.log('All tool calls execution completed')
+              devLog.log('All tool calls execution completed')
             } finally {
               setIsExecutingToolCalls(false)
             }
@@ -382,13 +421,13 @@ export default function HomePage() {
 
           // Execute the function
           executeAllToolCalls().catch(error => {
-            console.error('Failed to execute tool calls:', error)
+            devLog.error('Failed to execute tool calls:', error)
             setIsExecutingToolCalls(false)
           })
         }
       }
     }
-  }, [autoMode, currentSession?.messages, isLoading, isExecutingToolCalls]) // Use full messages array to detect changes properly
+  }, [autoMode, pendingToolCallsHash, isLoading, isExecutingToolCalls]) // Use hash to detect only meaningful changes
 
   // Auto execute HTTP tool call
   const autoExecuteHttpToolCall = async (toolCall: ToolCall, tool: Tool) => {
@@ -563,7 +602,7 @@ export default function HomePage() {
       showToast('Session deleted.', 'success')
     } catch (error) {
       showToast('Failed to delete session.', 'error')
-      console.error('Failed to delete session:', error)
+      devLog.error('Failed to delete session:', error)
 
     }
   }
@@ -581,7 +620,7 @@ export default function HomePage() {
       ))
     } catch (error) {
       showToast('Failed to rename session.', 'error')
-      console.error('Failed to rename session:', error)
+      devLog.error('Failed to rename session:', error)
     }
   }
 
@@ -610,7 +649,7 @@ export default function HomePage() {
       return newAgent.id
     } catch (error) {
       showToast('Failed to create agent.', 'error')
-      console.error('Failed to create agent:', error)
+      devLog.error('Failed to create agent:', error)
       throw error // Re-throw the error to maintain the Promise<string> return type
     }
   }
@@ -628,7 +667,7 @@ export default function HomePage() {
       ))
     } catch (error) {
       showToast('Failed to update agent.', 'error')
-      console.error('Failed to update agent:', error)
+      devLog.error('Failed to update agent:', error)
     }
   }
 
@@ -636,7 +675,7 @@ export default function HomePage() {
     try {
       await updateAgent(agentId, { systemPrompt: instruction })
     } catch (error) {
-      console.error('Failed to update agent instruction:', error)
+      devLog.error('Failed to update agent instruction:', error)
     }
   }
 
@@ -644,7 +683,7 @@ export default function HomePage() {
     try {
       await updateAgent(agentId, { tools: toolIds })
     } catch (error) {
-      console.error('Failed to update agent tools:', error)
+      devLog.error('Failed to update agent tools:', error)
     }
   }
 
@@ -657,7 +696,7 @@ export default function HomePage() {
       }
     } catch (error) {
       showToast('Failed to delete agent.', 'error')
-      console.error('Failed to delete agent:', error)
+      devLog.error('Failed to delete agent:', error)
     }
   }
 
@@ -669,7 +708,7 @@ export default function HomePage() {
       return authorization.id
     } catch (error) {
       showToast('Failed to create authorization.', 'error')
-      console.error('Failed to create authorization:', error)
+      devLog.error('Failed to create authorization:', error)
       throw error
     }
   }
@@ -680,7 +719,7 @@ export default function HomePage() {
       setAuthorizations(prev => prev.map(auth => auth.id === authorization.id ? authorization : auth))
     } catch (error) {
       showToast('Failed to update authorization.', 'error')
-      console.error('Failed to update authorization:', error)
+      devLog.error('Failed to update authorization:', error)
       throw error
     }
   }
@@ -691,7 +730,7 @@ export default function HomePage() {
       setAuthorizations(prev => prev.filter(auth => auth.id !== authorizationId))
     } catch (error) {
       showToast('Failed to delete authorization.', 'error')
-      console.error('Failed to delete authorization:', error)
+      devLog.error('Failed to delete authorization:', error)
       throw error
     }
   }
@@ -709,13 +748,13 @@ export default function HomePage() {
       }
     } catch (error) {
       showToast('Failed to reorder agents.', 'error')
-      console.error('Failed to reorder agents:', error)
+      devLog.error('Failed to reorder agents:', error)
       // Reload agents from DB on error
       try {
         const loadedAgents = await dbManager.getAllAgents()
         setAgents(loadedAgents)
       } catch (reloadError) {
-        console.error('Failed to reload agents:', reloadError)
+        devLog.error('Failed to reload agents:', reloadError)
       }
     }
   }
@@ -736,7 +775,7 @@ export default function HomePage() {
       return newTool
     } catch (error) {
       showToast('Failed to create tool.', 'error')
-      console.error('Failed to create tool:', error)
+      devLog.error('Failed to create tool:', error)
       throw error // Re-throw the error to maintain the Promise<Tool> return type
     }
   }
@@ -754,7 +793,7 @@ export default function HomePage() {
       ))
     } catch (error) {
       showToast('Failed to update tool.', 'error')
-      console.error('Failed to update tool:', error)
+      devLog.error('Failed to update tool:', error)
     }
   }
 
@@ -783,7 +822,7 @@ export default function HomePage() {
       showToast('Tool deleted.', 'success')
     } catch (error) {
       showToast('Failed to delete tool.', 'error')
-      console.error('Failed to delete tool:', error)
+      devLog.error('Failed to delete tool:', error)
     }
   }
 
@@ -812,7 +851,7 @@ export default function HomePage() {
       showToast(`Imported ${importAgents.length} agents and ${importTools.length} tools`, 'success')
     } catch (error) {
       showToast('Failed to import data.', 'error')
-      console.error('Failed to import data:', error)
+      devLog.error('Failed to import data:', error)
     }
   }
 
@@ -846,17 +885,17 @@ export default function HomePage() {
       // Get complete config for current model (includes correct endpoint and API key)
       const currentConfig = getCurrentModelConfig()
 
-      const client = new OpenAIClient(currentConfig, currentTools, currentConfig.provider)
+      const client = createClient(currentConfig, currentTools, currentConfig.provider)
 
       // Filter out any existing system messages from history to avoid conflicts
       const messagesWithoutSystem = sessionData.messages.filter(m => m.role !== 'system')
 
       // Validate message sequence before sending to API
-      console.log('Validating message sequence before sending to AI:')
+      devLog.log('Validating message sequence before sending to AI:')
       let lastAssistantMessage: AgentMessage | null = null
       for (let i = 0; i < messagesWithoutSystem.length; i++) {
         const msg = messagesWithoutSystem[i]
-        console.log(`Message ${i}: ${msg.role} - ${msg.role === 'tool' ? `tool_call_id: ${(msg as any).tool_call_id}` : msg.content?.substring(0, 50)}...`)
+        devLog.log(`Message ${i}: ${msg.role} - ${msg.role === 'tool' ? `tool_call_id: ${(msg as any).tool_call_id}` : msg.content?.substring(0, 50)}...`)
         
         if (msg.role === 'assistant') {
           lastAssistantMessage = msg as AgentMessage
@@ -865,9 +904,9 @@ export default function HomePage() {
           if (lastAssistantMessage && lastAssistantMessage.toolCalls) {
             const correspondingToolCall = lastAssistantMessage.toolCalls.find(tc => tc.id === toolMsg.tool_call_id)
             if (!correspondingToolCall) {
-              console.error(`Tool message with tool_call_id ${toolMsg.tool_call_id} has no corresponding tool call!`)
+              devLog.error(`Tool message with tool_call_id ${toolMsg.tool_call_id} has no corresponding tool call!`)
             } else {
-              console.log(`✓ Tool message for ${correspondingToolCall.function.name} found`)
+              devLog.log(`✓ Tool message for ${correspondingToolCall.function.name} found`)
             }
           }
         }
@@ -1040,7 +1079,7 @@ export default function HomePage() {
             })
           }
         } catch (error) {
-          console.error('Failed to save assistant message:', error)
+          devLog.error('Failed to save assistant message:', error)
         }
       } else {
         // Clear streaming states even if no message to save
@@ -1049,11 +1088,11 @@ export default function HomePage() {
       }
 
     } catch (error) {
-      console.error('Chat error:', error)
+      devLog.error('Chat error:', error)
 
       // Don't show error message if request was aborted (user clicked stop)
       if (error instanceof Error && error.name === 'AbortError') {
-        console.log('Request was aborted by user')
+        devLog.log('Request was aborted by user')
       } else {
         // Create error message with retry capability
         const errorMessage: Message = {
@@ -1082,7 +1121,7 @@ export default function HomePage() {
             s.id === sessionData.id ? sessionWithError : s
           ))
         } catch (saveError) {
-          console.error('Failed to save error message:', saveError)
+          devLog.error('Failed to save error message:', saveError)
         }
       }
     } finally {
@@ -1137,13 +1176,13 @@ export default function HomePage() {
         sessionId = newSession.id
         currentSessionData = newSession
       } catch (error) {
-        console.error('Failed to create session:', error)
+        devLog.error('Failed to create session:', error)
         return
       }
     }
 
     if (!currentSessionData) {
-      console.error('No session data available')
+      devLog.error('No session data available')
       return
     }
 
@@ -1178,7 +1217,7 @@ export default function HomePage() {
             try {
               const systemModelConfig = getSystemModelConfig()
               if (!systemModelConfig) {
-                console.warn('No system model configured, skipping title generation')
+                devLog.warn('No system model configured, skipping title generation')
                 return
               }
 
@@ -1202,18 +1241,18 @@ export default function HomePage() {
                 }
               }
             } catch (titleError) {
-              console.error('Failed to generate title from user message:', titleError)
+              devLog.error('Failed to generate title from user message:', titleError)
               // Title generation failure should never affect AI responses
             }
           })().catch(error => {
-            console.error('Title generation process failed:', error)
+            devLog.error('Title generation process failed:', error)
             // Completely isolated error handling
           })
         }, 100)
       }
     } catch (error) {
       showToast('Failed to save user message.', 'error')
-      console.error('Failed to save user message:', error)
+      devLog.error('Failed to save user message:', error)
       return
     }
 
@@ -1251,7 +1290,7 @@ export default function HomePage() {
       // Get complete config for current model (includes correct endpoint and API key)
       const currentConfig = getCurrentModelConfig()
 
-      const client = new OpenAIClient(currentConfig, availableTools, currentConfig.provider)
+      const client = createClient(currentConfig, availableTools, currentConfig.provider)
 
       // Filter out any existing system messages from history to avoid conflicts
       const messagesWithoutSystem = updatedSessionData.messages.filter(m => m.role !== 'system')
@@ -1424,7 +1463,7 @@ export default function HomePage() {
 
           // Title generation is now handled when user sends first message
         } catch (error) {
-          console.error('Failed to save assistant message:', error)
+          devLog.error('Failed to save assistant message:', error)
         }
       } else {
         // Clear streaming states even if no message to save
@@ -1437,11 +1476,11 @@ export default function HomePage() {
       }
 
     } catch (error) {
-      console.error('Chat error:', error)
+      devLog.error('Chat error:', error)
 
       // Don't show error message if request was aborted (user clicked stop)
       if (error instanceof Error && error.name === 'AbortError') {
-        console.log('Request was aborted by user')
+        devLog.log('Request was aborted by user')
       } else {
         // Create error message with retry capability
         const errorMessage: Message = {
@@ -1471,7 +1510,7 @@ export default function HomePage() {
               s.id === sessionId ? sessionWithError : s
             ))
           } catch (saveError) {
-            console.error('Failed to save error message:', saveError)
+            devLog.error('Failed to save error message:', saveError)
           }
         }
       }
@@ -1533,7 +1572,7 @@ export default function HomePage() {
             s.id === currentSessionId ? updatedSession : s
           ))
         } catch (error) {
-          console.error('Failed to save partial message:', error)
+          devLog.error('Failed to save partial message:', error)
         }
       }
     }
@@ -1567,7 +1606,7 @@ export default function HomePage() {
       ))
     } catch (error) {
       showToast('Failed to save system prompt.', 'error')
-      console.error('Failed to save system prompt:', error)
+      devLog.error('Failed to save system prompt:', error)
     }
   }
 
@@ -1577,7 +1616,7 @@ export default function HomePage() {
     if (lastMessage?.role === 'assistant') {
       const agentMessage = lastMessage as AgentMessage
       if (agentMessage.toolCalls && agentMessage.toolCalls.length > 0 && agentMessage.toolCallExecutions) {
-        console.log('Checking tool completion status:', {
+        devLog.log('Checking tool completion status:', {
           totalToolCalls: agentMessage.toolCalls.length,
           totalExecutions: agentMessage.toolCallExecutions.length,
           toolCalls: agentMessage.toolCalls.map(tc => ({
@@ -1594,7 +1633,7 @@ export default function HomePage() {
           return execution && (execution.status === 'completed' || execution.status === 'failed')
         })
 
-        console.log('All tool calls completed:', allCompleted)
+        devLog.log('All tool calls completed:', allCompleted)
         return allCompleted
       }
     }
@@ -1606,7 +1645,7 @@ export default function HomePage() {
     const lastMessage = session.messages[session.messages.length - 1] as AgentMessage
     if (!lastMessage?.toolCalls || !lastMessage?.toolCallExecutions) return
 
-    console.log('Processing tool results for tool calls:', lastMessage.toolCalls.map(tc => `${tc.function.name} (${tc.id})`))
+    devLog.log('Processing tool results for tool calls:', lastMessage.toolCalls.map(tc => `${tc.function.name} (${tc.id})`))
 
     // Verify all tool calls have corresponding executions with completed/failed status
     const missingExecutions: string[] = []
@@ -1618,7 +1657,7 @@ export default function HomePage() {
     }
 
     if (missingExecutions.length > 0) {
-      console.warn('Not all tool calls have completed executions. Missing:', missingExecutions)
+      devLog.warn('Not all tool calls have completed executions. Missing:', missingExecutions)
       return
     }
 
@@ -1642,7 +1681,7 @@ export default function HomePage() {
         name: toolCall.function.name
       }
       toolMessages.push(toolMessage)
-      console.log(`Created tool result message for ${toolCall.function.name} (${toolCall.id}):`, content.substring(0, 100) + '...')
+      devLog.log(`Created tool result message for ${toolCall.function.name} (${toolCall.id}):`, content.substring(0, 100) + '...')
     }
 
     if (toolMessages.length === 0) return
@@ -1660,7 +1699,7 @@ export default function HomePage() {
         s.id === currentSessionId ? sessionWithToolResults : s
       ))
     } catch (error) {
-      console.error('Failed to save tool results:', error)
+      devLog.error('Failed to save tool results:', error)
     }
 
     // Continue conversation with AI after all tool results
@@ -1705,7 +1744,7 @@ export default function HomePage() {
         await processAllToolResults(updatedSession)
       }
     } catch (error) {
-      console.error('Failed to save tool result:', error)
+      devLog.error('Failed to save tool result:', error)
     }
   }
 
@@ -1756,7 +1795,7 @@ export default function HomePage() {
           // Get complete config for current model (includes correct endpoint and API key)
           const currentConfig = getCurrentModelConfig()
 
-          const client = new OpenAIClient(currentConfig, currentTools, currentConfig.provider)
+          const client = createClient(currentConfig, currentTools, currentConfig.provider)
 
           // Filter out any existing system messages from history to avoid conflicts
           const messagesWithoutSystem = updatedSession.messages.filter(m => m.role !== 'system')
@@ -1931,11 +1970,11 @@ export default function HomePage() {
 
         } catch (error) {
           showToast('Failed to retry message.', 'error')
-          console.error('Failed to retry message:', error)
+          devLog.error('Failed to retry message:', error)
 
           // Don't show error message if request was aborted (user clicked stop)
           if (error instanceof Error && error.name === 'AbortError') {
-            console.log('Request was aborted by user')
+            devLog.log('Request was aborted by user')
           } else {
             // Create error message with retry capability
             const errorMessage: Message = {
@@ -1960,7 +1999,7 @@ export default function HomePage() {
                 s.id === currentSessionId ? sessionWithError : s
               ))
             } catch (saveError) {
-              console.error('Failed to save error message:', saveError)
+              devLog.error('Failed to save error message:', saveError)
             }
           }
 
@@ -2005,7 +2044,7 @@ export default function HomePage() {
             // This would trigger the tool execution again
             // For now, we'll just remove the failed result and let user provide new result
           } catch (error) {
-            console.error('Failed to retry tool message:', error)
+            devLog.error('Failed to retry tool message:', error)
           }
         }
       }
@@ -2025,7 +2064,7 @@ export default function HomePage() {
           s.id === currentSessionId ? updatedSession : s
         ))
       } catch (error) {
-        console.error('Failed to retry system message:', error)
+        devLog.error('Failed to retry system message:', error)
       }
     }
   }
@@ -2050,7 +2089,7 @@ export default function HomePage() {
       ))
     } catch (error) {
       showToast('Failed to delete message.', 'error')
-      console.error('Failed to delete message:', error)
+      devLog.error('Failed to delete message:', error)
     }
   }
 
@@ -2135,7 +2174,7 @@ export default function HomePage() {
             s.id === currentSessionId ? updatedSession : s
           ))
         } catch (error) {
-          console.error('Failed to update session agent:', error)
+          devLog.error('Failed to update session agent:', error)
         }
       }
     }
@@ -2219,7 +2258,7 @@ export default function HomePage() {
             s.id === currentSessionId ? updatedSession : s
           ))
         } catch (error) {
-          console.error('Failed to update session tools:', error)
+          devLog.error('Failed to update session tools:', error)
         }
       }
     }
@@ -2252,7 +2291,7 @@ export default function HomePage() {
         return JSON.parse(saved)
       }
     } catch (error) {
-      console.error('Failed to parse current model:', error)
+      devLog.error('Failed to parse current model:', error)
     }
     return null
   }
@@ -2275,7 +2314,7 @@ export default function HomePage() {
     // Find the provider for the selected model
     const provider = MODEL_PROVIDERS.find(p => p.name === currentModel.provider)
     if (!provider) {
-      console.warn(`Provider ${currentModel.provider} not found, using default config`)
+      devLog.warn(`Provider ${currentModel.provider} not found, using default config`)
       return config
     }
 
@@ -2284,6 +2323,33 @@ export default function HomePage() {
       const apiKeysStr = localStorage.getItem('agent-playground-api-keys')
       const apiKeys = apiKeysStr ? JSON.parse(apiKeysStr) : {}
       const apiKey = apiKeys[provider.name] || ''
+
+      // For Azure OpenAI, we need to get the provider-specific config from localStorage/IndexedDB
+      // since it contains azureApiVersion and other Azure-specific settings
+      if (provider.name === 'Azure OpenAI') {
+        try {
+          const llmConfigStr = localStorage.getItem('agent-playground-llm-config')
+          const llmConfig = llmConfigStr ? JSON.parse(llmConfigStr) : {}
+          
+          // Get Azure-specific config from the current config if this is the selected provider
+          const endpoint = config.provider === provider.name ? config.endpoint : provider.endpoint
+          const azureApiVersion = config.provider === provider.name ? config.azureApiVersion : '2025-04-01-preview'
+          
+          return {
+            ...config,
+            provider: provider.name,
+            endpoint,
+            apiKey,
+            model: currentModel.model,
+            azureApiVersion: azureApiVersion || '2025-04-01-preview',
+            // Ensure GPT-5 specific parameters are included
+            reasoningEffort: config.reasoningEffort,
+            verbosity: config.verbosity
+          }
+        } catch (error) {
+          devLog.error('Failed to get Azure OpenAI config:', error)
+        }
+      }
 
       // Get endpoint from current config (which is updated by API config panel)
       // The API config panel updates the config state directly, so we should use that
@@ -2295,10 +2361,13 @@ export default function HomePage() {
         provider: provider.name,
         endpoint,
         apiKey,
-        model: currentModel.model
+        model: currentModel.model,
+        // Ensure GPT-5 specific parameters are included
+        reasoningEffort: config.reasoningEffort,
+        verbosity: config.verbosity
       }
     } catch (error) {
-      console.error('Failed to get current model config:', error)
+      devLog.error('Failed to get current model config:', error)
       return config
     }
   }
@@ -2362,7 +2431,7 @@ export default function HomePage() {
             try {
               const systemModelConfig = getSystemModelConfig()
               if (!systemModelConfig) {
-                console.log('No system model configured, skipping title generation')
+                devLog.log('No system model configured, skipping title generation')
                 return
               }
 
@@ -2386,11 +2455,11 @@ export default function HomePage() {
                 }
               }
             } catch (titleError) {
-              console.error('Failed to generate title from edited message:', titleError)
+              devLog.error('Failed to generate title from edited message:', titleError)
               // Title generation failure should never affect AI responses
             }
           })().catch(error => {
-            console.error('Title generation process failed:', error)
+            devLog.error('Title generation process failed:', error)
             // Completely isolated error handling
           })
         }, 100)
@@ -2418,7 +2487,7 @@ export default function HomePage() {
       // Get complete config for current model (includes correct endpoint and API key)
       const currentConfig = getCurrentModelConfig()
 
-      const client = new OpenAIClient(currentConfig, currentTools, currentConfig.provider)
+      const client = createClient(currentConfig, currentTools, currentConfig.provider)
 
       // For API call, use the messages before edit plus the new user message
       // Filter out any existing system messages from history to avoid conflicts
@@ -2589,11 +2658,11 @@ export default function HomePage() {
 
     } catch (error) {
       showToast('Failed to edit message.', 'error')
-      console.error('Failed to edit message:', error)
+      devLog.error('Failed to edit message:', error)
 
       // Don't show error message if request was aborted (user clicked stop)
       if (error instanceof Error && error.name === 'AbortError') {
-        console.log('Request was aborted by user')
+        devLog.log('Request was aborted by user')
       } else {
         // Create error message with retry capability
         const errorMessage: Message = {
@@ -2621,7 +2690,7 @@ export default function HomePage() {
                 s.id === currentSessionId ? sessionWithError : s
               ))
             } catch (saveError) {
-              console.error('Failed to save error message:', saveError)
+              devLog.error('Failed to save error message:', saveError)
             }
           }
         }
@@ -2679,7 +2748,7 @@ export default function HomePage() {
         await processAllToolResults(updatedSession)
       }
     } catch (error) {
-      console.error('Failed to save tool error:', error)
+      devLog.error('Failed to save tool error:', error)
     }
   }
 

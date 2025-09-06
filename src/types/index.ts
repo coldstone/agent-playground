@@ -33,6 +33,11 @@ export interface APIConfig {
   frequencyPenalty: number;
   presencePenalty: number;
   systemPrompt: string;
+  // Azure OpenAI specific fields
+  azureApiVersion?: string;
+  // GPT-5 specific fields
+  reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high';
+  verbosity?: 'low' | 'medium' | 'high';
 }
 
 export interface SavedAPIKeys {
@@ -50,7 +55,7 @@ export interface ModelProvider {
   defaultModel: string;
   requiresApiKey: boolean;
   docsLink: string;
-  client: 'openai' | 'anthropic';
+  client: 'openai' | 'anthropic' | 'azure-openai';
 }
 
 export interface AvailableModel {

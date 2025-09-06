@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { ToolCall, ToolCallExecution, Tool, HTTPRequestConfig, Authorization, Agent } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -91,7 +91,7 @@ export function ToolCallDisplay({
   const [isManuallyExpanded, setIsManuallyExpanded] = useState(false)
 
   // Initialize HTTP configuration when tool or authorization changes
-  useEffect(() => {
+  const { mergedHeaders, httpRequestUrl } = useMemo(() => {
     if (tool?.httpRequest) {
       // Get effective authorization for this tool
       const toolBindings = agent ? migrateAgentTools(agent) : []
@@ -99,11 +99,22 @@ export function ToolCallDisplay({
       const effectiveAuth = getEffectiveAuthorization(tool, authorizations, binding)
       
       // Merge tool headers with authorization headers
-      const mergedHeaders = getMergedHeaders(tool, effectiveAuth)
-      setHttpHeaders(mergedHeaders)
-      setHttpUrl(tool.httpRequest.url)
+      const headers = getMergedHeaders(tool, effectiveAuth)
+      return {
+        mergedHeaders: headers,
+        httpRequestUrl: tool.httpRequest.url
+      }
+    }
+    return {
+      mergedHeaders: [],
+      httpRequestUrl: ''
     }
   }, [tool, agent, authorizations])
+
+  useEffect(() => {
+    setHttpHeaders(mergedHeaders)
+    setHttpUrl(httpRequestUrl)
+  }, [mergedHeaders, httpRequestUrl])
 
   const handleProvideResult = () => {
     if (result.trim()) {

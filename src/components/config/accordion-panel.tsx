@@ -288,8 +288,8 @@ export function AccordionPanel({
         </div>
 
         {activePanel === 'llm' && (
-          <div className="border-t border-border flex-1 min-h-0 overflow-hidden">
-            <div className="h-full overflow-y-auto">
+          <div className="border-t border-border flex-1 min-h-0 overflow-visible">
+            <div className="h-full overflow-y-auto overflow-x-visible">
               <div className="p-4">
                 <APIConfigPanel
                   config={config}

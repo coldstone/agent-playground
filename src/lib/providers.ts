@@ -5,18 +5,30 @@ export interface Provider {
   defaultModel: string
   requiresApiKey: boolean
   docsLink: string
-  client: 'openai' | 'anthropic'
+  icon: string
+  client: 'openai' | 'anthropic' | 'azure-openai'
 }
 
 export const MODEL_PROVIDERS: Provider[] = [
   {
     name: 'OpenAI',
     endpoint: 'https://api.openai.com/v1/chat/completions',
-    models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'o1', 'o1-mini', 'o3', 'o3-mini', 'o4-mini'],
+    models: ['gpt-5', 'gpt-5-mini', 'gpt-5-nano', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-4o', 'gpt-4o-mini', 'o1', 'o1-mini', 'o3', 'o3-mini', 'o4-mini'],
     defaultModel: 'gpt-4o',
     requiresApiKey: true,
     docsLink: 'https://platform.openai.com/docs/api-reference/chat/create',
+    icon: 'llm-openai',
     client: 'openai'
+  },
+  {
+    name: 'Azure OpenAI',
+    endpoint: 'https://{resource-name}.openai.azure.com',
+    models: ['gpt-5', 'gpt-5-mini', 'gpt-5-nano', 'o3', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-4o', 'gpt-4o-mini'],
+    defaultModel: 'gpt-4o',
+    requiresApiKey: true,
+    docsLink: 'https://docs.microsoft.com/en-us/azure/cognitive-services/openai/reference',
+    icon: 'llm-azure-openai',
+    client: 'azure-openai'
   },
   {
     name: 'Deepseek',
@@ -25,6 +37,7 @@ export const MODEL_PROVIDERS: Provider[] = [
     defaultModel: 'deepseek-chat',
     requiresApiKey: true,
     docsLink: 'https://api-docs.deepseek.com/zh-cn/api/create-chat-completion',
+    icon: 'llm-deepseek',
     client: 'openai'
   },
   {
@@ -34,6 +47,7 @@ export const MODEL_PROVIDERS: Provider[] = [
     defaultModel: 'qwen-plus-latest',
     requiresApiKey: true,
     docsLink: 'https://help.aliyun.com/zh/model-studio/use-qwen-by-calling-api',
+    icon: 'llm-qwen',
     client: 'openai'
   },
   {
@@ -43,6 +57,7 @@ export const MODEL_PROVIDERS: Provider[] = [
     defaultModel: 'doubao-seed-1.6-250615',
     requiresApiKey: true,
     docsLink: 'https://www.volcengine.com/docs/82379/1494384',
+    icon: 'llm-doubao',
     client: 'openai'
   },
   {
@@ -52,6 +67,7 @@ export const MODEL_PROVIDERS: Provider[] = [
     defaultModel: 'ernie-4.5-turbo-128k',
     requiresApiKey: true,
     docsLink: 'https://cloud.baidu.com/doc/qianfan-api/s/3m7of64lb',
+    icon: 'llm-qianfan',
     client: 'openai'
   },
   {
@@ -61,6 +77,7 @@ export const MODEL_PROVIDERS: Provider[] = [
     defaultModel: '4.0Ultra',
     requiresApiKey: true,
     docsLink: 'https://www.xfyun.cn/doc/spark/HTTP调用文档.html',
+    icon: 'llm-spark',
     client: 'openai'
   },
   {
@@ -70,6 +87,7 @@ export const MODEL_PROVIDERS: Provider[] = [
     defaultModel: 'qwen3:8b',
     requiresApiKey: false,
     docsLink: 'https://github.com/jmorganca/ollama',
+    icon: 'llm-ollama',
     client: 'openai'
   },
   {
@@ -79,6 +97,7 @@ export const MODEL_PROVIDERS: Provider[] = [
     defaultModel: 'custom-model',
     requiresApiKey: true,
     docsLink: '',
+    icon: 'llm-custom',
     client: 'openai'
   }
 ]
@@ -90,7 +109,10 @@ export const DEFAULT_CONFIG = {
   topP: 1,
   frequencyPenalty: 0,
   presencePenalty: 0,
-  stream: true
+  stream: true,
+  // GPT-5 specific defaults
+  reasoningEffort: 'medium' as const,
+  verbosity: 'medium' as const
 }
 
 export interface ProviderCustomConfig {
@@ -98,4 +120,6 @@ export interface ProviderCustomConfig {
   endpoint?: string
   models?: string[]
   currentModel?: string
+  // Azure OpenAI specific fields
+  azureApiVersion?: string
 }
