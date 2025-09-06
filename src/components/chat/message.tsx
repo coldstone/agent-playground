@@ -8,7 +8,9 @@ import { MessageContent } from '@/components/markdown'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Tooltip } from '@/components/ui/tooltip'
+import { MODEL_PROVIDERS } from '@/lib/providers'
 import { User, Bot, Settings, Wrench, RefreshCw, Trash2, Edit2, Check, X, Atom, Brain, Cpu, Zap, Text, Code, Copy, ChevronDown, ChevronUp } from 'lucide-react'
+import { devLog } from '@/lib/dev-utils'
 
 // Code block component for displaying tool results
 function CodeBlock({ content, language = 'json' }: { content: string; language?: string }) {
@@ -21,7 +23,7 @@ function CodeBlock({ content, language = 'json' }: { content: string; language?:
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch (err) {
-      console.error('Failed to copy text: ', err)
+      devLog.error('Failed to copy text: ', err)
     }
   }
 
@@ -134,6 +136,7 @@ export function Message({
   const [showMarkdown, setShowMarkdown] = useState(true)
   const [isCopied, setIsCopied] = useState(false)
 
+
   const isUser = message.role === 'user'
   const isSystem = message.role === 'system'
   const isTool = message.role === 'tool'
@@ -169,6 +172,7 @@ export function Message({
     try {
       let contentToCopy = message.content
 
+
       // If showing markdown, copy the formatted content
       // If showing raw text, copy the raw content
       if (showMarkdown) {
@@ -184,7 +188,7 @@ export function Message({
       setIsCopied(true)
       setTimeout(() => setIsCopied(false), 2000)
     } catch (err) {
-      console.error('Failed to copy content: ', err)
+      devLog.error('Failed to copy content: ', err)
     }
   }
 
@@ -212,11 +216,22 @@ export function Message({
   const getModelIcon = (provider?: string) => {
     if (!provider) return <Cpu className="w-3 h-3" />
 
-    const providerLower = provider.toLowerCase()
-    if (providerLower.includes('openai')) return <Brain className="w-3 h-3" />
-    if (providerLower.includes('deepseek')) return <Atom className="w-3 h-3" />
-    if (providerLower.includes('claude') || providerLower.includes('anthropic')) return <Zap className="w-3 h-3" />
-    return <Cpu className="w-3 h-3" />
+    // 从 providers.ts 中查找匹配的提供商配置
+    const providerConfig = MODEL_PROVIDERS.find(p => p.name === provider)
+    
+    if (providerConfig && providerConfig.icon) {
+      // 使用 providers.ts 中定义的 SVG 图标
+      return (
+        <img 
+          src={`/${providerConfig.icon}.svg`}
+          alt={provider}
+          className="w-3 h-3 opacity-60"
+        />
+      )
+    }
+
+    // 如果没有找到配置，使用默认图标
+    return <Cpu className="w-3 h-3 opacity-60" />
   }
 
   const getModelTooltip = (provider?: string, model?: string) => {

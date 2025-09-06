@@ -11,14 +11,35 @@ interface ToastProps {
 }
 
 function Toast({ message, type, onClose }: ToastProps) {
-  const bgColor = {
-    error: 'red',
-    success: 'green',
-    info: 'blue'
-  }[type]
+  const getToastStyles = () => {
+    switch (type) {
+      case 'error':
+        return {
+          container: 'bg-white border border-red-300 text-red-700',
+          button: 'hover:bg-red-200 hover:text-red-700'
+        }
+      case 'success':
+        return {
+          container: 'bg-white border border-green-300 text-green-700',
+          button: 'hover:bg-green-200 hover:text-green-700'
+        }
+      case 'info':
+        return {
+          container: 'bg-white border border-blue-300 text-blue-700',
+          button: 'hover:bg-blue-200 hover:text-blue-700'
+        }
+      default:
+        return {
+          container: 'bg-white border border-gray-300 text-gray-700',
+          button: 'hover:bg-gray-200 hover:text-gray-700'
+        }
+    }
+  }
+
+  const styles = getToastStyles()
 
   return (
-    <div className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-50 flex items-center gap-2 bg-${bgColor}-100 border border-${bgColor}-300 text-${bgColor}-700 px-4 py-2 rounded-full shadow-md animate-slide-down duration-300`}>
+    <div className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-2 rounded-full shadow-md animate-slide-down duration-300 ${styles.container}`}>
       <span className="text-sm font-medium shrink-0">{message}</span>
       <Button
         variant="ghost"
@@ -27,7 +48,7 @@ function Toast({ message, type, onClose }: ToastProps) {
           e.stopPropagation();
           onClose();
         }}
-        className={`h-6 w-6 p-0 hover:bg-${bgColor}-200 hover:text-${bgColor}-700`}
+        className={`h-6 w-6 p-0 ${styles.button}`}
       >
         <X className="h-4 w-4 shrink-0" />
       </Button>

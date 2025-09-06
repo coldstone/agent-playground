@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { Agent, Tool, Authorization, AgentToolBinding } from '@/types'
-import { X, Wrench, Save, Check, Tag, Plus, Sparkles, Key } from 'lucide-react'
+import { X, Wrench, Save, Check, Tag, Plus, Sparkles, Key, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CustomSelect } from '@/components/ui/custom-select'
 import { Label } from '@/components/ui/label'
@@ -30,6 +30,7 @@ export function AgentToolsModal({ isOpen, onClose, agent, allTools, authorizatio
   const [initialToolBindings, setInitialToolBindings] = useState<AgentToolBinding[]>([])
   const [isSaving, setIsSaving] = useState(false)
   const [selectedTag, setSelectedTag] = useState<string>('all')
+  const [searchQuery, setSearchQuery] = useState('')
   const [showCreateToolModal, setShowCreateToolModal] = useState(false)
   const [showGeneratorModal, setShowGeneratorModal] = useState(false)
   const [isGeneratingTool, setIsGeneratingTool] = useState(false)
@@ -171,6 +172,14 @@ export function AgentToolsModal({ isOpen, onClose, agent, allTools, authorizatio
 
   // 过滤工具
   const filteredTools = allTools.filter(tool => {
+    // Filter by search query
+    const matchesSearch = searchQuery === '' || 
+      tool.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      tool.description.toLowerCase().includes(searchQuery.toLowerCase())
+    
+    if (!matchesSearch) return false
+    
+    // Filter by tag
     if (selectedTag === 'all') return true
     if (selectedTag === 'untagged') return !tool.tag
     return tool.tag === selectedTag
@@ -286,13 +295,34 @@ export function AgentToolsModal({ isOpen, onClose, agent, allTools, authorizatio
               <p className="text-sm text-gray-600 mb-3">
                 Select the tools that this agent can use. Tools provide additional capabilities like API calls, data processing, and external integrations.
               </p>
+              {/* Search Box */}
+              <div className="relative">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search tools by name or description..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
             </div>
 
             {filteredTools.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
                 <Wrench className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p>No tools in this category</p>
-                <p className="text-sm">Try selecting a different category or create new tools</p>
+                <p>
+                  {searchQuery ? 
+                    `No tools match "${searchQuery}"` : 
+                    'No tools in this category'
+                  }
+                </p>
+                <p className="text-sm">
+                  {searchQuery ? 
+                    'Try different search terms or create new tools' :
+                    'Try selecting a different category or create new tools'
+                  }
+                </p>
               </div>
             ) : (
               <div className="space-y-4">

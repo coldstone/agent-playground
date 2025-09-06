@@ -33,6 +33,11 @@ export interface APIConfig {
   frequencyPenalty: number;
   presencePenalty: number;
   systemPrompt: string;
+  // Azure OpenAI specific fields
+  azureApiVersion?: string;
+  // GPT-5 specific fields
+  reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high';
+  verbosity?: 'low' | 'medium' | 'high';
 }
 
 export interface SavedAPIKeys {
@@ -50,7 +55,7 @@ export interface ModelProvider {
   defaultModel: string;
   requiresApiKey: boolean;
   docsLink: string;
-  client: 'openai' | 'anthropic';
+  client: 'openai' | 'anthropic' | 'azure-openai';
 }
 
 export interface AvailableModel {
@@ -144,6 +149,7 @@ export interface Agent {
   tools: string[]; // Store tool IDs instead of full Tool objects (legacy)
   toolBindings?: AgentToolBinding[]; // New authorization-aware tool bindings
   order?: number; // For drag and drop ordering
+  visible?: boolean; // Controls visibility in chat overlay (defaults to true)
   createdAt: number;
   updatedAt: number;
 }

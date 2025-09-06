@@ -6,8 +6,9 @@ import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import rehypeHighlight from 'rehype-highlight'
 import rehypeKatex from 'rehype-katex'
-import { Copy, Check } from 'lucide-react'
+import { Copy, Check, WrapText } from 'lucide-react'
 import { processMarkdownText } from '@/lib/markdown-utils'
+import { useCodeWrap } from '@/hooks/use-code-wrap'
 
 // Import highlight.js styles
 import 'highlight.js/styles/github-dark.css'
@@ -62,6 +63,7 @@ const isActualCode = (content: string, language: string): boolean => {
 
 const MarkdownContentComponent = function MarkdownContent({ content, className = '' }: MarkdownContentProps) {
   const [copiedCode, setCopiedCode] = useState<string | null>(null)
+  const { isWrapEnabled, toggleWrap } = useCodeWrap()
 
   const copyToClipboard = async (text: string) => {
     try {
@@ -76,9 +78,15 @@ const MarkdownContentComponent = function MarkdownContent({ content, className =
   // Process the content to handle math expressions properly - 使用 useMemo 缓存
   const processedContent = useMemo(() => processMarkdownText(content), [content])
 
-  // 缓存插件配置
+  // 缓存插件配置 - 配置rehypeHighlight以避免处理问题
   const remarkPlugins = useMemo(() => [remarkGfm, remarkMath], [])
-  const rehypePlugins = useMemo(() => [rehypeHighlight, rehypeKatex], [])
+  const rehypePlugins = useMemo(() => [
+    [rehypeHighlight, { 
+      detect: false, // 禁用自动语言检测，可能导致问题
+      subset: false  // 不限制语言子集
+    }] as any, 
+    rehypeKatex
+  ] as any, [])
 
   // 缓存 ReactMarkdown 的 components 配置，避免每次重新创建
   const markdownComponents = useMemo(() => ({
@@ -92,13 +100,30 @@ const MarkdownContentComponent = function MarkdownContent({ content, className =
             if (node && node.children && node.children[0] && node.children[0].value) {
               // 优先从 AST node 中获取原始文本
               codeString = node.children[0].value
-            } else if (Array.isArray(children)) {
-              // 对于数组形式的children，递归提取文本内容
+            } else {
+              // 递归提取所有文本内容，包括嵌套结构中的文本
               const extractText = (element: any): string => {
                 if (typeof element === 'string') {
                   return element
                 }
-                if (element && element.props && element.props.children) {
+                if (typeof element === 'number') {
+                  return String(element)
+                }
+                if (React.isValidElement(element)) {
+                  // 如果是React元素，递归提取其children中的文本
+                  const props = element.props as any
+                  if (props && props.children) {
+                    if (Array.isArray(props.children)) {
+                      return props.children.map(extractText).join('')
+                    } else {
+                      return extractText(props.children)
+                    }
+                  }
+                }
+                if (Array.isArray(element)) {
+                  return element.map(extractText).join('')
+                }
+                if (element && typeof element === 'object' && element.props && element.props.children) {
                   if (Array.isArray(element.props.children)) {
                     return element.props.children.map(extractText).join('')
                   }
@@ -106,10 +131,15 @@ const MarkdownContentComponent = function MarkdownContent({ content, className =
                 }
                 return ''
               }
-              codeString = children.map(extractText).join('')
-            } else {
-              // 备用方案：直接转换为字符串
-              codeString = String(children).replace(/\n$/, '')
+
+              if (Array.isArray(children)) {
+                codeString = children.map(extractText).join('')
+              } else {
+                codeString = extractText(children)
+              }
+              
+              // 移除末尾的换行符（如果有的话）
+              codeString = codeString.replace(/\n$/, '')
             }
 
             const language = match ? match[1] : ''
@@ -123,34 +153,60 @@ const MarkdownContentComponent = function MarkdownContent({ content, className =
             // 检查是否为实际代码
             const isCode = isActualCode(codeString, language)
 
+
             return !inline ? (
               <div className="relative group my-4">
                 <div className="flex items-center justify-between bg-gray-800 text-gray-300 px-3 py-1.5 text-xs rounded-t-lg">
                   <span className="font-mono text-xs uppercase tracking-wide">
                     {language || 'plain'}
                   </span>
-                  <button
-                    onClick={() => copyToClipboard(codeString)}
-                    className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-700 hover:bg-gray-600 transition-colors opacity-0 group-hover:opacity-100"
-                    title="Copy code"
-                  >
-                    {copiedCode === codeString ? (
-                      <>
-                        <Check size={12} />
-                        <span className="text-xs">Copied</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy size={12} />
-                        <span className="text-xs">Copy</span>
-                      </>
-                    )}
-                  </button>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
+                    <button
+                      onClick={toggleWrap}
+                      className={`flex items-center gap-1 px-1.5 py-0.5 rounded transition-colors ${
+                        isWrapEnabled 
+                          ? 'bg-blue-600 hover:bg-blue-700' 
+                          : 'bg-gray-700 hover:bg-gray-600'
+                      }`}
+                      title={isWrapEnabled ? "Disable word wrap" : "Enable word wrap"}
+                    >
+                      <WrapText size={12} />
+                      <span className="text-xs">Wrap</span>
+                    </button>
+                    <button
+                      onClick={() => copyToClipboard(codeString)}
+                      className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-700 hover:bg-gray-600 transition-colors"
+                      title="Copy code"
+                    >
+                      {copiedCode === codeString ? (
+                        <>
+                          <Check size={12} />
+                          <span className="text-xs">Copied</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy size={12} />
+                          <span className="text-xs">Copy</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
                 <pre className={`bg-gray-900 text-gray-100 p-3 rounded-b-lg m-0 text-xs ${
-                  isCode ? 'overflow-x-auto' : 'whitespace-pre-wrap break-words overflow-wrap-anywhere'
+                  isWrapEnabled 
+                    ? 'whitespace-pre-wrap break-words overflow-wrap-anywhere text-left w-full' 
+                    : (isCode ? 'overflow-x-auto' : 'whitespace-pre-wrap break-words overflow-wrap-anywhere')
                 }`}>
-                  <code className={className} {...props}>
+                  <code 
+                    className={`${className} ${isWrapEnabled ? 'block w-full' : ''}`} 
+                    style={isWrapEnabled ? { 
+                      wordBreak: 'break-word',
+                      overflowWrap: 'break-word',
+                      width: '100%',
+                      display: 'block'
+                    } : {}}
+                    {...props}
+                  >
                     {children}
                   </code>
                 </pre>
@@ -328,6 +384,7 @@ const MarkdownContentComponent = function MarkdownContent({ content, className =
             </em>
           ),
   }), [copiedCode, copyToClipboard])
+
 
   return (
     <div className={`markdown-content ${className}`}>

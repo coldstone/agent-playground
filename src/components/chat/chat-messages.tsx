@@ -10,6 +10,7 @@ import { Atom, Bot, Text, Code, Trash2, Brain, Cpu, Zap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip } from '@/components/ui/tooltip'
 import { useSmartScroll } from '@/hooks/use-smart-scroll'
+import { MODEL_PROVIDERS } from '@/lib/providers'
 
 // Agent with resolved tools for display purposes
 type AgentWithTools = Omit<Agent, 'tools'> & {
@@ -516,13 +517,24 @@ function MergedMessageDisplay({
   }
 
   const getModelIcon = (provider?: string) => {
-    if (!provider) return <Cpu className="w-3 h-3" />
+    if (!provider) return <Cpu className="w-3 h-3 opacity-60" />
 
-    const providerLower = provider.toLowerCase()
-    if (providerLower.includes('openai')) return <Brain className="w-3 h-3" />
-    if (providerLower.includes('deepseek')) return <Atom className="w-3 h-3" />
-    if (providerLower.includes('claude') || providerLower.includes('anthropic')) return <Zap className="w-3 h-3" />
-    return <Cpu className="w-3 h-3" />
+    // 从 providers.ts 中查找匹配的提供商配置
+    const providerConfig = MODEL_PROVIDERS.find(p => p.name === provider)
+    
+    if (providerConfig && providerConfig.icon) {
+      // 使用 providers.ts 中定义的 SVG 图标
+      return (
+        <img 
+          src={`/${providerConfig.icon}.svg`}
+          alt={provider}
+          className="w-3 h-3 opacity-60"
+        />
+      )
+    }
+
+    // 如果没有找到配置，使用默认图标
+    return <Cpu className="w-3 h-3 opacity-60" />
   }
 
   const getModelTooltip = (provider?: string, model?: string) => {

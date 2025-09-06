@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { CustomSelect } from '@/components/ui/custom-select'
-import { Sparkles, Tag, Check, ChevronLeft, ChevronRight, Plus, Key } from 'lucide-react'
+import { Sparkles, Tag, Check, ChevronLeft, ChevronRight, Plus, Key, Search } from 'lucide-react'
 import { useSystemModel } from '@/hooks/use-system-model'
 import { InstructionGenerator, ToolGenerator } from '@/lib/generators'
 import { migrateAgentTools, getAvailableAuthorizations, getEffectiveAuthorization } from '@/lib/authorization'
@@ -51,6 +51,7 @@ export function AgentFormModal({
   const [aiPrompt, setAiPrompt] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
   const [selectedTag, setSelectedTag] = useState<string>('all')
+  const [searchQuery, setSearchQuery] = useState('')
   const [currentStep, setCurrentStep] = useState(1)
   const [showCreateToolModal, setShowCreateToolModal] = useState(false)
   const [showGeneratorModal, setShowGeneratorModal] = useState(false)
@@ -470,8 +471,27 @@ export function AgentFormModal({
 
                   {/* 右侧：工具列表 */}
                   <div className="flex-1 p-3 overflow-y-auto">
+                    {/* Search Box */}
+                    <div className="relative mb-3">
+                      <Search className="w-3 h-3 absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                      <input
+                        type="text"
+                        placeholder="Search tools..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full pl-7 pr-2 py-1 border border-gray-200 rounded text-xs focus:ring-1 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
                     {(() => {
                       const filteredTools = tools.filter(tool => {
+                        // Filter by search query
+                        const matchesSearch = searchQuery === '' || 
+                          tool.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          tool.description.toLowerCase().includes(searchQuery.toLowerCase())
+                        
+                        if (!matchesSearch) return false
+                        
+                        // Filter by tag
                         if (selectedTag === 'all') return true
                         if (selectedTag === 'untagged') return !tool.tag
                         return tool.tag === selectedTag
@@ -480,7 +500,10 @@ export function AgentFormModal({
                       if (filteredTools.length === 0) {
                         return (
                           <p className="text-sm text-muted-foreground text-center py-8">
-                            No tools in this category
+                            {searchQuery ? 
+                              `No tools match "${searchQuery}"` : 
+                              'No tools in this category'
+                            }
                           </p>
                         )
                       }

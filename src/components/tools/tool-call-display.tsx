@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { ToolCall, ToolCallExecution, Tool, HTTPRequestConfig, Authorization, Agent } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -91,7 +91,7 @@ export function ToolCallDisplay({
   const [isManuallyExpanded, setIsManuallyExpanded] = useState(false)
 
   // Initialize HTTP configuration when tool or authorization changes
-  useEffect(() => {
+  const { mergedHeaders, httpRequestUrl } = useMemo(() => {
     if (tool?.httpRequest) {
       // Get effective authorization for this tool
       const toolBindings = agent ? migrateAgentTools(agent) : []
@@ -99,11 +99,22 @@ export function ToolCallDisplay({
       const effectiveAuth = getEffectiveAuthorization(tool, authorizations, binding)
       
       // Merge tool headers with authorization headers
-      const mergedHeaders = getMergedHeaders(tool, effectiveAuth)
-      setHttpHeaders(mergedHeaders)
-      setHttpUrl(tool.httpRequest.url)
+      const headers = getMergedHeaders(tool, effectiveAuth)
+      return {
+        mergedHeaders: headers,
+        httpRequestUrl: tool.httpRequest.url
+      }
+    }
+    return {
+      mergedHeaders: [],
+      httpRequestUrl: ''
     }
   }, [tool, agent, authorizations])
+
+  useEffect(() => {
+    setHttpHeaders(mergedHeaders)
+    setHttpUrl(httpRequestUrl)
+  }, [mergedHeaders, httpRequestUrl])
 
   const handleProvideResult = () => {
     if (result.trim()) {
@@ -326,41 +337,40 @@ export function ToolCallDisplay({
   // Collapsed state for auto mode
   if (isCollapsed && !isManuallyExpanded) {
     return (
-      <div className={`rounded-lg border p-3 ${getStatusColor()} min-w-0 w-full`}>
-        <div className="flex items-center gap-3 min-w-0">
-          {/* Left side icon */}
+      <div className={`rounded-lg border p-4 ${getStatusColor()} min-w-0 w-full`}>
+        <div className="flex items-start gap-3 min-w-0">
           <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-white border">
             {getMainStatusIcon()}
           </div>
-          
-          {/* Content section */}
+
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1 text-xs text-gray-500 mb-1">
-              <span>Tool Call</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className={`text-sm font-medium ${execution?.status === 'failed' ? 'text-red-600' : 'text-purple-600'}`}>
-                {toolCall.function.name}
-              </span>
-              <span className={`text-xs ${getStatusTextColor()}`}>
-                {getStatusText()}
-                {execution && (
-                  <span className="ml-1">
-                    • {formatTimestamp(execution.timestamp)}
+            <div 
+              className="flex items-center justify-between cursor-pointer hover:bg-gray-50 hover:bg-opacity-60 rounded transition-all duration-200 -mx-1 px-1"
+              onClick={() => setIsManuallyExpanded(true)}
+            >
+              <div className="flex flex-col gap-1">
+                <div className="text-xs text-gray-500">Tool Call</div>
+                <div className="flex items-center gap-2">
+                  <span className={`text-sm font-medium ${execution?.status === 'failed' ? 'text-red-600' : 'text-purple-600'}`}>
+                    {toolCall.function.name}
                   </span>
-                )}
-              </span>
+                  <span className={`text-xs ${getStatusTextColor()}`}>
+                    {getStatusText()}
+                    {execution && (
+                      <span className="ml-1">
+                        • {formatTimestamp(execution.timestamp)}
+                      </span>
+                    )}
+                  </span>
+                </div>
+              </div>
+              
+              {/* Expand indicator */}
+              <div className="flex-shrink-0 w-6 h-6 flex items-center justify-center text-gray-400 transition-colors">
+                <ChevronDown className="w-4 h-4" />
+              </div>
             </div>
           </div>
-          
-          {/* Expand button */}
-          <button
-            onClick={() => setIsManuallyExpanded(true)}
-            className="flex-shrink-0 w-6 h-6 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors"
-            title="Expand tool call"
-          >
-            <ChevronDown className="w-4 h-4" />
-          </button>
         </div>
       </div>
     )
@@ -374,7 +384,10 @@ export function ToolCallDisplay({
         </div>
 
         <div className="flex-1 space-y-3 min-w-0">
-          <div className="flex items-center justify-between">
+          <div 
+            className="flex items-center justify-between cursor-pointer hover:bg-gray-50 hover:bg-opacity-60 rounded transition-all duration-200 -mx-1 px-1"
+            onClick={isCollapsed && isManuallyExpanded ? () => setIsManuallyExpanded(false) : undefined}
+          >
             <div className="flex flex-col gap-1">
               <div className="text-xs text-gray-500">Tool Call</div>
               <div className="flex items-center gap-2">
@@ -391,15 +404,15 @@ export function ToolCallDisplay({
                 </span>
               </div>
             </div>
-            {/* Collapse button for manually expanded cards */}
-            {isCollapsed && isManuallyExpanded && (
-              <button
-                onClick={() => setIsManuallyExpanded(false)}
-                className="flex-shrink-0 w-6 h-6 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors"
-                title="Collapse tool call"
-              >
+            {/* Collapse indicator for manually expanded cards */}
+            {isCollapsed && isManuallyExpanded ? (
+              <div className="flex-shrink-0 w-6 h-6 flex items-center justify-center text-gray-400 transition-colors">
                 <ChevronUp className="w-4 h-4" />
-              </button>
+              </div>
+            ) : (
+              <div className="flex-shrink-0 w-6 h-6 flex items-center justify-center text-transparent">
+                <ChevronUp className="w-4 h-4" />
+              </div>
             )}
           </div>
 

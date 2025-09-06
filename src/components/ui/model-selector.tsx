@@ -4,6 +4,8 @@ import React, { useState, useEffect, useRef } from 'react'
 import { CurrentModel, AvailableModel } from '@/types'
 import { ChevronDown } from 'lucide-react'
 import { useAvailableModels } from '@/hooks/use-available-models'
+import { devLog } from '@/lib/dev-utils'
+import { MODEL_PROVIDERS } from '@/lib/providers'
 
 interface ModelSelectorProps {
   onConfigLLM?: () => void
@@ -42,7 +44,7 @@ export function ModelSelector({ onConfigLLM, autoMode = false, onAutoModeChange,
         const parsed = JSON.parse(saved)
         setCurrentModel(parsed)
       } catch (error) {
-        console.error('Failed to parse current model:', error)
+        devLog.error('Failed to parse current model:', error)
       }
     }
   }
@@ -89,7 +91,7 @@ export function ModelSelector({ onConfigLLM, autoMode = false, onAutoModeChange,
       return 'Select Model'
     }
 
-    return model.displayName
+    return model.model
   }
 
 
@@ -101,6 +103,24 @@ export function ModelSelector({ onConfigLLM, autoMode = false, onAutoModeChange,
           onClick={() => setIsOpen(!isOpen)}
           className="flex items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors border-none bg-gray-100 rounded-full"
         >
+          {currentModel && (() => {
+            const model = availableModels.find(
+              m => m.provider === currentModel.provider && m.model === currentModel.model
+            )
+            if (model) {
+              const providerConfig = MODEL_PROVIDERS.find(p => p.name === model.provider)
+              if (providerConfig && providerConfig.icon) {
+                return (
+                  <img 
+                    src={`/${providerConfig.icon}.svg`}
+                    alt={model.provider}
+                    className="w-3 h-3 flex-shrink-0"
+                  />
+                )
+              }
+            }
+            return null
+          })()}
           <span className="truncate max-w-[240px]">
             {getCurrentModelDisplay()}
           </span>

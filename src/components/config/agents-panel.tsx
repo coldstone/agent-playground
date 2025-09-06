@@ -17,9 +17,11 @@ interface AgentsPanelProps {
   agents: Agent[]
   tools: Tool[]
   authorizations: Authorization[]
+  currentAgentId?: string | null
   onAgentUpdate: (agentId: string, updates: Partial<Agent>) => void
   onAgentDelete: (agentId: string) => void
   onAgentReorder: (agents: Agent[]) => void
+  onAgentClearSelection?: () => void
   onToolCreate: (tool: Tool) => void
   apiConfig: any
 }
@@ -32,6 +34,7 @@ interface DraggableAgentCardProps {
   onDelete: (agent: Agent) => void
   onEditInstruction: (agent: Agent) => void
   onManageTools: (agent: Agent) => void
+  onToggleVisibility: (agent: Agent) => void
 }
 
 function DraggableAgentCard({
@@ -41,7 +44,8 @@ function DraggableAgentCard({
   onEdit,
   onDelete,
   onEditInstruction,
-  onManageTools
+  onManageTools,
+  onToggleVisibility
 }: DraggableAgentCardProps) {
   const ref = React.useRef<HTMLDivElement>(null)
 
@@ -116,7 +120,31 @@ function DraggableAgentCard({
 
         <div className="flex-1 flex flex-col gap-2">
           <div className="flex-1">
-            <h5 className="font-medium text-sm">{agent.name}</h5>
+            <div className="flex items-start justify-between mb-1">
+              <h5 className="font-medium text-sm">{agent.name}</h5>
+              {/* Mini visibility switch */}
+              <label 
+                className="relative inline-flex items-center cursor-pointer"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <input
+                  type="checkbox"
+                  checked={agent.visible !== false} // default to true if undefined
+                  onChange={(e) => {
+                    e.stopPropagation()
+                    onToggleVisibility(agent)
+                  }}
+                  className="sr-only"
+                />
+                <div className={`w-7 h-4 rounded-full transition-colors ${
+                  agent.visible !== false ? 'bg-green-500' : 'bg-gray-300'
+                }`}>
+                  <div className={`w-3 h-3 bg-white rounded-full shadow transform transition-transform ${
+                    agent.visible !== false ? 'translate-x-3.5' : 'translate-x-0.5'
+                  } mt-0.5`} />
+                </div>
+              </label>
+            </div>
             <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
               {agent.description}
             </p>
@@ -171,9 +199,11 @@ export function AgentsPanel({
   agents,
   tools,
   authorizations,
+  currentAgentId,
   onAgentUpdate,
   onAgentDelete,
   onAgentReorder,
+  onAgentClearSelection,
   onToolCreate,
   apiConfig
 }: AgentsPanelProps) {
@@ -254,6 +284,17 @@ export function AgentsPanel({
     setSelectedAgent(null)
   }
 
+  const handleToggleVisibility = (agent: Agent) => {
+    const newVisibility = agent.visible === false
+    
+    // If we're hiding the current selected agent, clear the selection
+    if (!newVisibility && currentAgentId === agent.id && onAgentClearSelection) {
+      onAgentClearSelection()
+    }
+    
+    onAgentUpdate(agent.id, { visible: newVisibility })
+  }
+
   return (
     <DndProvider backend={HTML5Backend}>
       <div className="space-y-3">
@@ -277,6 +318,7 @@ export function AgentsPanel({
                 onDelete={handleDeleteClick}
                 onEditInstruction={handleInstructionClick}
                 onManageTools={handleToolsClick}
+                onToggleVisibility={handleToggleVisibility}
               />
             ))}
           </div>

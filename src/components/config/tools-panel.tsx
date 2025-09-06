@@ -3,6 +3,7 @@
 import React, { useState, forwardRef, useImperativeHandle, useMemo } from 'react'
 import { APIConfig, Tool } from '@/types'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { HttpRequestModal as HTTPRequestModal } from '@/components/modals'
 import { ToolGeneratorModal } from '@/components/tools/tool-generator-modal'
@@ -18,6 +19,8 @@ import {
   Globe,
   Wrench as ToolIcon,
   Tag,
+  Search,
+  X,
 } from 'lucide-react'
 
 interface ToolsPanelProps {
@@ -52,6 +55,7 @@ export const ToolsPanel = forwardRef<ToolsPanelRef, ToolsPanelProps>(({
   const [editingTool, setEditingTool] = useState<Tool | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [selectedTag, setSelectedTag] = useState<string>('all')
+  const [searchQuery, setSearchQuery] = useState<string>('')
   const [generatedToolData, setGeneratedToolData] = useState<{
     name: string
     description: string
@@ -165,23 +169,30 @@ export const ToolsPanel = forwardRef<ToolsPanelRef, ToolsPanelProps>(({
 
   // 按标签分组工具
   const groupedTools = useMemo(() => {
+    // First apply search filter
+    const filteredTools = searchQuery.trim() 
+      ? tools.filter(tool => 
+          tool.name.toLowerCase().includes(searchQuery.toLowerCase())
+        )
+      : tools
+
     if (selectedTag !== 'all') {
       // 如果选择了特定标签，只显示该标签下的工具
-      const filteredTools = tools.filter(tool => {
+      const tagFilteredTools = filteredTools.filter(tool => {
         if (selectedTag === 'untagged') return !tool.tag
         return tool.tag === selectedTag
       })
-      return { [selectedTag]: filteredTools.sort((a, b) => a.name.localeCompare(b.name)) }
+      return { [selectedTag]: tagFilteredTools.sort((a, b) => a.name.localeCompare(b.name)) }
     }
 
     // 显示所有工具，按标签分组（不包含All组）
     const groups: Record<string, Tool[]> = {}
 
     // 获取所有唯一标签并排序
-    const allTags = Array.from(new Set(tools.map(t => t.tag).filter(Boolean))).sort()
+    const allTags = Array.from(new Set(filteredTools.map(t => t.tag).filter(Boolean))).sort()
 
     // Untagged 组
-    const untaggedTools = tools.filter(t => !t.tag).sort((a, b) => a.name.localeCompare(b.name))
+    const untaggedTools = filteredTools.filter(t => !t.tag).sort((a, b) => a.name.localeCompare(b.name))
     if (untaggedTools.length > 0) {
       groups['Untagged'] = untaggedTools
     }
@@ -189,7 +200,7 @@ export const ToolsPanel = forwardRef<ToolsPanelRef, ToolsPanelProps>(({
     // 各个标签组
     allTags.forEach(tag => {
       if (tag) {
-        const taggedTools = tools.filter(t => t.tag === tag).sort((a, b) => a.name.localeCompare(b.name))
+        const taggedTools = filteredTools.filter(t => t.tag === tag).sort((a, b) => a.name.localeCompare(b.name))
         if (taggedTools.length > 0) {
           groups[tag] = taggedTools
         }
@@ -197,11 +208,33 @@ export const ToolsPanel = forwardRef<ToolsPanelRef, ToolsPanelProps>(({
     })
 
     return groups
-  }, [tools, selectedTag])
+  }, [tools, selectedTag, searchQuery])
 
   return (
     <>
       <div className="space-y-3">
+        {/* 搜索框 */}
+        <div className="relative">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <Search className="h-4 w-4 text-muted-foreground" />
+          </div>
+          <Input
+            type="text"
+            placeholder="Search tools by name..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10 pr-10"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute inset-y-0 right-0 pr-3 flex items-center hover:text-foreground transition-colors"
+            >
+              <X className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+            </button>
+          )}
+        </div>
+
         {/* 标签过滤器 */}
         <div className="flex gap-2">
           <Select value={selectedTag} onValueChange={setSelectedTag}>

@@ -1,5 +1,6 @@
 import { APIConfig, ToolSchema } from '@/types'
-import { OpenAIClient } from '@/lib/clients'
+import { createClient } from '@/lib/client-factory'
+import { devLog } from '@/lib/dev-utils'
 
 export interface GeneratedTool {
   name: string
@@ -21,7 +22,7 @@ export class ToolGenerator {
       throw new Error('Invalid prompt or API configuration')
     }
 
-    const client = new OpenAIClient(this.config, [], this.provider)
+    const client = createClient(this.config, [], this.provider)
 
     const systemPrompt = `You are an expert at creating OpenAI function calling tools. Your task is to generate a tool definition based on the user's description.
 
@@ -95,7 +96,7 @@ Respond ONLY with the JSON object, no additional text or formatting.`
 
       return generatedTool
     } catch (error) {
-      console.error('Tool generation error:', error)
+      devLog.error('Tool generation error:', error)
       throw error
     }
   }

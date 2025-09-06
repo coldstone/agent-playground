@@ -270,10 +270,34 @@ export function CustomSelect({
       {/* Dropdown */}
       {isOpen && (
         <div
-          className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-md shadow-lg max-h-60 overflow-auto"
+          ref={listRef}
+          className="fixed z-[9999] w-full bg-popover border border-border rounded-md shadow-lg max-h-60 overflow-auto"
+          style={(() => {
+            if (!selectRef.current) return {}
+            
+            const rect = selectRef.current.getBoundingClientRect()
+            const spaceBelow = window.innerHeight - rect.bottom
+            const spaceAbove = rect.top
+            const shouldDropUp = spaceBelow < 120 && spaceAbove > spaceBelow
+            
+            // 估算实际内容高度（选项数量 * 大概高度）
+            const optionCount = groups.length > 0 
+              ? groups.reduce((acc, g) => acc + g.options.length, 0)
+              : options.length
+            const estimatedHeight = Math.min(optionCount * 40 + 16, 240) // 每个选项约40px高度，最大240px
+            
+            return {
+              top: shouldDropUp 
+                ? rect.top - estimatedHeight + 22
+                : rect.bottom + 2,
+              left: rect.left,
+              width: rect.width,
+              maxHeight: shouldDropUp ? Math.min(240, spaceAbove - 8) : Math.min(240, spaceBelow - 8)
+            }
+          })()}
           onMouseEnter={() => setKeyboardNavigation(false)}
         >
-          <div ref={listRef}>
+          <div>
             {groups.length > 0 ? (
               // Render grouped options
               groups.map((group, groupIndex) => (
