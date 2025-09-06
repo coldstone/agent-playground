@@ -7,11 +7,13 @@ import { CheckCircle, XCircle, AlertCircle, Loader2 } from 'lucide-react'
 
 interface StatusIndicatorProps {
   config: APIConfig
+  selectedModels?: string[]
+  providerName?: string
 }
 
 type ConnectionStatus = 'idle' | 'testing' | 'connected' | 'error'
 
-export function StatusIndicator({ config }: StatusIndicatorProps) {
+export function StatusIndicator({ config, selectedModels = [], providerName = '' }: StatusIndicatorProps) {
   const [status, setStatus] = useState<ConnectionStatus>('idle')
   const [errorMessage, setErrorMessage] = useState('')
 
@@ -26,23 +28,83 @@ export function StatusIndicator({ config }: StatusIndicatorProps) {
     setErrorMessage('')
 
     try {
-      const testPayload = {
-        model: config.model || 'gpt-3.5-turbo',
-        messages: [{ role: 'user', content: 'test' }],
-        max_tokens: 1,
-        stream: false
+      let testPayload: any
+      let headers: Record<string, string>
+      let testEndpoint: string
+
+      if (providerName === 'Azure OpenAI') {
+        // Azure OpenAI specific logic
+        const firstSelectedModel = selectedModels.length > 0 ? selectedModels[0] : config.model || 'gpt-35-turbo'
+        
+        if (!config.azureApiVersion) {
+          setStatus('error')
+          setErrorMessage('Azure API version not configured')
+          return
+        }
+
+        // Build Azure OpenAI endpoint
+        let resourceEndpoint = config.endpoint
+        
+        // Remove protocol if present
+        if (resourceEndpoint.startsWith('https://')) {
+          resourceEndpoint = resourceEndpoint.substring(8)
+        } else if (resourceEndpoint.startsWith('http://')) {
+          resourceEndpoint = resourceEndpoint.substring(7)
+        }
+        
+        // Remove any trailing path
+        resourceEndpoint = resourceEndpoint.split('/')[0]
+        
+        // If it doesn't include the full domain, add it
+        if (!resourceEndpoint.includes('.openai.azure.com')) {
+          resourceEndpoint = `${resourceEndpoint}.openai.azure.com`
+        }
+
+        testEndpoint = `https://${resourceEndpoint}/openai/deployments/${firstSelectedModel}/chat/completions?api-version=${config.azureApiVersion}`
+        
+        // Check if model should exclude temperature and top_p
+        const modelName = firstSelectedModel.toLowerCase()
+        const shouldExcludeAdvancedParams = modelName.startsWith('o') || modelName.startsWith('gpt-5')
+        
+        testPayload = {
+          // Azure OpenAI doesn't need model parameter
+          messages: [{ role: 'user', content: 'test' }],
+          max_completion_tokens: 4, // Minimum for Azure OpenAI
+          stream: false
+        }
+        
+        // Only add temperature and top_p for models that support them
+        if (!shouldExcludeAdvancedParams) {
+          testPayload.temperature = 0.7
+          testPayload.top_p = 1
+        }
+
+        headers = {
+          'Content-Type': 'application/json',
+          'api-key': config.apiKey // Azure uses api-key header
+        }
+      } else {
+        // Standard OpenAI-compatible logic
+        testPayload = {
+          model: config.model || 'gpt-3.5-turbo',
+          messages: [{ role: 'user', content: 'test' }],
+          max_tokens: 1,
+          stream: false
+        }
+
+        headers = {
+          'Content-Type': 'application/json'
+        }
+
+        // Only add Authorization header if API key is provided
+        if (config.apiKey.trim()) {
+          headers['Authorization'] = `Bearer ${config.apiKey}`
+        }
+
+        testEndpoint = config.endpoint
       }
 
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json'
-      }
-
-      // Only add Authorization header if API key is provided
-      if (config.apiKey.trim()) {
-        headers['Authorization'] = `Bearer ${config.apiKey}`
-      }
-
-      const response = await fetch(config.endpoint, {
+      const response = await fetch(testEndpoint, {
         method: 'POST',
         headers,
         body: JSON.stringify(testPayload),

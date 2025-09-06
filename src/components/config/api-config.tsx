@@ -10,7 +10,6 @@ import { CustomSelect } from '@/components/ui/custom-select'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Slider } from '@/components/ui/slider'
-import { SystemModelSelector } from '@/components/ui/system-model-selector'
 import { StatusIndicator } from './status-indicator'
 import { Settings, Eye, EyeOff, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react'
 
@@ -29,11 +28,42 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
   const [editingModels, setEditingModels] = useState('')
   const [selectedModels, setSelectedModels] = useState<string[]>([])
   const [availableModels, setAvailableModels] = useState<AvailableModel[]>([])
+  const [currentChatModel, setCurrentChatModel] = useState<any>(null)
 
   useEffect(() => {
     setIsClient(true)
     loadProviderConfigs()
+    
+    // Load initial current chat model
+    setCurrentChatModel(getCurrentChatModel())
   }, [])
+
+  // Listen for changes to current model in localStorage
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'agent-playground-current-model') {
+        setCurrentChatModel(getCurrentChatModel())
+      }
+    }
+
+    // Listen for storage events from other tabs
+    window.addEventListener('storage', handleStorageChange)
+    
+    // Also listen for changes in the same tab by polling (since storage events don't fire in the same tab)
+    const interval = setInterval(() => {
+      const newModel = getCurrentChatModel()
+      const currentModelStr = JSON.stringify(currentChatModel)
+      const newModelStr = JSON.stringify(newModel)
+      if (currentModelStr !== newModelStr) {
+        setCurrentChatModel(newModel)
+      }
+    }, 1000)
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange)
+      clearInterval(interval)
+    }
+  }, [currentChatModel])
 
   useEffect(() => {
     // Find provider by name from config, fallback to first provider if not found
@@ -93,21 +123,18 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
       // Add model
       newSelectedModels = [...selectedModels, model]
 
-      // Add to available models if API key is configured
-      const hasApiKey = config.apiKey && config.apiKey.trim() !== ''
-      if (!selectedProvider.requiresApiKey || hasApiKey) {
-        const availableModel: AvailableModel = {
-          id: `${selectedProvider.name}-${model}`,
-          provider: selectedProvider.name,
-          model: model,
-          displayName: `${selectedProvider.name} - ${model}`
-        }
+      // Always add to available models when user selects it
+      const availableModel: AvailableModel = {
+        id: `${selectedProvider.name}-${model}`,
+        provider: selectedProvider.name,
+        model: model,
+        displayName: `${selectedProvider.name} - ${model}`
+      }
 
-        try {
-          await dbManager.saveAvailableModel(availableModel)
-        } catch (error) {
-          console.error('Failed to save available model:', error)
-        }
+      try {
+        await dbManager.saveAvailableModel(availableModel)
+      } catch (error) {
+        console.error('Failed to save available model:', error)
       }
     }
 
@@ -141,6 +168,16 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
           model: providerConfig?.currentModel || 'custom-model',
           apiKey
         })
+      } else if (provider.name === 'Azure OpenAI') {
+        // For Azure OpenAI, load Azure-specific fields from provider config
+        onConfigChange({
+          ...config,
+          provider: provider.name,
+          endpoint: providerConfig?.endpoint || '',
+          model: providerConfig?.currentModel || provider.defaultModel,
+          apiKey,
+          azureApiVersion: (providerConfig as any)?.azureApiVersion || '2025-04-01-preview'
+        })
       } else {
         onConfigChange({
           ...config,
@@ -172,38 +209,18 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
           apiKeys[selectedProvider.name] = value
           localStorage.setItem('agent-playground-api-keys', JSON.stringify(apiKeys))
 
-          // Update available models based on API key presence
-          if (value && value.trim() !== '') {
-            // API key added - add selected models to available models
-            for (const model of selectedModels) {
-              const availableModel: AvailableModel = {
-                id: `${selectedProvider.name}-${model}`,
-                provider: selectedProvider.name,
-                model: model,
-                displayName: `${selectedProvider.name} - ${model}`
-              }
-              try {
-                await dbManager.saveAvailableModel(availableModel)
-              } catch (error) {
-                console.error('Failed to save available model:', error)
-              }
-            }
-          } else {
-            // API key removed - remove all models for this provider
-            try {
-              await dbManager.deleteAvailableModelsByProvider(selectedProvider.name)
-            } catch (error) {
-              console.error('Failed to delete available models:', error)
-            }
-          }
-
-          // Reload available models
+          // API key changes shouldn't affect which models are available
+          // Models are controlled by user selection in Available Deployments, not API key presence
+          // Reload available models to ensure consistency
           await loadAvailableModels()
         } else if (field === 'endpoint') {
           await saveProviderConfig({ endpoint: value })
         } else if (field === 'model') {
           await saveProviderConfig({ currentModel: value })
-        } else if (['systemPrompt', 'temperature', 'maxTokens', 'topP', 'frequencyPenalty', 'presencePenalty'].includes(field)) {
+        } else if (['azureApiVersion'].includes(field)) {
+          // Save Azure OpenAI specific fields to provider config
+          await saveProviderConfig({ [field]: value })
+        } else if (['systemPrompt', 'temperature', 'maxTokens', 'topP', 'frequencyPenalty', 'presencePenalty', 'reasoningEffort', 'verbosity'].includes(field)) {
           // Save common settings to consolidated storage
           const llmConfigStr = localStorage.getItem('agent-playground-llm-config')
           const llmConfig = llmConfigStr ? JSON.parse(llmConfigStr) : {}
@@ -238,6 +255,34 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
   const getCurrentModels = () => {
     const customConfig = getCurrentProviderConfig()
     return customConfig?.models || selectedProvider.models
+  }
+
+  // Get current model from chat interface (not config panel)
+  const getCurrentChatModel = () => {
+    if (typeof window === 'undefined') {
+      return null
+    }
+    try {
+      const saved = localStorage.getItem('agent-playground-current-model')
+      if (saved) {
+        return JSON.parse(saved)
+      }
+    } catch (error) {
+      console.error('Failed to parse current model:', error)
+    }
+    return null
+  }
+
+  // Check if current model should hide temperature and top_p
+  const shouldHideAdvancedParams = () => {
+    const currentModel = currentChatModel?.model?.toLowerCase() || ''
+    return currentModel.startsWith('o') || currentModel.startsWith('gpt-5')
+  }
+
+  // Check if current model is GPT-5 and should show GPT-5 specific params
+  const shouldShowGPT5Params = () => {
+    const currentModel = currentChatModel?.model?.toLowerCase() || ''
+    return currentModel.startsWith('gpt-5')
   }
 
   const getModelGroups = () => {
@@ -324,9 +369,6 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
     <div className="space-y-4">{/* Remove wrapper div, will be handled by parent */}
 
       <div className="space-y-4">
-        {/* System Model Selector */}
-        <SystemModelSelector />
-
         {/* Provider Selection */}
         <div className="space-y-2">
           <Label htmlFor="provider">Provider</Label>
@@ -362,15 +404,32 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
             id="endpoint"
             value={config.endpoint}
             onChange={(e) => handleConfigChange('endpoint', e.target.value)}
-            placeholder={selectedProvider.name === 'Custom' ? 'https://api.example.com/v1/chat/completions' : selectedProvider.endpoint}
+            placeholder={selectedProvider.name === 'Azure OpenAI' ? 'https://your-resource-name.openai.azure.com' : 
+                        selectedProvider.name === 'Custom' ? 'https://api.example.com/v1/chat/completions' : 
+                        selectedProvider.endpoint}
           />
         </div>
+
+        {/* Azure OpenAI specific fields */}
+        {selectedProvider.name === 'Azure OpenAI' && (
+          <div className="space-y-2">
+            <Label htmlFor="azureApiVersion">API Version</Label>
+            <Input
+              id="azureApiVersion"
+              value={config.azureApiVersion || '2025-04-01-preview'}
+              onChange={(e) => handleConfigChange('azureApiVersion', e.target.value)}
+              placeholder="2025-04-01-preview"
+            />
+          </div>
+        )}
 
         {/* API Key */}
         {selectedProvider.requiresApiKey && (
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label htmlFor="apiKey">API Key</Label>
+              <Label htmlFor="apiKey">
+                {selectedProvider.name === 'Azure OpenAI' ? 'API Key' : 'API Key'}
+              </Label>
               {config.apiKey && (
                 <span className="text-xs text-green-600">
                   Saved
@@ -383,7 +442,7 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
                 type={showApiKey ? 'text' : 'password'}
                 value={config.apiKey}
                 onChange={(e) => handleConfigChange('apiKey', e.target.value)}
-                placeholder="sk-..."
+                placeholder={selectedProvider.name === 'Azure OpenAI' ? 'your-api-key' : 'sk-...'}
                 className="pr-10"
               />
               <Button
@@ -402,7 +461,9 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
         {/* Available Models Selection */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <Label htmlFor="models">Available Models</Label>
+            <Label htmlFor="models">
+              {selectedProvider.name === 'Azure OpenAI' ? 'Available Deployments' : 'Available Models'}
+            </Label>
             <Button
               variant="ghost"
               size="sm"
@@ -440,20 +501,26 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
         </div>
 
         {/* Connection Status */}
-        <StatusIndicator config={config} />
+        <StatusIndicator 
+          config={config} 
+          selectedModels={selectedModels}
+          providerName={selectedProvider.name}
+        />
 
         {/* Advanced Parameters */}
         <div className="pt-4 border-t border-border">
             <div className="space-y-4 mt-4">
             
-            <Slider
-              label="Temperature"
-              min={0}
-              max={2}
-              step={0.1}
-              value={config.temperature}
-              onChange={(e) => handleConfigChange('temperature', parseFloat(e.target.value))}
-            />
+            {!shouldHideAdvancedParams() && (
+              <Slider
+                label="Temperature"
+                min={0}
+                max={2}
+                step={0.1}
+                value={config.temperature}
+                onChange={(e) => handleConfigChange('temperature', parseFloat(e.target.value))}
+              />
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="maxTokens">Max Tokens</Label>
@@ -467,14 +534,16 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
               />
             </div>
 
-            <Slider
-              label="Top P"
-              min={0}
-              max={1}
-              step={0.1}
-              value={config.topP}
-              onChange={(e) => handleConfigChange('topP', parseFloat(e.target.value))}
-            />
+            {!shouldHideAdvancedParams() && (
+              <Slider
+                label="Top P"
+                min={0}
+                max={1}
+                step={0.1}
+                value={config.topP}
+                onChange={(e) => handleConfigChange('topP', parseFloat(e.target.value))}
+              />
+            )}
 
             <Slider
               label="Frequency Penalty"
@@ -493,6 +562,44 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
               value={config.presencePenalty}
               onChange={(e) => handleConfigChange('presencePenalty', parseFloat(e.target.value))}
             />
+
+            {/* GPT-5 specific parameters */}
+            {shouldShowGPT5Params() && (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="reasoningEffort">Reasoning Effort</Label>
+                  <CustomSelect
+                    value={config.reasoningEffort || 'medium'}
+                    onChange={(value) => handleConfigChange('reasoningEffort', value)}
+                    options={[
+                      { value: 'minimal', label: 'Minimal' },
+                      { value: 'low', label: 'Low' },
+                      { value: 'medium', label: 'Medium' },
+                      { value: 'high', label: 'High' }
+                    ]}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Constrains effort on reasoning. Reducing effort can result in faster responses and fewer tokens.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="verbosity">Verbosity</Label>
+                  <CustomSelect
+                    value={config.verbosity || 'medium'}
+                    onChange={(value) => handleConfigChange('verbosity', value)}
+                    options={[
+                      { value: 'low', label: 'Low' },
+                      { value: 'medium', label: 'Medium' },
+                      { value: 'high', label: 'High' }
+                    ]}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Constrains the verbosity of responses. Lower values result in more concise responses.
+                  </p>
+                </div>
+              </>
+            )}
             </div>
         </div>
       </div>

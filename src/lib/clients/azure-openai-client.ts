@@ -1,29 +1,57 @@
 import { APIConfig, ChatCompletionRequest, Message, Tool, ToolCall, AgentMessage } from '@/types'
 import { devLog } from '@/lib/dev-utils'
 
-export class OpenAIClient {
+export class AzureOpenAIClient {
   private config: APIConfig
   private tools: Tool[]
-  private providerName: string
 
-  constructor(config: APIConfig, tools: Tool[] = [], providerName: string = 'OpenAI') {
+  constructor(config: APIConfig, tools: Tool[] = []) {
     this.config = config
     this.tools = tools
-    this.providerName = providerName
   }
 
-  private getMaxTokensField(): string {
-    // OpenAI uses max_completion_tokens, others use max_tokens
-    return this.providerName === 'OpenAI' ? 'max_completion_tokens' : 'max_tokens'
+  private buildEndpoint(): string {
+    // Azure OpenAI endpoint format: 
+    // https://{resource-name}.openai.azure.com/openai/deployments/{deployment-name}/chat/completions?api-version={api-version}
+    // deployment-name is the current model name
+    const { endpoint, azureApiVersion, model } = this.config
+    
+    if (!endpoint || !azureApiVersion || !model) {
+      throw new Error('Azure OpenAI requires endpoint, API version, and model (deployment name)')
+    }
+
+    // Extract resource name from endpoint
+    // Expected format: your-resource-name.openai.azure.com or https://your-resource-name.openai.azure.com
+    let resourceEndpoint = endpoint
+    
+    // Remove protocol if present
+    if (resourceEndpoint.startsWith('https://')) {
+      resourceEndpoint = resourceEndpoint.substring(8)
+    } else if (resourceEndpoint.startsWith('http://')) {
+      resourceEndpoint = resourceEndpoint.substring(7)
+    }
+    
+    // Remove any trailing path
+    resourceEndpoint = resourceEndpoint.split('/')[0]
+    
+    // If it doesn't include the full domain, add it
+    if (!resourceEndpoint.includes('.openai.azure.com')) {
+      resourceEndpoint = `${resourceEndpoint}.openai.azure.com`
+    }
+
+    return `https://${resourceEndpoint}/openai/deployments/${model}/chat/completions?api-version=${azureApiVersion}`
   }
 
   async *streamChatCompletion(messages: (Message | AgentMessage)[], abortSignal?: AbortSignal): AsyncGenerator<{ content?: string; reasoningContent?: string; toolCalls?: ToolCall[]; usage?: any }, void, unknown> {
+    // Ensure max_completion_tokens is at least 4 for Azure OpenAI
+    const maxTokens = Math.max(4, this.config.maxTokens)
+    
     // Check if model should exclude temperature and top_p (o series and gpt-5 series)
     const modelName = this.config.model.toLowerCase()
     const shouldExcludeAdvancedParams = modelName.startsWith('o') || modelName.startsWith('gpt-5')
 
-    const requestBody: ChatCompletionRequest = {
-      model: this.config.model,
+    const requestBody: any = {
+      // Azure OpenAI doesn't need model parameter, it's in the URL path
       messages: messages.map(msg => {
         const baseMessage: any = {
           role: msg.role,
@@ -51,15 +79,12 @@ export class OpenAIClient {
 
         return baseMessage
       }),
+      max_completion_tokens: maxTokens,
       frequency_penalty: this.config.frequencyPenalty,
       presence_penalty: this.config.presencePenalty,
       stream: true,
       stream_options: { include_usage: true }
     }
-
-    // Add max_tokens field based on provider
-    const maxTokensField = this.getMaxTokensField()
-    ;(requestBody as any)[maxTokensField] = this.config.maxTokens
 
     // Only add temperature and top_p for models that support them
     if (!shouldExcludeAdvancedParams) {
@@ -83,14 +108,14 @@ export class OpenAIClient {
       requestBody.tool_choice = 'auto'
     }
 
-    // System prompt is handled by the caller - don't add it here to avoid duplication
-
     try {
-      const response = await fetch(this.config.endpoint, {
+      const endpoint = this.buildEndpoint()
+      
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.config.apiKey}`,
+          'api-key': this.config.apiKey, // Azure uses api-key header instead of Authorization
         },
         body: JSON.stringify(requestBody),
         signal: abortSignal,
@@ -98,7 +123,7 @@ export class OpenAIClient {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
-        throw new Error(`API Error: ${response.status} - ${errorData.error?.message || response.statusText}`)
+        throw new Error(`Azure OpenAI API Error: ${response.status} - ${errorData.error?.message || response.statusText}`)
       }
 
       const reader = response.body?.getReader()
@@ -144,7 +169,7 @@ export class OpenAIClient {
                   result.toolCalls = delta.tool_calls
                 }
 
-                // Include usage if present (for providers like Deepseek that include usage with delta)
+                // Include usage if present
                 if (usage) {
                   result.usage = usage
                 }
@@ -154,7 +179,7 @@ export class OpenAIClient {
                 }
               }
 
-              // Handle usage information (final chunk before [DONE]) - for providers that send usage separately
+              // Handle usage information (final chunk before [DONE])
               if (usage && !delta) {
                 yield { usage }
               }
@@ -165,18 +190,21 @@ export class OpenAIClient {
         }
       }
     } catch (error) {
-      devLog.error('Stream error:', error)
+      devLog.error('Azure OpenAI Stream error:', error)
       throw error
     }
   }
 
   async chatCompletion(messages: (Message | AgentMessage)[]): Promise<string> {
+    // Ensure max_completion_tokens is at least 4 for Azure OpenAI
+    const maxTokens = Math.max(4, this.config.maxTokens)
+    
     // Check if model should exclude temperature and top_p (o series and gpt-5 series)
     const modelName = this.config.model.toLowerCase()
     const shouldExcludeAdvancedParams = modelName.startsWith('o') || modelName.startsWith('gpt-5')
 
-    const requestBody: ChatCompletionRequest = {
-      model: this.config.model,
+    const requestBody: any = {
+      // Azure OpenAI doesn't need model parameter, it's in the URL path
       messages: messages.map(msg => {
         const baseMessage: any = {
           role: msg.role,
@@ -204,14 +232,11 @@ export class OpenAIClient {
 
         return baseMessage
       }),
+      max_completion_tokens: maxTokens,
       frequency_penalty: this.config.frequencyPenalty,
       presence_penalty: this.config.presencePenalty,
       stream: false
     }
-
-    // Add max_tokens field based on provider
-    const maxTokensField = this.getMaxTokensField()
-    ;(requestBody as any)[maxTokensField] = this.config.maxTokens
 
     // Only add temperature and top_p for models that support them
     if (!shouldExcludeAdvancedParams) {
@@ -229,27 +254,27 @@ export class OpenAIClient {
       }
     }
 
-    // System prompt is handled by the caller - don't add it here to avoid duplication
-
     try {
-      const response = await fetch(this.config.endpoint, {
+      const endpoint = this.buildEndpoint()
+      
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.config.apiKey}`,
+          'api-key': this.config.apiKey, // Azure uses api-key header instead of Authorization
         },
         body: JSON.stringify(requestBody),
       })
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
-        throw new Error(`API Error: ${response.status} - ${errorData.error?.message || response.statusText}`)
+        throw new Error(`Azure OpenAI API Error: ${response.status} - ${errorData.error?.message || response.statusText}`)
       }
 
       const data = await response.json()
       return data.choices?.[0]?.message?.content || 'No response content'
     } catch (error) {
-      devLog.error('Chat completion error:', error)
+      devLog.error('Azure OpenAI Chat completion error:', error)
       throw error
     }
   }

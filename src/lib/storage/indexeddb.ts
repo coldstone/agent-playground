@@ -1,5 +1,6 @@
 import { Agent, Tool, ChatSession, AvailableModel, Authorization, Message, AgentMessage, ToolCallExecution } from '@/types'
 import { ProviderCustomConfig } from '../providers'
+import { devLog } from '@/lib/dev-utils'
 
 const DB_NAME = 'agent-playground'
 const DB_VERSION = 6
@@ -40,7 +41,7 @@ export class IndexedDBManager {
       const request = indexedDB.open(DB_NAME, DB_VERSION)
 
       request.onerror = () => {
-        console.error('Failed to open IndexedDB:', request.error)
+        devLog.error('Failed to open IndexedDB:', request.error)
         reject(request.error)
       }
 
@@ -178,7 +179,7 @@ export class IndexedDBManager {
     try {
       await this.update(AGENTS_STORE, agent)
     } catch (error) {
-      console.error('Failed to save agent:', error)
+      devLog.error('Failed to save agent:', error)
       throw error
     }
   }
@@ -187,7 +188,7 @@ export class IndexedDBManager {
     try {
       return await this.get<Agent>(AGENTS_STORE, id)
     } catch (error) {
-      console.error('Failed to get agent:', error)
+      devLog.error('Failed to get agent:', error)
       return null
     }
   }
@@ -196,7 +197,7 @@ export class IndexedDBManager {
     try {
       return await this.getAll<Agent>(AGENTS_STORE)
     } catch (error) {
-      console.error('Failed to get all agents:', error)
+      devLog.error('Failed to get all agents:', error)
       return []
     }
   }
@@ -205,7 +206,7 @@ export class IndexedDBManager {
     try {
       await this.delete(AGENTS_STORE, id)
     } catch (error) {
-      console.error('Failed to delete agent:', error)
+      devLog.error('Failed to delete agent:', error)
       throw error
     }
   }
@@ -215,7 +216,7 @@ export class IndexedDBManager {
     try {
       await this.update(TOOLS_STORE, tool)
     } catch (error) {
-      console.error('Failed to save tool:', error)
+      devLog.error('Failed to save tool:', error)
       throw error
     }
   }
@@ -224,7 +225,7 @@ export class IndexedDBManager {
     try {
       return await this.get<Tool>(TOOLS_STORE, id)
     } catch (error) {
-      console.error('Failed to get tool:', error)
+      devLog.error('Failed to get tool:', error)
       return null
     }
   }
@@ -233,7 +234,7 @@ export class IndexedDBManager {
     try {
       return await this.getAll<Tool>(TOOLS_STORE)
     } catch (error) {
-      console.error('Failed to get all tools:', error)
+      devLog.error('Failed to get all tools:', error)
       return []
     }
   }
@@ -242,7 +243,7 @@ export class IndexedDBManager {
     try {
       await this.delete(TOOLS_STORE, id)
     } catch (error) {
-      console.error('Failed to delete tool:', error)
+      devLog.error('Failed to delete tool:', error)
       throw error
     }
   }
@@ -252,7 +253,7 @@ export class IndexedDBManager {
     try {
       await this.update(SESSIONS_STORE, session)
     } catch (error) {
-      console.error('Failed to save session:', error)
+      devLog.error('Failed to save session:', error)
       throw error
     }
   }
@@ -264,7 +265,7 @@ export class IndexedDBManager {
       // Migrate session to ensure compatibility
       return this.migrateSession(session)
     } catch (error) {
-      console.error('Failed to get session:', error)
+      devLog.error('Failed to get session:', error)
       return null
     }
   }
@@ -277,7 +278,7 @@ export class IndexedDBManager {
       // Sort by updatedAt descending
       return migratedSessions.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
     } catch (error) {
-      console.error('Failed to get all sessions:', error)
+      devLog.error('Failed to get all sessions:', error)
       return []
     }
   }
@@ -361,7 +362,7 @@ export class IndexedDBManager {
     try {
       await this.delete(SESSIONS_STORE, id)
     } catch (error) {
-      console.error('Failed to delete session:', error)
+      devLog.error('Failed to delete session:', error)
       throw error
     }
   }
@@ -371,7 +372,7 @@ export class IndexedDBManager {
     try {
       await this.update(PROVIDER_CONFIGS_STORE, config)
     } catch (error) {
-      console.error('Failed to save provider config:', error)
+      devLog.error('Failed to save provider config:', error)
       throw error
     }
   }
@@ -380,7 +381,7 @@ export class IndexedDBManager {
     try {
       return await this.get<ProviderCustomConfig>(PROVIDER_CONFIGS_STORE, providerId)
     } catch (error) {
-      console.error('Failed to get provider config:', error)
+      devLog.error('Failed to get provider config:', error)
       return null
     }
   }
@@ -389,7 +390,7 @@ export class IndexedDBManager {
     try {
       return await this.getAll<ProviderCustomConfig>(PROVIDER_CONFIGS_STORE)
     } catch (error) {
-      console.error('Failed to get all provider configs:', error)
+      devLog.error('Failed to get all provider configs:', error)
       return []
     }
   }
@@ -398,7 +399,7 @@ export class IndexedDBManager {
     try {
       await this.delete(PROVIDER_CONFIGS_STORE, providerId)
     } catch (error) {
-      console.error('Failed to delete provider config:', error)
+      devLog.error('Failed to delete provider config:', error)
       throw error
     }
   }
@@ -493,7 +494,7 @@ export class IndexedDBManager {
     try {
       await this.update(AUTHORIZATIONS_STORE, authorization)
     } catch (error) {
-      console.error('Failed to save authorization:', error)
+      devLog.error('Failed to save authorization:', error)
       throw error
     }
   }
@@ -502,7 +503,7 @@ export class IndexedDBManager {
     try {
       return await this.get<Authorization>(AUTHORIZATIONS_STORE, id)
     } catch (error) {
-      console.error('Failed to get authorization:', error)
+      devLog.error('Failed to get authorization:', error)
       return null
     }
   }
@@ -511,7 +512,7 @@ export class IndexedDBManager {
     try {
       return await this.getAll<Authorization>(AUTHORIZATIONS_STORE)
     } catch (error) {
-      console.error('Failed to get all authorizations:', error)
+      devLog.error('Failed to get all authorizations:', error)
       return []
     }
   }
@@ -520,7 +521,7 @@ export class IndexedDBManager {
     try {
       await this.delete(AUTHORIZATIONS_STORE, id)
     } catch (error) {
-      console.error('Failed to delete authorization:', error)
+      devLog.error('Failed to delete authorization:', error)
       throw error
     }
   }
@@ -566,7 +567,7 @@ export class IndexedDBManager {
       const authorizations = await this.getAuthorizationsByTag(tag)
       return authorizations.find(auth => auth.isDefaultInTag) || null
     } catch (error) {
-      console.error('Failed to get default authorization by tag:', error)
+      devLog.error('Failed to get default authorization by tag:', error)
       return null
     }
   }
@@ -575,7 +576,7 @@ export class IndexedDBManager {
     try {
       return await this.getDefaultAuthorizationByTag(undefined)
     } catch (error) {
-      console.error('Failed to get global default authorization:', error)
+      devLog.error('Failed to get global default authorization:', error)
       return null
     }
   }

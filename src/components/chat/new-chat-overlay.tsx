@@ -103,7 +103,10 @@ export function NewChatOverlay({
       <div className="w-full max-w-4xl mb-8">
         <div className="flex flex-wrap gap-2 justify-center">
           {/* Agent Buttons */}
-          {agents.sort((a, b) => (a.order || 0) - (b.order || 0)).map((agent) => (
+          {agents
+            .filter(agent => agent.visible !== false) // Only show visible agents (default to visible if undefined)
+            .sort((a, b) => (a.order || 0) - (b.order || 0))
+            .map((agent) => (
             <Button
               key={agent.id}
               variant={currentAgentId === agent.id ? "default" : "outline"}
