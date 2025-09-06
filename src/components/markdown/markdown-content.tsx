@@ -84,9 +84,9 @@ const MarkdownContentComponent = function MarkdownContent({ content, className =
     [rehypeHighlight, { 
       detect: false, // 禁用自动语言检测，可能导致问题
       subset: false  // 不限制语言子集
-    }], 
+    }] as any, 
     rehypeKatex
-  ], [])
+  ] as any, [])
 
   // 缓存 ReactMarkdown 的 components 配置，避免每次重新创建
   const markdownComponents = useMemo(() => ({
@@ -111,7 +111,7 @@ const MarkdownContentComponent = function MarkdownContent({ content, className =
                 }
                 if (React.isValidElement(element)) {
                   // 如果是React元素，递归提取其children中的文本
-                  const props = element.props
+                  const props = element.props as any
                   if (props && props.children) {
                     if (Array.isArray(props.children)) {
                       return props.children.map(extractText).join('')
