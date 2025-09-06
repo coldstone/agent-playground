@@ -1,14 +1,14 @@
 'use client'
 
 import React, { useState, useRef } from 'react'
-import { APIConfig, Tool, Agent, Authorization } from '@/types'
+import { APIConfig, Tool, Agent, Authorization, ChatSession } from '@/types'
 import { APIConfigPanel } from './api-config'
 import { SystemModelSelector } from '@/components/ui/system-model-selector'
 import { AgentsPanel } from './agents-panel'
 import { ToolsPanel, ToolsPanelRef } from './tools-panel'
 import { AuthorizationsPanel, AuthorizationsPanelRef } from './authorizations-panel'
 import { useSystemModel } from '@/hooks/use-system-model'
-import { Settings, Wrench, ChevronDown, ChevronUp, Sparkles, Plus, Download, Upload, Bot, AlertTriangle, Key, BrainCircuit } from 'lucide-react'
+import { Settings, Wrench, ChevronDown, ChevronUp, Sparkles, Plus, Download, Upload, Bot, AlertTriangle, Key, BrainCircuit, Trash2 } from 'lucide-react'
 
 
 interface AccordionPanelProps {
@@ -16,6 +16,7 @@ interface AccordionPanelProps {
   agents: Agent[]
   tools: Tool[]
   authorizations: Authorization[]
+  sessions: ChatSession[]
   currentAgentId?: string | null
   onConfigChange: (config: APIConfig) => void
   onAgentCreate: () => void
@@ -31,6 +32,7 @@ interface AccordionPanelProps {
   onAuthorizationDelete: (authorizationId: string) => Promise<void>
   onExport: () => void
   onImport: () => void
+  onBatchDelete: () => void
 }
 type PanelType = 'agents' | 'tools' | 'authorizations' | 'llm' | 'settings' | null
 
@@ -39,6 +41,7 @@ export function AccordionPanel({
   agents,
   tools,
   authorizations,
+  sessions,
   currentAgentId,
   onConfigChange,
   onAgentCreate,
@@ -53,7 +56,8 @@ export function AccordionPanel({
   onAuthorizationUpdate,
   onAuthorizationDelete,
   onExport,
-  onImport
+  onImport,
+  onBatchDelete
 }: AccordionPanelProps) {
   // Determine initial panel based on priority: LLM config > remembered panel > default LLM
   const getInitialPanel = (): PanelType => {
@@ -335,6 +339,25 @@ export function AccordionPanel({
                   <SystemModelSelector />
                 </div>
 
+                {/* Batch Delete Group */}
+                <div>
+                  <h4 className="text-sm font-medium text-foreground mb-3">Data Management</h4>
+                  <div className="w-full flex flex-col items-center">
+                    <button
+                      onClick={onBatchDelete}
+                      className="w-full max-w-48 p-3 text-sm bg-gray-100 hover:bg-red-500 hover:text-white rounded-lg flex items-center justify-center gap-2 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Batch Delete ...
+                    </button>
+                    <p className="text-sm text-muted-foreground mt-2 text-center">
+                      Delete agents, tools, or conversations
+                    </p>
+                  </div>
+                  {/* Separator */}
+                  <hr className="mt-6 border-t border-border" />
+                </div>
+
                 {/* Export & Import Group */}
                 <div>
                   <h4 className="text-sm font-medium text-foreground mb-3">Export & Import</h4>
@@ -346,7 +369,7 @@ export function AccordionPanel({
                         className="w-full max-w-48 p-3 text-sm bg-gray-100 hover:bg-blue-500 hover:text-white rounded-lg flex items-center justify-center gap-2 transition-colors"
                       >
                         <Download className="w-4 h-4" />
-                        Export Data
+                        Export Data ...
                       </button>
                       <p className="text-sm text-muted-foreground mt-2 text-center">
                         Export all agents, tools to a JSON file
@@ -360,7 +383,7 @@ export function AccordionPanel({
                         className="w-full max-w-48 p-3 text-sm bg-gray-100 hover:bg-green-500 hover:text-white rounded-lg flex items-center justify-center gap-2 transition-colors"
                       >
                         <Upload className="w-4 h-4" />
-                        Import Data
+                        Import Data ...
                       </button>
                       <p className="text-sm text-muted-foreground mt-2 text-center">
                         Import agents, tools from a JSON file

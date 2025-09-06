@@ -15,7 +15,7 @@ import { useToast } from '@/components/ui/toast'
 import { getMergedHeaders, getEffectiveAuthorization, migrateAgentTools } from '@/lib/authorization'
 
 
-import { ExportModal, ImportModal, SystemPromptModal } from '@/components/modals'
+import { ExportModal, ImportModal, SystemPromptModal, BatchDeleteModal } from '@/components/modals'
 
 export default function HomePage() {
   // Create initial config with empty provider to avoid triggering saves
@@ -46,6 +46,7 @@ export default function HomePage() {
 
   const [showExportModal, setShowExportModal] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
+  const [showBatchDeleteModal, setShowBatchDeleteModal] = useState(false)
   const [showNewChatOverlay, setShowNewChatOverlay] = useState(true) 
 
   const { showToast, ToastContainer } = useToast()
@@ -852,6 +853,49 @@ export default function HomePage() {
     } catch (error) {
       showToast('Failed to import data.', 'error')
       devLog.error('Failed to import data:', error)
+    }
+  }
+
+  // Batch Delete function
+  const handleBatchDelete = async (selectedAgents: string[], selectedTools: string[], selectedSessions: string[]) => {
+    try {
+      let deletedCount = 0
+
+      // Delete agents
+      for (const agentId of selectedAgents) {
+        await dbManager.deleteAgent(agentId)
+        setAgents(prev => prev.filter(a => a.id !== agentId))
+        deletedCount++
+        
+        // Clear current agent if it was deleted
+        if (currentAgentId === agentId) {
+          setCurrentAgentId(null)
+        }
+      }
+
+      // Delete tools
+      for (const toolId of selectedTools) {
+        await dbManager.deleteTool(toolId)
+        setTools(prev => prev.filter(t => t.id !== toolId))
+        deletedCount++
+      }
+
+      // Delete sessions
+      for (const sessionId of selectedSessions) {
+        await dbManager.deleteSession(sessionId)
+        setSessions(prev => prev.filter(s => s.id !== sessionId))
+        deletedCount++
+        
+        // Clear current session if it was deleted
+        if (currentSessionId === sessionId) {
+          setCurrentSessionId(null)
+        }
+      }
+
+      showToast(`Successfully deleted ${deletedCount} item${deletedCount !== 1 ? 's' : ''}`, 'success')
+    } catch (error) {
+      devLog.error('Batch delete failed:', error)
+      showToast('Batch delete failed', 'error')
     }
   }
 
@@ -2870,6 +2914,7 @@ export default function HomePage() {
         agents={agents}
         tools={tools}
         authorizations={authorizations}
+        sessions={sessions}
         currentAgentId={currentAgentId}
         onConfigChange={setConfig}
         onAgentCreate={() => setShowAgentModal(true)}
@@ -2885,6 +2930,7 @@ export default function HomePage() {
         onAuthorizationDelete={deleteAuthorization}
         onExport={() => setShowExportModal(true)}
         onImport={() => setShowImportModal(true)}
+        onBatchDelete={() => setShowBatchDeleteModal(true)}
       />
 
       {/* Modals */}
@@ -2919,6 +2965,15 @@ export default function HomePage() {
         onClose={() => setShowSystemPromptModal(false)}
         initialPrompt={currentSession?.systemPrompt || config.systemPrompt}
         onSave={handleSystemPromptSave}
+      />
+
+      <BatchDeleteModal
+        isOpen={showBatchDeleteModal}
+        onClose={() => setShowBatchDeleteModal(false)}
+        agents={agents}
+        tools={tools}
+        sessions={sessions}
+        onDelete={handleBatchDelete}
       />
 
       <ToastContainer />
