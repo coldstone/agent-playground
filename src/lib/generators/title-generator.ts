@@ -1,5 +1,6 @@
 import { APIConfig } from '@/types'
-import { OpenAIClient } from '@/lib/clients'
+import { createClient } from '@/lib/client-factory'
+import { devLog } from '@/lib/dev-utils'
 
 export class TitleGenerator {
   private config: APIConfig
@@ -16,7 +17,7 @@ export class TitleGenerator {
         throw new Error('Invalid input or API configuration')
       }
 
-      const client = new OpenAIClient(this.config, [], this.provider)
+      const client = createClient(this.config, [], this.provider)
 
       const systemPrompt = 'You are a title generator that uses user conversation language. Generate very short, concise titles (2-5 words) capturing the main topic. Return only the title, no quotes or extra text.'
 
@@ -39,7 +40,7 @@ export class TitleGenerator {
 
       return 'New conversation' // Fallback
     } catch (error) {
-      console.error('Failed to generate title:', error)
+      devLog.error('Failed to generate title:', error)
       // Generate a simple title from the user input as fallback
       return this.generateSimpleTitle(aiResponse)
     }
@@ -67,7 +68,7 @@ export class TitleGenerator {
 
       return title.slice(0, 50) // Limit length
     } catch (error) {
-      console.error('Failed to generate simple title:', error)
+      devLog.error('Failed to generate simple title:', error)
       return 'New conversation'
     }
   }

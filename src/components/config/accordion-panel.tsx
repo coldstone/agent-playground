@@ -1,13 +1,14 @@
 'use client'
 
 import React, { useState, useRef } from 'react'
-import { APIConfig, Tool, Agent, Authorization } from '@/types'
+import { APIConfig, Tool, Agent, Authorization, ChatSession } from '@/types'
 import { APIConfigPanel } from './api-config'
+import { SystemModelSelector } from '@/components/ui/system-model-selector'
 import { AgentsPanel } from './agents-panel'
 import { ToolsPanel, ToolsPanelRef } from './tools-panel'
 import { AuthorizationsPanel, AuthorizationsPanelRef } from './authorizations-panel'
 import { useSystemModel } from '@/hooks/use-system-model'
-import { Settings, Wrench, ChevronDown, ChevronUp, Sparkles, Plus, Download, Upload, Bot, AlertTriangle, Key } from 'lucide-react'
+import { Settings, Wrench, ChevronDown, ChevronUp, Sparkles, Plus, Download, Upload, Bot, AlertTriangle, Key, BrainCircuit, Trash2 } from 'lucide-react'
 
 
 interface AccordionPanelProps {
@@ -15,11 +16,14 @@ interface AccordionPanelProps {
   agents: Agent[]
   tools: Tool[]
   authorizations: Authorization[]
+  sessions: ChatSession[]
+  currentAgentId?: string | null
   onConfigChange: (config: APIConfig) => void
   onAgentCreate: () => void
   onAgentUpdate: (agentId: string, updates: Partial<Agent>) => void
   onAgentDelete: (agentId: string) => void
   onAgentReorder: (agents: Agent[]) => void
+  onAgentClearSelection?: () => void
   onToolCreate: (tool: Tool) => void
   onToolUpdate: (tool: Tool) => void
   onToolDelete: (toolId: string) => void
@@ -28,19 +32,23 @@ interface AccordionPanelProps {
   onAuthorizationDelete: (authorizationId: string) => Promise<void>
   onExport: () => void
   onImport: () => void
+  onBatchDelete: () => void
 }
-type PanelType = 'agents' | 'tools' | 'authorizations' | 'llm' | 'export' | null
+type PanelType = 'agents' | 'tools' | 'authorizations' | 'llm' | 'settings' | null
 
 export function AccordionPanel({
   config,
   agents,
   tools,
   authorizations,
+  sessions,
+  currentAgentId,
   onConfigChange,
   onAgentCreate,
   onAgentUpdate,
   onAgentDelete,
   onAgentReorder,
+  onAgentClearSelection,
   onToolCreate,
   onToolUpdate,
   onToolDelete,
@@ -48,7 +56,8 @@ export function AccordionPanel({
   onAuthorizationUpdate,
   onAuthorizationDelete,
   onExport,
-  onImport
+  onImport,
+  onBatchDelete
 }: AccordionPanelProps) {
   // Determine initial panel based on priority: LLM config > remembered panel > default LLM
   const getInitialPanel = (): PanelType => {
@@ -62,7 +71,7 @@ export function AccordionPanel({
       
       // Priority 2: If LLM is configured, check for remembered panel
       const rememberedPanel = localStorage.getItem('agent-playground-active-panel') as PanelType
-      if (rememberedPanel && ['agents', 'tools', 'authorizations', 'llm', 'export'].includes(rememberedPanel)) {
+      if (rememberedPanel && ['agents', 'tools', 'authorizations', 'llm', 'settings'].includes(rememberedPanel)) {
         return rememberedPanel
       }
       
@@ -129,9 +138,11 @@ export function AccordionPanel({
                   agents={agents}
                   tools={tools}
                   authorizations={authorizations}
+                  currentAgentId={currentAgentId}
                   onAgentUpdate={onAgentUpdate}
                   onAgentDelete={onAgentDelete}
                   onAgentReorder={onAgentReorder}
+                  onAgentClearSelection={onAgentClearSelection}
                   onToolCreate={onToolCreate}
                   apiConfig={config}
                 />
@@ -270,16 +281,8 @@ export function AccordionPanel({
           className="w-full p-4 flex items-center justify-between text-left hover:bg-muted/50 transition-colors cursor-pointer flex-shrink-0"
         >
           <div className="flex items-center gap-2">
-            <Settings className="w-4 h-4" />
+            <BrainCircuit className="w-4 h-4" />
             <span className="text-sm font-semibold">LLM Configuration</span>
-            {!hasSystemModel && (
-              <div className="relative group">
-                <AlertTriangle className="w-4 h-4 text-amber-500" />
-                <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 px-2 py-1 text-xs text-white bg-gray-900 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
-                  System model not configured
-                </div>
-              </div>
-            )}
           </div>
           {activePanel === 'llm' ? (
             <ChevronUp className="w-4 h-4" />
@@ -289,8 +292,8 @@ export function AccordionPanel({
         </div>
 
         {activePanel === 'llm' && (
-          <div className="border-t border-border flex-1 min-h-0 overflow-hidden">
-            <div className="h-full overflow-y-auto">
+          <div className="border-t border-border flex-1 min-h-0 overflow-visible">
+            <div className="h-full overflow-y-auto overflow-x-visible">
               <div className="p-4">
                 <APIConfigPanel
                   config={config}
@@ -302,53 +305,91 @@ export function AccordionPanel({
         )}
       </div>
 
-      {/* Export & Import Panel */}
-      <div className={`${activePanel === 'export' ? 'flex-1 flex flex-col min-h-0' : ''}`}>
+      {/* Settings Panel */}
+      <div className={`${activePanel === 'settings' ? 'flex-1 flex flex-col min-h-0' : ''}`}>
         <div
-          onClick={() => togglePanel('export')}
+          onClick={() => togglePanel('settings')}
           className="w-full p-4 flex items-center justify-between text-left hover:bg-muted/50 transition-colors cursor-pointer flex-shrink-0"
         >
           <div className="flex items-center gap-2">
-            <Download className="w-4 h-4" />
-            <span className="text-sm font-semibold">Export & Import</span>
+            <Settings className="w-4 h-4" />
+            <span className="text-sm font-semibold">Settings</span>
+            {!hasSystemModel && (
+              <div className="relative group">
+                <AlertTriangle className="w-4 h-4 text-amber-500" />
+                <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 px-2 py-1 text-xs text-white bg-gray-900 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+                  System model not configured
+                </div>
+              </div>
+            )}
           </div>
-          {activePanel === 'export' ? (
+          {activePanel === 'settings' ? (
             <ChevronUp className="w-4 h-4" />
           ) : (
             <ChevronDown className="w-4 h-4" />
           )}
         </div>
 
-        {activePanel === 'export' && (
+        {activePanel === 'settings' && (
           <div className="border-t border-border flex-1 min-h-0 overflow-hidden">
             <div className="h-full overflow-y-auto">
-              <div className="p-4 mt-5 flex flex-col items-center space-y-8">
-                {/* Export Section */}
-                <div className="w-full flex flex-col items-center">
-                  <button
-                    onClick={onExport}
-                    className="w-full max-w-48 p-3 text-sm bg-gray-100 hover:bg-blue-500 hover:text-white rounded-lg flex items-center justify-center gap-2 transition-colors"
-                  >
-                    <Download className="w-4 h-4" />
-                    Export Data
-                  </button>
-                  <p className="text-sm text-muted-foreground mt-2 text-center">
-                    Export all agents, tools to a JSON file
-                  </p>
+              <div className="p-4 space-y-6">
+                {/* System Model Settings Group */}
+                <div>
+                  <SystemModelSelector />
                 </div>
 
-                {/* Import Section */}
-                <div className="w-full flex flex-col items-center">
-                  <button
-                    onClick={onImport}
-                    className="w-full max-w-48 p-3 text-sm bg-gray-100 hover:bg-green-500 hover:text-white rounded-lg flex items-center justify-center gap-2 transition-colors"
-                  >
-                    <Upload className="w-4 h-4" />
-                    Import Data
-                  </button>
-                  <p className="text-sm text-muted-foreground mt-2 text-center">
-                    Import agents, tools from a JSON file
-                  </p>
+                {/* Batch Delete Group */}
+                <div>
+                  <h4 className="text-sm font-medium text-foreground mb-3">Data Management</h4>
+                  <div className="w-full flex flex-col items-center">
+                    <button
+                      onClick={onBatchDelete}
+                      className="w-full max-w-48 p-3 text-sm bg-gray-100 hover:bg-red-500 hover:text-white rounded-lg flex items-center justify-center gap-2 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Batch Delete ...
+                    </button>
+                    <p className="text-sm text-muted-foreground mt-2 text-center">
+                      Delete agents, tools, or conversations
+                    </p>
+                  </div>
+                  {/* Separator */}
+                  <hr className="mt-6 border-t border-border" />
+                </div>
+
+                {/* Export & Import Group */}
+                <div>
+                  <h4 className="text-sm font-medium text-foreground mb-3">Export & Import</h4>
+                  <div className="space-y-4">
+                    {/* Export Section */}
+                    <div className="w-full flex flex-col items-center">
+                      <button
+                        onClick={onExport}
+                        className="w-full max-w-48 p-3 text-sm bg-gray-100 hover:bg-blue-500 hover:text-white rounded-lg flex items-center justify-center gap-2 transition-colors"
+                      >
+                        <Download className="w-4 h-4" />
+                        Export Data ...
+                      </button>
+                      <p className="text-sm text-muted-foreground mt-2 text-center">
+                        Export all agents, tools to a JSON file
+                      </p>
+                    </div>
+
+                    {/* Import Section */}
+                    <div className="w-full flex flex-col items-center">
+                      <button
+                        onClick={onImport}
+                        className="w-full max-w-48 p-3 text-sm bg-gray-100 hover:bg-green-500 hover:text-white rounded-lg flex items-center justify-center gap-2 transition-colors"
+                      >
+                        <Upload className="w-4 h-4" />
+                        Import Data ...
+                      </button>
+                      <p className="text-sm text-muted-foreground mt-2 text-center">
+                        Import agents, tools from a JSON file
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

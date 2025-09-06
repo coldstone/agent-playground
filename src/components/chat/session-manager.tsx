@@ -1,11 +1,11 @@
 'use client'
 
 import React, { useState } from 'react'
-import { ChatSession, Agent } from '@/types'
+import { ChatSession, Agent, AgentMessage } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { truncateText, formatTimestamp } from '@/lib/utils'
-import { MessageSquare, Trash2, Edit2, Check, X, Plus, Bot } from 'lucide-react'
+import { MessageSquare, Trash2, Edit2, Check, X, Plus, Bot, Copy } from 'lucide-react'
 import { Title } from '@/components/layout'
 
 interface SessionManagerProps {
@@ -48,6 +48,58 @@ export function SessionManager({
   const handleCancelEdit = () => {
     setEditingSessionId(null)
     setEditingName('')
+  }
+
+  const handleCopySession = async (session: ChatSession) => {
+    // Filter out tool messages and keep only user and assistant messages
+    const messagesToCopy = session.messages
+      .filter(msg => msg.role === 'user' || msg.role === 'assistant')
+      .map(msg => {
+        const baseMessage: any = {
+          role: msg.role,
+          content: msg.content
+        }
+        
+        // Add tool calls if this is an assistant message with tool calls
+        if (msg.role === 'assistant') {
+          const agentMessage = msg as AgentMessage
+          if (agentMessage.toolCalls && agentMessage.toolCalls.length > 0) {
+            baseMessage.tool_calls = agentMessage.toolCalls.map(toolCall => ({
+              id: toolCall.id,
+              type: toolCall.type,
+              function: {
+                name: toolCall.function.name,
+                arguments: toolCall.function.arguments
+              }
+            }))
+          }
+        }
+        
+        return baseMessage
+      })
+    
+    // Extract model information from the latest assistant message
+    let model = 'unknown'
+    const assistantMessages = session.messages.filter(msg => msg.role === 'assistant') as AgentMessage[]
+    if (assistantMessages.length > 0) {
+      const latestAssistant = assistantMessages[assistantMessages.length - 1]
+      if (latestAssistant.provider && latestAssistant.model) {
+        model = `${latestAssistant.provider}-${latestAssistant.model}`
+      } else if (latestAssistant.model) {
+        model = latestAssistant.model
+      }
+    }
+    
+    const jsonData = { 
+      model: model,
+      messages: messagesToCopy 
+    }
+    
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(jsonData, null, 2))
+    } catch (err) {
+      console.error('Failed to copy to clipboard:', err)
+    }
   }
 
   const getSessionAgent = (session: ChatSession) => {
@@ -153,6 +205,18 @@ export function SessionManager({
                         {formatTimestamp(session.updatedAt)}
                       </p>
                       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button
+                          size="xs"
+                          variant="ghost"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleCopySession(session)
+                          }}
+                          className="h-6 w-6 p-0 flex items-center justify-center"
+                          title="Copy conversation"
+                        >
+                          <Copy className="w-3 h-3 flex-shrink-0" />
+                        </Button>
                         <Button
                           size="xs"
                           variant="ghost"

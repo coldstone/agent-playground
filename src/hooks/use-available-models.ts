@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { AvailableModel, CurrentModel } from '@/types'
 import { IndexedDBManager } from '@/lib/storage/indexeddb'
+import { devLog } from '@/lib/dev-utils'
 
 export function useAvailableModels() {
   const [availableModels, setAvailableModels] = useState<AvailableModel[]>([])
@@ -15,7 +16,7 @@ export function useAvailableModels() {
       const models = await dbManager.getAllAvailableModels()
       setAvailableModels(models)
     } catch (error) {
-      console.error('Failed to load available models:', error)
+      devLog.error('Failed to load available models:', error)
     } finally {
       setIsLoading(false)
     }
@@ -28,7 +29,7 @@ export function useAvailableModels() {
         const parsed = JSON.parse(saved)
         setCurrentModel(parsed)
       } catch (error) {
-        console.error('Failed to parse current model:', error)
+        devLog.error('Failed to parse current model:', error)
         setCurrentModel(null)
       }
     } else {
@@ -39,13 +40,6 @@ export function useAvailableModels() {
   useEffect(() => {
     loadAvailableModels()
     loadCurrentModel()
-
-    // Set up polling to check for model updates
-    const interval = setInterval(() => {
-      loadAvailableModels()
-      loadCurrentModel()
-    }, 1000)
-    return () => clearInterval(interval)
   }, [])
 
   const hasAvailableModels = availableModels.length > 0
