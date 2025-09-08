@@ -44,19 +44,19 @@ function ResultDisplay({ content }: { content: string }) {
       <div className={`relative ${!isExpanded && needsToggle ? 'max-h-[200px] overflow-hidden' : ''}`}>
         <pre 
           ref={preRef}
-          className="text-sm bg-transparent p-3 whitespace-pre-wrap break-all overflow-wrap-anywhere min-w-0 overflow-x-auto"
+          className="text-sm bg-transparent p-3 whitespace-pre-wrap break-all overflow-wrap-anywhere min-w-0 overflow-x-auto text-foreground"
         >
           {content}
         </pre>
         {!isExpanded && needsToggle && (
-          <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-white to-transparent pointer-events-none" />
+          <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-card to-transparent pointer-events-none" />
         )}
       </div>
       {needsToggle && (
         <div className="flex justify-center mt-4 mb-2">
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="text-sm text-green-600 hover:text-green-800 cursor-pointer bg-transparent border-none"
+            className="text-sm text-primary hover:text-foreground cursor-pointer bg-transparent border-none"
           >
             {isExpanded ? 'Display Less' : 'Display More'}
           </button>
@@ -268,34 +268,34 @@ export function ToolCallDisplay({
   const getStatusColor = () => {
     // In merged cards, use consistent subtle background colors
     if (inMergedCard) {
-      if (isStreaming) return 'border-gray-200 bg-gray-50'
-      if (!execution) return 'border-gray-200 bg-gray-50'
+      if (isStreaming) return 'border-border bg-muted'
+      if (!execution) return 'border-border bg-muted'
 
       switch (execution.status) {
         case 'pending':
-          return 'border-gray-200 bg-gray-50'
+          return 'border-border bg-muted'
         case 'completed':
-          return 'border-gray-200 bg-white'
+          return 'border-border bg-card'
         case 'failed':
-          return 'border-red-200 bg-red-50'
+          return 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30'
         default:
-          return 'border-gray-200 bg-gray-50'
+          return 'border-border bg-muted'
       }
     }
 
-    // Original colors for standalone tool calls
-    if (isStreaming) return 'border-purple-200 bg-purple-50'
-    if (!execution) return 'border-blue-200 bg-blue-50'
+    // Standalone tool calls
+    if (isStreaming) return 'border-border bg-muted'
+    if (!execution) return 'border-border bg-muted'
 
     switch (execution.status) {
       case 'pending':
-        return 'border-blue-200 bg-blue-50'
+        return 'border-border bg-muted'
       case 'completed':
-        return 'border-green-200 bg-green-50'
+        return 'border-border bg-card'
       case 'failed':
-        return 'border-red-200 bg-red-50'
+        return 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30'
       default:
-        return 'border-gray-200 bg-gray-50'
+        return 'border-border bg-muted'
     }
   }
 
@@ -339,23 +339,23 @@ export function ToolCallDisplay({
     return (
       <div className={`rounded-lg border p-4 ${getStatusColor()} min-w-0 w-full`}>
         <div className="flex items-start gap-3 min-w-0">
-          <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-white border">
+          <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-card border border-border">
             {getMainStatusIcon()}
           </div>
 
           <div className="flex-1 min-w-0">
-            <div 
-              className="flex items-center justify-between cursor-pointer hover:bg-gray-50 hover:bg-opacity-60 rounded transition-all duration-200 -mx-1 px-1"
-              onClick={() => setIsManuallyExpanded(true)}
-            >
-              <div className="flex flex-col gap-1">
-                <div className="text-xs text-gray-500">Tool Call</div>
-                <div className="flex items-center gap-2">
-                  <span className={`text-sm font-medium ${execution?.status === 'failed' ? 'text-red-600' : 'text-purple-600'}`}>
-                    {toolCall.function.name}
-                  </span>
-                  <span className={`text-xs ${getStatusTextColor()}`}>
-                    {getStatusText()}
+          <div 
+            className={`flex items-center justify-between ${autoMode ? 'cursor-pointer hover:bg-muted/60' : ''} rounded transition-all duration-200 -mx-1 px-1`}
+            onClick={() => setIsManuallyExpanded(true)}
+          >
+            <div className="flex flex-col gap-1">
+              <div className="text-xs text-muted-foreground">Tool Call</div>
+              <div className="flex items-center gap-2">
+                <span className={`text-sm font-medium ${execution?.status === 'failed' ? 'text-red-600' : 'text-purple-600'}`}>
+                  {toolCall.function.name}
+                </span>
+                <span className={`text-xs ${getStatusTextColor()}`}>
+                  {getStatusText()}
                     {execution && (
                       <span className="ml-1">
                         • {formatTimestamp(execution.timestamp)}
@@ -366,7 +366,7 @@ export function ToolCallDisplay({
               </div>
               
               {/* Expand indicator */}
-              <div className="flex-shrink-0 w-6 h-6 flex items-center justify-center text-gray-400 transition-colors">
+              <div className="flex-shrink-0 w-6 h-6 flex items-center justify-center text-muted-foreground transition-colors">
                 <ChevronDown className="w-4 h-4" />
               </div>
             </div>
@@ -379,23 +379,23 @@ export function ToolCallDisplay({
   return (
     <div className={`rounded-lg border p-4 ${getStatusColor()} min-w-0 w-full`}>
       <div className="flex items-start gap-3 min-w-0">
-        <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-white border">
+        <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-card border border-border">
           {getMainStatusIcon()}
         </div>
 
         <div className="flex-1 space-y-3 min-w-0">
           <div 
-            className="flex items-center justify-between cursor-pointer hover:bg-gray-50 hover:bg-opacity-60 rounded transition-all duration-200 -mx-1 px-1"
-            onClick={isCollapsed && isManuallyExpanded ? () => setIsManuallyExpanded(false) : undefined}
-          >
-            <div className="flex flex-col gap-1">
-              <div className="text-xs text-gray-500">Tool Call</div>
-              <div className="flex items-center gap-2">
-                <span className={`text-sm font-medium ${execution?.status === 'failed' ? 'text-red-600' : 'text-purple-600'}`}>
-                  {toolCall.function.name}
-                </span>
-                <span className={`text-xs ${getStatusTextColor()}`}>
-                  {getStatusText()}
+          className={`flex items-center justify-between ${autoMode ? 'cursor-pointer hover:bg-muted/60' : ''} rounded transition-all duration-200 -mx-1 px-1`}
+          onClick={isCollapsed && isManuallyExpanded ? () => setIsManuallyExpanded(false) : undefined}
+        >
+          <div className="flex flex-col gap-1">
+            <div className="text-xs text-muted-foreground">Tool Call</div>
+            <div className="flex items-center gap-2">
+              <span className={`text-sm font-medium ${execution?.status === 'failed' ? 'text-red-600' : 'text-purple-600'}`}>
+                {toolCall.function.name}
+              </span>
+              <span className={`text-xs ${getStatusTextColor()}`}>
+                {getStatusText()}
                   {execution && (
                     <span className="ml-1">
                       • {formatTimestamp(execution.timestamp)}
@@ -406,7 +406,7 @@ export function ToolCallDisplay({
             </div>
             {/* Collapse indicator for manually expanded cards */}
             {isCollapsed && isManuallyExpanded ? (
-              <div className="flex-shrink-0 w-6 h-6 flex items-center justify-center text-gray-400 transition-colors">
+              <div className="flex-shrink-0 w-6 h-6 flex items-center justify-center text-muted-foreground transition-colors">
                 <ChevronUp className="w-4 h-4" />
               </div>
             ) : (
@@ -418,32 +418,32 @@ export function ToolCallDisplay({
 
           <div className="space-y-2">
             <div className="min-w-0">
-              <div className="bg-purple-50 px-3 py-2 rounded-t border border-purple-200 flex items-center gap-2">
-                <Settings2 className="w-4 h-4 text-purple-600" />
-                <span className="text-sm font-medium text-purple-700">Arguments</span>
-              </div>
-              <pre className="text-sm bg-white p-3 rounded-b border border-t-0 border-purple-200 whitespace-pre-wrap break-all overflow-wrap-anywhere min-w-0 overflow-x-auto">
-                {argumentsDisplay}
-                {isStreaming && (
-                  <span className="inline-block w-2 h-4 bg-purple-600 animate-pulse ml-1" />
-                )}
-              </pre>
+            <div className="bg-muted px-3 py-2 rounded-t border border-border flex items-center gap-2">
+              <Settings2 className="w-4 h-4 text-purple-600" />
+              <span className="text-sm font-medium text-foreground">Arguments</span>
             </div>
+            <pre className="text-sm bg-card p-3 rounded-b border border-t-0 border-border whitespace-pre-wrap break-all overflow-wrap-anywhere min-w-0 overflow-x-auto">
+              {argumentsDisplay}
+              {isStreaming && (
+                <span className="inline-block w-2 h-4 bg-purple-600 animate-pulse ml-1" />
+              )}
+            </pre>
+          </div>
 
             {tool?.httpRequest && (
-              <div className="border border-blue-200 rounded space-y-2">
-                <div className="bg-blue-50 px-3 py-2 rounded-t border-b border-blue-200 flex items-center gap-2">
-                  <Globe className="w-4 h-4 text-blue-600" />
-                  <span className="text-sm font-medium text-blue-700">Get Results via API</span>
-                </div>
+            <div className="border border-border rounded space-y-2">
+              <div className="bg-muted px-3 py-2 rounded-t border-b border-border flex items-center gap-2">
+                <Globe className="w-4 h-4 text-blue-600" />
+                <span className="text-sm font-medium text-foreground">Get Results via API</span>
+              </div>
 
-                <div className="bg-white p-3 rounded-b border-t-0 space-y-2">
+              <div className="bg-card p-3 rounded-b border-t-0 space-y-2">
                   {/* Method, URL and Request button in one row */}
                   <div className="flex items-center gap-2">
                     {/* Method - fixed width */}
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <span className="text-xs font-medium">Method:</span>
-                      <code className="text-xs bg-white px-2 py-1 rounded border">
+                      <code className="text-xs bg-card px-2 py-1 rounded border border-border">
                         {tool.httpRequest.method}
                       </code>
                     </div>
@@ -451,7 +451,7 @@ export function ToolCallDisplay({
                     {/* URL - takes remaining space */}
                     <div className="flex items-center gap-2 min-w-0 flex-1">
                       <span className="text-xs font-medium flex-shrink-0">URL:</span>
-                      <code className="text-xs bg-white px-2 py-1 rounded border flex-1 truncate min-w-0">
+                      <code className="text-xs bg-card px-2 py-1 rounded border border-border flex-1 truncate min-w-0">
                         {httpUrl}
                       </code>
                     </div>
@@ -516,11 +516,11 @@ export function ToolCallDisplay({
 
             {execution?.result && (
               <div className="min-w-0">
-                <div className="bg-green-50 px-3 py-2 rounded-t border border-green-200 flex items-center gap-2">
+                <div className="bg-muted px-3 py-2 rounded-t border border-border flex items-center gap-2">
                   <Check className="w-4 h-4 text-green-600" />
-                  <span className="text-sm font-medium text-green-700">Result</span>
+                  <span className="text-sm font-medium text-foreground">Result</span>
                 </div>
-                <div className="bg-white border border-t-0 border-green-200 rounded-b">
+                <div className="bg-card border border-t-0 border-border rounded-b">
                   <ResultDisplay content={execution.result} />
                 </div>
               </div>
@@ -528,8 +528,8 @@ export function ToolCallDisplay({
 
             {execution?.error && (
               <div className="min-w-0">
-                <span className="text-sm font-medium text-red-600">Error:</span>
-                <pre className="text-sm bg-red-100 p-2 rounded border border-red-200 mt-1 whitespace-pre-wrap break-all overflow-wrap-anywhere min-w-0 overflow-x-auto">
+                <span className="text-sm font-medium text-red-600 dark:text-red-400">Error:</span>
+                <pre className="text-sm bg-red-50 dark:bg-red-950/30 p-2 rounded border border-red-200 dark:border-red-800 mt-1 whitespace-pre-wrap break-all overflow-wrap-anywhere min-w-0 overflow-x-auto">
                   {execution.error}
                 </pre>
               </div>
@@ -565,7 +565,7 @@ export function ToolCallDisplay({
           )}
 
           {isProvidingResult && (
-            <div className="space-y-3 border-t pt-3">
+            <div className="space-y-3 border-t border-border pt-3">
               <div className="space-y-2">
                 <Label htmlFor="tool-result">Tool Result</Label>
                 <Textarea
@@ -589,7 +589,7 @@ export function ToolCallDisplay({
           )}
 
           {isProvidingError && (
-            <div className="space-y-3 border-t pt-3">
+            <div className="space-y-3 border-t border-border pt-3">
               <div className="space-y-2">
                 <Label htmlFor="tool-error">Error Message</Label>
                 <Textarea

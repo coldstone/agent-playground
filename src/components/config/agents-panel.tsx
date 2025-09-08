@@ -137,9 +137,9 @@ function DraggableAgentCard({
                   className="sr-only"
                 />
                 <div className={`w-7 h-4 rounded-full transition-colors ${
-                  agent.visible !== false ? 'bg-green-500' : 'bg-gray-300'
+                  agent.visible !== false ? 'bg-green-500' : 'bg-muted'
                 }`}>
-                  <div className={`w-3 h-3 bg-white rounded-full shadow transform transition-transform ${
+                  <div className={`w-3 h-3 bg-card rounded-full shadow transform transition-transform ${
                     agent.visible !== false ? 'translate-x-3.5' : 'translate-x-0.5'
                   } mt-0.5`} />
                 </div>

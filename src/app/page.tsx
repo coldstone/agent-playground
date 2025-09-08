@@ -2983,11 +2983,11 @@ export default function HomePage() {
         <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-10">
           <button
             onClick={handleScrollToTopClick}
-            className="w-10 h-10 bg-white/50 backdrop-blur-sm border border-gray-200 rounded-full shadow-lg hover:bg-white hover:shadow-xl transition-all duration-200 flex items-center justify-center group"
+            className="w-10 h-10 bg-card/70 backdrop-blur-sm border border-border rounded-full shadow-lg hover:bg-card hover:shadow-xl transition-all duration-200 flex items-center justify-center group"
             aria-label="Scroll to the top"
           >
             <svg
-              className="w-5 h-5 text-gray-600 group-hover:text-gray-800 transition-colors"
+              className="w-5 h-5 text-muted-foreground group-hover:text-foreground transition-colors"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -3003,11 +3003,11 @@ export default function HomePage() {
         <div className="fixed bottom-40 left-1/2 transform -translate-x-1/2 z-10">
           <button
             onClick={handleScrollToBottomClick}
-            className="w-10 h-10 bg-white/50 backdrop-blur-sm border border-gray-200 rounded-full shadow-lg hover:bg-white hover:shadow-xl transition-all duration-200 flex items-center justify-center group"
+            className="w-10 h-10 bg-card/70 backdrop-blur-sm border border-border rounded-full shadow-lg hover:bg-card hover:shadow-xl transition-all duration-200 flex items-center justify-center group"
             aria-label="Scroll to the bottom"
           >
             <svg
-              className="w-5 h-5 text-gray-600 group-hover:text-gray-800 transition-colors"
+              className="w-5 h-5 text-muted-foreground group-hover:text-foreground transition-colors"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"

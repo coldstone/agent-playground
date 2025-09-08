@@ -35,12 +35,8 @@ export function StatusIndicator({ config, selectedModels = [], providerName = ''
       if (providerName === 'Azure OpenAI') {
         // Azure OpenAI specific logic
         const firstSelectedModel = selectedModels.length > 0 ? selectedModels[0] : config.model || 'gpt-35-turbo'
-        
-        if (!config.azureApiVersion) {
-          setStatus('error')
-          setErrorMessage('Azure API version not configured')
-          return
-        }
+        // Use default API version if not configured
+        const apiVersion = (config.azureApiVersion && config.azureApiVersion.trim()) || '2025-04-01-preview'
 
         // Build Azure OpenAI endpoint
         let resourceEndpoint = config.endpoint
@@ -60,7 +56,7 @@ export function StatusIndicator({ config, selectedModels = [], providerName = ''
           resourceEndpoint = `${resourceEndpoint}.openai.azure.com`
         }
 
-        testEndpoint = `https://${resourceEndpoint}/openai/deployments/${firstSelectedModel}/chat/completions?api-version=${config.azureApiVersion}`
+        testEndpoint = `https://${resourceEndpoint}/openai/deployments/${firstSelectedModel}/chat/completions?api-version=${apiVersion}`
         
         // Check if model should exclude temperature and top_p
         const modelName = firstSelectedModel.toLowerCase()

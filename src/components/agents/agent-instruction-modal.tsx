@@ -92,15 +92,15 @@ export function AgentInstructionModal({ isOpen, onClose, agent, onSave, apiConfi
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[80vh] overflow-hidden">
-        <div className="flex items-center justify-between p-6 border-b">
+      <div className="bg-background border border-border rounded-lg shadow-xl w-full max-w-4xl max-h-[80vh] overflow-hidden">
+        <div className="flex items-center justify-between p-6 border-b border-border">
           <h2 className="text-xl font-semibold flex items-center gap-2">
             <BookUser className="w-5 h-5" />
             Edit Instruction - {agent.name}
           </h2>
           <button
             onClick={handleCancel}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
+            className="text-muted-foreground hover:text-foreground transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -112,10 +112,10 @@ export function AgentInstructionModal({ isOpen, onClose, agent, onSave, apiConfi
             {!showAIGenerator ? (
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-foreground mb-1">
                     Agent Instruction
                   </label>
-                  <p className="text-sm text-gray-500">
+                  <p className="text-sm text-muted-foreground">
                     Define how this agent should behave and respond to user messages.
                   </p>
                 </div>
@@ -131,18 +131,18 @@ export function AgentInstructionModal({ isOpen, onClose, agent, onSave, apiConfi
                 )}
               </div>
             ) : (
-              <div className="bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg p-4 mb-4">
+              <div className="bg-muted border border-border rounded-lg p-4 mb-4">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <Wand2 className="w-5 h-5 text-purple-600" />
-                    <h3 className="font-medium text-purple-900">AI Instruction Generator</h3>
+                    <h3 className="font-medium text-foreground">AI Instruction Generator</h3>
                   </div>
                   <button
                     onClick={() => {
                       setShowAIGenerator(false)
                       setAiPrompt('')
                     }}
-                    className="text-purple-400 hover:text-purple-600 transition-colors"
+                    className="text-muted-foreground hover:text-foreground transition-colors"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -150,19 +150,19 @@ export function AgentInstructionModal({ isOpen, onClose, agent, onSave, apiConfi
 
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-sm font-medium text-purple-900 mb-2">
-                      Describe your agent
-                    </label>
-                    <p className="text-sm text-purple-700 mb-2">
-                    Tell us what you want your agent to do, its personality, expertise, as well as the tools and workflows it can utilize.
-                    </p>
-                    <textarea
-                      value={aiPrompt}
-                      onChange={(e) => setAiPrompt(e.target.value)}
-                      placeholder="Example: A helpful customer service agent that is friendly, professional, and knowledgeable about our products. It should always ask clarifying questions and provide detailed solutions."
-                      className="w-full h-24 px-3 py-2 border border-purple-300 rounded-md focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent resize-none"
-                    />
-                  </div>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    Describe your agent
+                  </label>
+                  <p className="text-sm text-muted-foreground mb-2">
+                  Tell us what you want your agent to do, its personality, expertise, as well as the tools and workflows it can utilize.
+                  </p>
+                  <textarea
+                    value={aiPrompt}
+                    onChange={(e) => setAiPrompt(e.target.value)}
+                    placeholder="Example: A helpful customer service agent that is friendly, professional, and knowledgeable about our products. It should always ask clarifying questions and provide detailed solutions."
+                    className="w-full h-24 px-3 py-2 border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent resize-none bg-card text-foreground placeholder:text-muted-foreground"
+                  />
+                </div>
 
                   <div className="flex gap-2">
                     <button
@@ -187,7 +187,7 @@ export function AgentInstructionModal({ isOpen, onClose, agent, onSave, apiConfi
                         setShowAIGenerator(false)
                         setAiPrompt('')
                       }}
-                      className="px-4 py-2 text-purple-600 hover:text-purple-800 transition-colors"
+                      className="px-4 py-2 text-muted-foreground hover:text-foreground transition-colors"
                     >
                       Cancel
                     </button>
@@ -202,14 +202,14 @@ export function AgentInstructionModal({ isOpen, onClose, agent, onSave, apiConfi
                 value={instruction}
                 onChange={(e) => setInstruction(e.target.value)}
                 placeholder="You are a helpful AI assistant with access to tools. When you need to use a tool, call the appropriate function with the required parameters."
-                className={`w-full h-64 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none ${
-                  isGenerating ? 'bg-gray-50' : ''
-                }`}
-                disabled={isGenerating}
-              />
+              className={`w-full h-64 px-3 py-2 border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent resize-none bg-card text-foreground placeholder:text-muted-foreground ${
+                isGenerating ? 'opacity-80' : ''
+              }`}
+              disabled={isGenerating}
+            />
               {/* 生成状态指示器 */}
               {isGenerating && (
-                <div className="absolute top-3 right-3 flex items-center gap-2 bg-white/95 backdrop-blur-sm px-3 py-2 rounded-md text-sm text-gray-600 border border-gray-200 shadow-sm">
+                <div className="absolute top-3 right-3 flex items-center gap-2 bg-card/95 backdrop-blur-sm px-3 py-2 rounded-md text-sm text-muted-foreground border border-border shadow-sm">
                   <div className="flex gap-1">
                     <div className="w-2 h-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
                     <div className="w-2 h-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
@@ -220,20 +220,20 @@ export function AgentInstructionModal({ isOpen, onClose, agent, onSave, apiConfi
               )}
             </div>
 
-            <div className="text-sm text-gray-500">
+            <div className="text-sm text-muted-foreground">
               Character count: {instruction.length}
             </div>
           </div>
         </div>
 
-        <div className="flex items-center justify-between p-6 border-t bg-gray-50">
-          <div className="text-sm text-gray-600">
+        <div className="flex items-center justify-between p-6 border-t border-border bg-muted">
+          <div className="text-sm text-muted-foreground">
             Changes will be saved to the agent configuration
           </div>
           <div className="flex gap-3">
             <button
               onClick={handleCancel}
-              className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+              className="px-4 py-2 text-muted-foreground hover:text-foreground transition-colors"
               disabled={isSaving}
             >
               Cancel

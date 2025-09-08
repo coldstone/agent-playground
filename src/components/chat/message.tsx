@@ -207,10 +207,8 @@ export function Message({
   }
 
   const getBgColor = () => {
-    if (isSystem) return 'bg-orange-50 border-orange-200'
-    if (isUser) return 'bg-blue-50 border-blue-200'
-    if (isTool) return 'bg-purple-50 border-purple-200'
-    return 'bg-green-50 border-green-200'
+    // Use tokenized surfaces for theme consistency
+    return 'bg-card border-border'
   }
 
   const getModelIcon = (provider?: string) => {
@@ -225,7 +223,7 @@ export function Message({
         <img 
           src={`/${providerConfig.icon}.svg`}
           alt={provider}
-          className="w-3 h-3 opacity-60"
+          className="w-3 h-3 opacity-60 dark:invert"
         />
       )
     }
@@ -241,7 +239,7 @@ export function Message({
 
   return (
     <div className={`group flex gap-3 p-4 rounded-lg border ${getBgColor()} min-w-0`}>
-      <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${getRoleColor()} bg-white border`}>
+      <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${getRoleColor()} bg-card border border-border`}>
         {getIcon()}
       </div>
       <div className="flex-1 space-y-2 min-w-0">
@@ -254,12 +252,12 @@ export function Message({
               {formatTimestamp(message.timestamp)}
             </span>
             {isTool && message.tool_call_id && (
-              <span className="text-xs text-muted-foreground bg-purple-100 px-2 py-1 rounded">
+              <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
                 ID: {message.tool_call_id.slice(-8)}
               </span>
             )}
             {message.error && (
-              <span className="text-xs text-red-600 bg-red-100 px-2 py-1 rounded">
+              <span className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 px-2 py-1 rounded">
                 Error
               </span>
             )}
@@ -374,21 +372,21 @@ export function Message({
           <>
             {/* Reasoning content - only show for assistant messages with reasoning */}
             {message.role === 'assistant' && agentMessage.reasoningContent && (
-              <div className="border border-gray-200 bg-gray-50 rounded-md mb-3">
+              <div className="border border-border bg-muted rounded-md mb-3">
                 {!isInActiveConversation && (
-                  <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200 hover:cursor-pointer"
+                  <div className="flex items-center justify-between px-3 py-2 border-b border-border hover:cursor-pointer"
                       onClick={() => onToggleReasoningExpansion?.(message.id)}>
                     <div className="flex items-center gap-2">
-                      <Atom className="w-4 h-4 text-gray-400" />
-                      <span className="text-xs text-gray-600 font-medium">
+                      <Atom className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-xs text-muted-foreground font-medium">
                         Thoughts
                         {agentMessage.reasoningDuration && formatReasoningDuration && (
-                          <span className="text-gray-400"> ({formatReasoningDuration(agentMessage.reasoningDuration)})</span>
+                          <span className="text-muted-foreground/70"> ({formatReasoningDuration(agentMessage.reasoningDuration)})</span>
                         )}
                       </span>
                     </div>
                     <button
-                      className="text-xs text-gray-400 hover:text-gray-600 transition-colors p-1"
+                      className="text-xs text-muted-foreground hover:text-foreground transition-colors p-1"
                     >
                       {isReasoningExpanded ? (
                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -404,7 +402,7 @@ export function Message({
                 )}
                 {(isInActiveConversation || isReasoningExpanded) && (
                   <div className="p-3">
-                    <div className="text-sm text-gray-500 leading-snug">
+                    <div className="text-sm text-muted-foreground leading-snug">
                       <MessageContent
                         content={agentMessage.reasoningContent}
                         className="min-w-0"
@@ -433,7 +431,7 @@ export function Message({
 
             {/* Error message display - show below content for assistant messages */}
             {message.role === 'assistant' && message.error && (
-              <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <div className="mt-3 p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg">
                 <div className="flex items-start gap-2">
                   <X className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
                   <div className="flex-1 min-w-0">

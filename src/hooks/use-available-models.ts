@@ -42,12 +42,51 @@ export function useAvailableModels() {
     loadCurrentModel()
   }, [])
 
+  // Listen for available models changes broadcasted by config panel
+  useEffect(() => {
+    const handler = () => {
+      loadAvailableModels()
+    }
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('agent-playground-available-models-changed', handler)
+    }
+
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('agent-playground-available-models-changed', handler)
+      }
+    }
+  }, [])
+
+  // Listen for current model changes (same-tab via custom event, cross-tab via storage)
+  useEffect(() => {
+    const onCustom = () => loadCurrentModel()
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'agent-playground-current-model') {
+        loadCurrentModel()
+      }
+    }
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('agent-playground-current-model-changed', onCustom as EventListener)
+      window.addEventListener('storage', onStorage)
+    }
+
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('agent-playground-current-model-changed', onCustom as EventListener)
+        window.removeEventListener('storage', onStorage)
+      }
+    }
+  }, [])
+
   const hasAvailableModels = availableModels.length > 0
 
   // Check if current model is valid and available
-  const hasValidCurrentModel = currentModel && availableModels.some(
+  const hasValidCurrentModel = !!(currentModel && availableModels.some(
     m => m.provider === currentModel.provider && m.model === currentModel.model
-  )
+  ))
 
   return {
     availableModels,
