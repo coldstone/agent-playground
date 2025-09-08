@@ -24,6 +24,26 @@ export function ModelSelector({ onConfigLLM, autoMode = false, onAutoModeChange,
     loadCurrentModel()
   }, [])
 
+  // When available models change, ensure currentModel is still valid
+  useEffect(() => {
+    if (!currentModel) return
+    const stillAvailable = availableModels.some(
+      m => m.provider === currentModel.provider && m.model === currentModel.model
+    )
+    if (!stillAvailable) {
+      setCurrentModel(null)
+      try {
+        localStorage.removeItem('agent-playground-current-model')
+        // Broadcast change so other components update immediately
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('agent-playground-current-model-changed', { detail: null }))
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+  }, [availableModels, currentModel])
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -52,6 +72,10 @@ export function ModelSelector({ onConfigLLM, autoMode = false, onAutoModeChange,
   const saveCurrentModel = (model: CurrentModel) => {
     localStorage.setItem('agent-playground-current-model', JSON.stringify(model))
     setCurrentModel(model)
+    // Notify other parts of the app (same-tab) that current model changed
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('agent-playground-current-model-changed', { detail: model }))
+    }
   }
 
   const handleModelSelect = (model: AvailableModel) => {
@@ -85,9 +109,7 @@ export function ModelSelector({ onConfigLLM, autoMode = false, onAutoModeChange,
     )
 
     if (!model) {
-      // Current model is no longer available, clear it
-      setCurrentModel(null)
-      localStorage.removeItem('agent-playground-current-model')
+      // Current model is no longer available
       return 'Select Model'
     }
 

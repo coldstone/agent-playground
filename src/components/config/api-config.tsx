@@ -116,6 +116,10 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
       const modelId = `${selectedProvider.name}-${model}`
       try {
         await dbManager.deleteAvailableModel(modelId)
+        // Notify other parts of the app to refresh available models
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('agent-playground-available-models-changed'))
+        }
       } catch (error) {
         console.error('Failed to delete available model:', error)
       }
@@ -133,6 +137,10 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
 
       try {
         await dbManager.saveAvailableModel(availableModel)
+        // Notify other parts of the app to refresh available models
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('agent-playground-available-models-changed'))
+        }
       } catch (error) {
         console.error('Failed to save available model:', error)
       }
@@ -360,6 +368,11 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
 
       // Reload available models to reflect changes
       await loadAvailableModels()
+
+      // Notify other parts of the app to refresh available models
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('agent-playground-available-models-changed'))
+      }
     } catch (error) {
       console.error('Failed to save models:', error)
     }
