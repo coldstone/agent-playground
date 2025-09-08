@@ -16,9 +16,9 @@ export function AutoSwitch({ autoMode, onAutoModeChange }: AutoSwitchProps) {
           className="sr-only"
         />
         <div className={`w-11 h-6 rounded-full transition-colors ${
-          autoMode ? 'bg-green-500' : 'bg-gray-200'
+          autoMode ? 'bg-green-500' : 'bg-muted'
         }`}>
-          <div className={`w-4 h-4 bg-white rounded-full shadow transform transition-transform ${
+          <div className={`w-4 h-4 bg-card rounded-full shadow transform transition-transform ${
             autoMode ? 'translate-x-6' : 'translate-x-1'
           } mt-1`} />
         </div>

@@ -352,8 +352,8 @@ export function ChatMessages({
           {isLoading && showAIMessageBox && (!autoMode || (autoMode && !displayMessages.some((msg, index) => 
             'isMerged' in msg && msg.isMerged && index === displayMessages.length - 1
           ))) && (
-            <div className="flex gap-3 p-4 rounded-lg border bg-green-50 border-green-200">
-              <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-green-600 bg-white border">
+            <div className="flex gap-3 p-4 rounded-lg border bg-card border-border">
+              <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-green-600 bg-card border border-border">
                 <div className="w-4 h-4 border-2 border-green-600 border-t-transparent rounded-full animate-spin" />
               </div>
               <div className="flex-1 min-w-0 space-y-2">
@@ -368,20 +368,20 @@ export function ChatMessages({
 
                 {/* Streaming reasoning content */}
                 {streamingReasoningContent && (
-                  <div className="border border-gray-200 bg-gray-50 rounded-md mb-3">
-                    <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200">
+                  <div className="border border-border bg-muted rounded-md mb-3">
+                    <div className="flex items-center justify-between px-3 py-2 border-b border-border">
                       <div className="flex items-center gap-2">
-                        <Atom className="w-4 h-4 text-gray-400" />
-                        <span className="text-xs text-gray-600 font-medium">
+                        <Atom className="w-4 h-4 text-muted-foreground" />
+                        <span className="text-xs text-muted-foreground font-medium">
                           Thoughts
                           {reasoningDuration && formatReasoningDuration && (
-                            <span className="text-gray-400"> ({formatReasoningDuration(reasoningDuration)})</span>
+                            <span className="text-muted-foreground/70"> ({formatReasoningDuration(reasoningDuration)})</span>
                           )}
                         </span>
                       </div>
                       <button
                         onClick={onToggleStreamingReasoningExpansion}
-                        className="text-xs text-gray-400 hover:text-gray-600 transition-colors p-1"
+                        className="text-xs text-muted-foreground hover:text-foreground transition-colors p-1"
                       >
                         {isStreamingReasoningExpanded ? (
                           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -396,7 +396,7 @@ export function ChatMessages({
                     </div>
                     {(isInActiveConversation || isStreamingReasoningExpanded) && (
                       <div className="p-3">
-                        <div className="text-sm text-gray-500 leading-snug">
+                        <div className="text-sm text-muted-foreground leading-snug">
                           <div className="relative">
                             <StreamingContent
                               content={streamingReasoningContent}
@@ -413,7 +413,7 @@ export function ChatMessages({
 
                 {/* Streaming content */}
                 {streamingContent && (
-                  <div className="min-w-0 overflow-hidden">
+                  <div className="min-w-0 overflow-hidden text-foreground">
                     <StreamingContent
                       content={streamingContent}
                       isStreaming={true}
@@ -528,7 +528,7 @@ function MergedMessageDisplay({
         <img 
           src={`/${providerConfig.icon}.svg`}
           alt={provider}
-          className="w-3 h-3 opacity-60"
+          className="w-3 h-3 opacity-60 dark:invert"
         />
       )
     }
@@ -543,8 +543,8 @@ function MergedMessageDisplay({
   }
 
   return (
-    <div className="group flex gap-3 p-4 rounded-lg border bg-green-50 border-green-200 min-w-0">
-      <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-green-600 bg-white border">
+    <div className="group flex gap-3 p-4 rounded-lg border bg-card border-border min-w-0">
+      <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-green-600 bg-card border border-border">
         <Bot className="w-4 h-4" />
       </div>
 
@@ -594,19 +594,19 @@ function MergedMessageDisplay({
           <div key={message.id} className="space-y-3">
             {/* Reasoning content - only show for assistant messages with reasoning */}
             {message.reasoningContent && (
-              <div className="border border-gray-200 bg-gray-50 rounded-md mb-3">
-                <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200 hover:cursor-pointer"
+              <div className="border border-border bg-muted rounded-md mb-3">
+                <div className="flex items-center justify-between px-3 py-2 border-b border-border hover:cursor-pointer"
                     onClick={() => onToggleReasoningExpansion?.(message.id)}>
                   <div className="flex items-center gap-2">
-                    <Atom className="w-4 h-4 text-gray-400" />
-                    <span className="text-xs text-gray-600 font-medium">
+                    <Atom className="w-4 h-4 text-muted-foreground" />
+                    <span className="text-xs text-muted-foreground font-medium">
                       Thoughts
                       {formatReasoningDuration && message.reasoningDuration && (
-                        <span className="text-gray-400"> ({formatReasoningDuration(message.reasoningDuration)})</span>
+                        <span className="text-muted-foreground/70"> ({formatReasoningDuration(message.reasoningDuration)})</span>
                       )}
                     </span>
                   </div>
-                  <button className="text-xs text-gray-400 hover:text-gray-600 transition-colors p-1">
+                  <button className="text-xs text-muted-foreground hover:text-foreground transition-colors p-1">
                     {expandedReasoningMessages.has(message.id) ? (
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
@@ -620,7 +620,7 @@ function MergedMessageDisplay({
                 </div>
                 {expandedReasoningMessages.has(message.id) && (
                   <div className="p-3">
-                    <div className="text-sm text-gray-500 leading-snug">
+                    <div className="text-sm text-muted-foreground leading-snug">
                       <MessageContent
                         content={message.reasoningContent}
                         className="min-w-0"
@@ -698,20 +698,20 @@ function MergedMessageDisplay({
           <>
             {/* Streaming reasoning content */}
             {streamingReasoningContent && (
-              <div className="border border-gray-200 bg-gray-50 rounded-md mb-3">
-                <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200">
+              <div className="border border-border bg-muted rounded-md mb-3">
+                <div className="flex items-center justify-between px-3 py-2 border-b border-border">
                   <div className="flex items-center gap-2">
-                    <Atom className="w-4 h-4 text-gray-400" />
-                    <span className="text-xs text-gray-600 font-medium">
+                    <Atom className="w-4 h-4 text-muted-foreground" />
+                    <span className="text-xs text-muted-foreground font-medium">
                       Thoughts
                       {reasoningDuration && formatReasoningDuration && (
-                        <span className="text-gray-400"> ({formatReasoningDuration(reasoningDuration)})</span>
+                        <span className="text-muted-foreground/70"> ({formatReasoningDuration(reasoningDuration)})</span>
                       )}
                     </span>
                   </div>
                   <button
                     onClick={onToggleStreamingReasoningExpansion}
-                    className="text-xs text-gray-400 hover:text-gray-600 transition-colors p-1"
+                    className="text-xs text-muted-foreground hover:text-foreground transition-colors p-1"
                   >
                     {isStreamingReasoningExpanded ? (
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -726,7 +726,7 @@ function MergedMessageDisplay({
                 </div>
                 {(isInActiveConversation || isStreamingReasoningExpanded) && (
                   <div className="p-3">
-                    <div className="text-sm text-gray-500 leading-snug">
+                    <div className="text-sm text-muted-foreground leading-snug">
                       <div className="relative">
                         <StreamingContent
                           content={streamingReasoningContent}
@@ -743,7 +743,7 @@ function MergedMessageDisplay({
 
             {/* Streaming text content */}
             {streamingContent && (
-              <div className="min-w-0 overflow-hidden">
+              <div className="min-w-0 overflow-hidden text-foreground">
                 <StreamingContent
                   content={streamingContent}
                   isStreaming={true}

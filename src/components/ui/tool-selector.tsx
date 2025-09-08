@@ -71,14 +71,14 @@ export function ToolSelector({ tools, selectedToolIds, onToolsChange }: ToolSele
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 transition-colors min-w-[120px] rounded-full"
+        className="flex items-center gap-2 px-3 py-1.5 border border-border bg-muted hover:bg-muted/80 transition-colors min-w-[120px] rounded-full"
       >
         <span className="flex-1 text-left truncate text-xs text-muted-foreground">{getDisplayText()}</span>
         <ChevronDown className="w-3 h-3 text-muted-foreground" />
       </button>
 
       {isOpen && (
-        <div className="absolute bottom-full left-0 mb-1 w-64 bg-background border border-border rounded-md shadow-lg z-50 max-h-64 overflow-y-auto">
+        <div className="absolute bottom-full left-0 mb-1 w-64 bg-card border border-border rounded-md shadow-lg z-50 max-h-64 overflow-y-auto">
           {tools.length === 0 ? (
             <div className="p-3 text-sm text-muted-foreground text-center">
               No tools available
@@ -119,7 +119,7 @@ export function ToolSelector({ tools, selectedToolIds, onToolsChange }: ToolSele
                           type="checkbox"
                           checked={selectedToolIds.includes(tool.id)}
                           onChange={() => {}} // Handled by parent div click
-                          className="flex-shrink-0"
+                          className="apg-checkbox flex-shrink-0"
                         />
                         <div className="flex-1 min-w-0">
                           <div className="text-sm truncate">{tool.name}</div>

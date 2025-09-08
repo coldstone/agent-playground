@@ -200,8 +200,8 @@ export function AgentToolsModal({ isOpen, onClose, agent, allTools, authorizatio
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[80vh] overflow-hidden">
-        <div className="flex items-center justify-between p-6 border-b">
+      <div className="bg-background border border-border rounded-lg shadow-xl w-full max-w-3xl max-h-[80vh] overflow-hidden">
+        <div className="flex items-center justify-between p-6 border-b border-border">
           <h2 className="text-xl font-semibold flex items-center gap-2">
             <Wrench className="w-5 h-5" />
             Manage Tools - {agent.name}
@@ -228,7 +228,7 @@ export function AgentToolsModal({ isOpen, onClose, agent, allTools, authorizatio
             </Button>
             <button
               onClick={handleCancel}
-              className="text-gray-400 hover:text-gray-600 transition-colors ml-2"
+              className="text-muted-foreground hover:text-foreground transition-colors ml-2"
             >
               <X className="w-5 h-5" />
             </button>
@@ -237,25 +237,25 @@ export function AgentToolsModal({ isOpen, onClose, agent, allTools, authorizatio
 
         <div className="flex h-[60vh]">
           {/* 左侧：标签分类 */}
-          <div className="w-48 border-r bg-gray-50 p-4 overflow-y-auto">
-            <h3 className="font-medium text-gray-900 mb-3">Categories</h3>
+          <div className="w-48 border-r border-border bg-muted p-4 overflow-y-auto">
+            <h3 className="font-medium text-foreground mb-3">Categories</h3>
             <div className="space-y-1">
               <button
                 onClick={() => setSelectedTag('all')}
-                className={`w-full text-left px-3 py-2 rounded text-sm transition-colors ${
+                className={`w-full text-left px-3 py-2 rounded text-sm transition-colors border ${
                   selectedTag === 'all'
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'text-gray-600 hover:bg-gray-100'
+                    ? 'bg-primary/10 text-primary border-primary/40'
+                    : 'text-muted-foreground hover:bg-muted border-transparent'
                 }`}
               >
                 All Tools ({allTools.length})
               </button>
               <button
                 onClick={() => setSelectedTag('untagged')}
-                className={`w-full text-left px-3 py-2 rounded text-sm transition-colors ${
+                className={`w-full text-left px-3 py-2 rounded text-sm transition-colors border ${
                   selectedTag === 'untagged'
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'text-gray-600 hover:bg-gray-100'
+                    ? 'bg-primary/10 text-primary border-primary/40'
+                    : 'text-muted-foreground hover:bg-muted border-transparent'
                 }`}
               >
                 Untagged ({allTools.filter(t => !t.tag).length})
@@ -272,10 +272,10 @@ export function AgentToolsModal({ isOpen, onClose, agent, allTools, authorizatio
                     <button
                       key={tag}
                       onClick={() => setSelectedTag(tag!)}
-                      className={`w-full text-left px-3 py-2 rounded text-sm transition-colors ${
+                      className={`w-full text-left px-3 py-2 rounded text-sm transition-colors border ${
                         selectedTag === tag
-                          ? 'bg-blue-100 text-blue-700'
-                          : 'text-gray-600 hover:bg-gray-100'
+                          ? 'bg-primary/10 text-primary border-primary/40'
+                          : 'text-muted-foreground hover:bg-muted border-transparent'
                       }`}
                     >
                       <div className="flex items-center gap-2">
@@ -292,24 +292,24 @@ export function AgentToolsModal({ isOpen, onClose, agent, allTools, authorizatio
           {/* 右侧：工具列表 */}
           <div className="flex-1 p-6 overflow-y-auto">
             <div className="mb-4">
-              <p className="text-sm text-gray-600 mb-3">
+              <p className="text-sm text-muted-foreground mb-3">
                 Select the tools that this agent can use. Tools provide additional capabilities like API calls, data processing, and external integrations.
               </p>
               {/* Search Box */}
               <div className="relative">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
                 <input
                   type="text"
                   placeholder="Search tools by name or description..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full pl-10 pr-4 py-2 border border-input rounded-md text-sm focus:ring-2 focus:ring-ring focus:border-transparent bg-card text-foreground placeholder:text-muted-foreground"
                 />
               </div>
             </div>
 
             {filteredTools.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
+              <div className="text-center py-8 text-muted-foreground">
                 <Wrench className="w-12 h-12 mx-auto mb-4 opacity-50" />
                 <p>
                   {searchQuery ? 
@@ -333,7 +333,7 @@ export function AgentToolsModal({ isOpen, onClose, agent, allTools, authorizatio
                   const effectiveAuth = binding ? getEffectiveAuthorization(tool, authorizations, binding) : null
                   
                   return (
-                    <div key={tool.id} className="border border-gray-200 rounded-lg p-4 space-y-3">
+                    <div key={tool.id} className="border border-border rounded-lg p-4 space-y-3 bg-card">
                       {/* Tool Selection */}
                       <label className="flex items-start gap-3 cursor-pointer">
                         <div className="flex items-center h-5">
@@ -341,14 +341,14 @@ export function AgentToolsModal({ isOpen, onClose, agent, allTools, authorizatio
                             type="checkbox"
                             checked={isSelected}
                             onChange={() => handleToolToggle(tool.id)}
-                            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                            className="apg-checkbox"
                           />
                         </div>
                         <div className="flex-1 min-w-0 overflow-hidden">
                           <div className="flex items-center gap-2 min-w-0">
-                            <h3 className="font-medium text-gray-900 truncate">{tool.name}</h3>
+                            <h3 className="font-medium text-foreground truncate">{tool.name}</h3>
                             {tool.tag && (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-600 flex-shrink-0">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-muted text-muted-foreground flex-shrink-0">
                                 <Tag className="w-3 h-3" />
                                 {tool.tag}
                               </span>
@@ -357,7 +357,7 @@ export function AgentToolsModal({ isOpen, onClose, agent, allTools, authorizatio
                               <Check className="w-4 h-4 text-green-600 flex-shrink-0" />
                             )}
                           </div>
-                          <p className="text-sm text-gray-600 mt-1 line-clamp-2">{tool.description}</p>
+                          <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{tool.description}</p>
                           {tool.httpRequest && (
                             <div className="text-xs text-blue-600 mt-1 flex items-center gap-1 min-w-0">
                               <span className="font-medium flex-shrink-0">{tool.httpRequest.method}</span>
@@ -371,9 +371,9 @@ export function AgentToolsModal({ isOpen, onClose, agent, allTools, authorizatio
 
                       {/* Authorization Selection */}
                       {isSelected && (
-                        <div className="ml-7 pl-4 border-l-2 border-gray-200 space-y-2">
+                        <div className="ml-7 pl-4 border-l-2 border-border space-y-2">
                           <div className="flex items-center gap-2">
-                            <Key className="w-4 h-4 text-gray-500" />
+                            <Key className="w-4 h-4 text-muted-foreground" />
                             <Label className="text-sm font-medium">Authorization</Label>
                           </div>
                           <CustomSelect
@@ -390,7 +390,7 @@ export function AgentToolsModal({ isOpen, onClose, agent, allTools, authorizatio
                             size="sm"
                           />
                           {effectiveAuth && (
-                            <p className="text-xs text-gray-500">
+                            <p className="text-xs text-muted-foreground">
                               Using: <span className="font-medium">{effectiveAuth.name}</span>
                               {effectiveAuth !== authorizations.find(a => a.id === binding?.authorizationId) && (
                                 <span className="text-blue-600"> (Auto-selected)</span>
@@ -407,14 +407,14 @@ export function AgentToolsModal({ isOpen, onClose, agent, allTools, authorizatio
           </div>
         </div>
 
-        <div className="flex items-center justify-between p-6 border-t bg-gray-50">
-          <div className="text-sm text-gray-600 flex items-center">
+        <div className="flex items-center justify-between p-6 border-t border-border bg-muted/60">
+          <div className="text-sm text-muted-foreground flex items-center">
             Selected: {selectedCount} tool{selectedCount !== 1 ? 's' : ''}
           </div>
           <div className="flex items-center gap-3">
             <button
               onClick={handleCancel}
-              className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors flex items-center"
+              className="px-4 py-2 text-muted-foreground hover:text-foreground transition-colors flex items-center"
               disabled={isSaving}
             >
               Cancel

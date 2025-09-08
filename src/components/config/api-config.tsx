@@ -493,7 +493,7 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
                   type="checkbox"
                   checked={selectedModels.includes(model)}
                   onChange={() => handleModelToggle(model)}
-                  className="rounded border-border"
+                  className="apg-checkbox"
                 />
                 <span className="text-sm">{model}</span>
               </label>
