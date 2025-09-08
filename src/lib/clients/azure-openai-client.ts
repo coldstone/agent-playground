@@ -14,10 +14,11 @@ export class AzureOpenAIClient {
     // Azure OpenAI endpoint format: 
     // https://{resource-name}.openai.azure.com/openai/deployments/{deployment-name}/chat/completions?api-version={api-version}
     // deployment-name is the current model name
-    const { endpoint, azureApiVersion, model } = this.config
+    const { endpoint, model } = this.config
+    const apiVersion = (this.config.azureApiVersion && this.config.azureApiVersion.trim()) || '2025-04-01-preview'
     
-    if (!endpoint || !azureApiVersion || !model) {
-      throw new Error('Azure OpenAI requires endpoint, API version, and model (deployment name)')
+    if (!endpoint || !model) {
+      throw new Error('Azure OpenAI requires endpoint and model (deployment name)')
     }
 
     // Extract resource name from endpoint
@@ -39,7 +40,7 @@ export class AzureOpenAIClient {
       resourceEndpoint = `${resourceEndpoint}.openai.azure.com`
     }
 
-    return `https://${resourceEndpoint}/openai/deployments/${model}/chat/completions?api-version=${azureApiVersion}`
+    return `https://${resourceEndpoint}/openai/deployments/${model}/chat/completions?api-version=${apiVersion}`
   }
 
   async *streamChatCompletion(messages: (Message | AgentMessage)[], abortSignal?: AbortSignal): AsyncGenerator<{ content?: string; reasoningContent?: string; toolCalls?: ToolCall[]; usage?: any }, void, unknown> {

@@ -92,7 +92,7 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(function ChatI
   }), [disabled])
 
   return (
-    <div className="border-t border-border bg-background p-4">
+    <div className="border-t border-border bg-card p-4">
       <form onSubmit={handleSubmit} className="space-y-3">
         <div className="flex-1">
           <Textarea

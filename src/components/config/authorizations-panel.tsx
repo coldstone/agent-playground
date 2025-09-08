@@ -146,32 +146,32 @@ export const AuthorizationsPanel = forwardRef<AuthorizationsPanelRef, Authorizat
       {/* Authorization Groups */}
       <div className="space-y-3">
         {Object.entries(groupedAuthorizations).map(([groupKey, auths]) => (
-          <div key={groupKey} className="border rounded-lg">
+          <div key={groupKey} className="border border-border rounded-lg bg-card">
             {/* Group Header */}
-            <div className="flex items-center gap-2 p-2 bg-gray-50 border-b">
+            <div className="flex items-center gap-2 p-2 bg-muted border-b border-border">
               {groupKey === 'global' ? (
                 <>
                   <Globe className="w-3 h-3 text-blue-500" />
-                  <span className="text-xs font-medium">Global (All Tools)</span>
+                  <span className="text-xs font-medium text-foreground">Global (All Tools)</span>
                 </>
               ) : (
                 <>
                   <Tag className="w-3 h-3 text-green-500" />
-                  <span className="text-xs font-medium">Tag: {groupKey}</span>
+                  <span className="text-xs font-medium text-foreground">Tag: {groupKey}</span>
                 </>
               )}
-              <span className="text-xs text-gray-400">({auths.length})</span>
+              <span className="text-xs text-muted-foreground">({auths.length})</span>
             </div>
 
             {/* Authorizations in Group */}
-            <div className="divide-y">
+            <div className="divide-y divide-border">
               {auths.map(auth => (
                 <div key={auth.id} className="p-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => toggleExpanded(auth.id)}
-                        className="p-0.5 hover:bg-gray-100 rounded"
+                        className="p-0.5 hover:bg-muted rounded"
                       >
                         {expandedAuths.has(auth.id) ? (
                           <ChevronDown className="w-3 h-3" />
@@ -180,7 +180,7 @@ export const AuthorizationsPanel = forwardRef<AuthorizationsPanelRef, Authorizat
                         )}
                       </button>
                       <div>
-                        <span className="text-xs font-medium">{auth.name}</span>
+                        <span className="text-xs font-medium text-foreground">{auth.name}</span>
                       </div>
                     </div>
 
@@ -188,16 +188,16 @@ export const AuthorizationsPanel = forwardRef<AuthorizationsPanelRef, Authorizat
                       <button
                         onClick={() => handleToggleDefault(auth)}
                         title={auth.isDefaultInTag ? "Remove as default" : "Set as default"}
-                        className="h-6 w-6 flex items-center justify-center hover:bg-gray-100 rounded transition-colors"
+                        className="h-6 w-6 flex items-center justify-center hover:bg-muted rounded transition-colors"
                       >
-                        <Star className={`w-3 h-3 ${auth.isDefaultInTag ? 'text-yellow-500 fill-current' : 'text-gray-400'}`} />
+                        <Star className={`w-3 h-3 ${auth.isDefaultInTag ? 'text-yellow-500 fill-current' : 'text-muted-foreground'}`} />
                       </button>
                       <button
                         onClick={() => handleEdit(auth)}
-                        className="h-6 w-6 flex items-center justify-center hover:bg-gray-100 rounded transition-colors"
+                        className="h-6 w-6 flex items-center justify-center hover:bg-muted rounded transition-colors"
                         title="Edit"
                       >
-                        <Edit3 className="w-3 h-3 text-gray-500" />
+                        <Edit3 className="w-3 h-3 text-muted-foreground" />
                       </button>
                       <button
                         onClick={() => handleDeleteClick(auth)}
@@ -213,14 +213,14 @@ export const AuthorizationsPanel = forwardRef<AuthorizationsPanelRef, Authorizat
                   {expandedAuths.has(auth.id) && (
                     <div className="mt-2 pl-4 space-y-2">
                       <div>
-                        <h4 className="text-xs font-medium text-gray-700 mb-1">Headers:</h4>
+                        <h4 className="text-xs font-medium text-foreground mb-1">Headers:</h4>
                         {auth.headers.length > 0 ? (
                           <div className="space-y-1">
                             {auth.headers.map((header, index) => (
-                              <div key={index} className="text-xs font-mono text-gray-600 truncate">
-                                <span className="font-medium bg-gray-100 px-1.5 py-0.5 rounded">{header.key}</span>
-                                <span className="text-gray-400">: </span>
-                                <span className="text-gray-500">
+                              <div key={index} className="text-xs font-mono text-muted-foreground truncate">
+                                <span className="font-medium bg-muted px-1.5 py-0.5 rounded">{header.key}</span>
+                                <span className="text-muted-foreground/70">: </span>
+                                <span className="text-muted-foreground">
                                   {header.value.length > 30 
                                     ? `${header.value.substring(0, 30)}...` 
                                     : header.value
@@ -230,10 +230,10 @@ export const AuthorizationsPanel = forwardRef<AuthorizationsPanelRef, Authorizat
                             ))}
                           </div>
                         ) : (
-                          <p className="text-xs text-gray-500">No headers defined</p>
+                          <p className="text-xs text-muted-foreground">No headers defined</p>
                         )}
                       </div>
-                      <div className="text-xs text-gray-400">
+                      <div className="text-xs text-muted-foreground">
                         Created: {new Date(auth.createdAt).toLocaleDateString()}
                         {auth.updatedAt !== auth.createdAt && (
                           <span> • Updated: {new Date(auth.updatedAt).toLocaleDateString()}</span>
@@ -248,10 +248,10 @@ export const AuthorizationsPanel = forwardRef<AuthorizationsPanelRef, Authorizat
         ))}
 
         {authorizations.length === 0 && (
-          <div className="text-center py-6 text-gray-500">
-            <Key className="w-8 h-8 mx-auto mb-3 text-gray-300" />
+          <div className="text-center py-6 text-muted-foreground">
+            <Key className="w-8 h-8 mx-auto mb-3 opacity-60" />
             <p className="text-xs">No authorizations created yet</p>
-            <p className="text-xs text-gray-400">Create your first authorization to get started</p>
+            <p className="text-xs text-muted-foreground/70">Create your first authorization to get started</p>
           </div>
         )}
       </div>
@@ -443,6 +443,7 @@ function AuthorizationModal({ authorization, availableTags, onSave, onCancel }: 
               id="isDefault"
               checked={isDefaultInTag}
               onChange={(e) => setIsDefaultInTag(e.target.checked)}
+              className="apg-checkbox"
             />
             <label htmlFor="isDefault" className="text-sm">
               Set as default for this tag

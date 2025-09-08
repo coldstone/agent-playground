@@ -24,6 +24,26 @@ export function ModelSelector({ onConfigLLM, autoMode = false, onAutoModeChange,
     loadCurrentModel()
   }, [])
 
+  // When available models change, ensure currentModel is still valid
+  useEffect(() => {
+    if (!currentModel) return
+    const stillAvailable = availableModels.some(
+      m => m.provider === currentModel.provider && m.model === currentModel.model
+    )
+    if (!stillAvailable) {
+      setCurrentModel(null)
+      try {
+        localStorage.removeItem('agent-playground-current-model')
+        // Broadcast change so other components update immediately
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('agent-playground-current-model-changed', { detail: null }))
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+  }, [availableModels, currentModel])
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -52,6 +72,10 @@ export function ModelSelector({ onConfigLLM, autoMode = false, onAutoModeChange,
   const saveCurrentModel = (model: CurrentModel) => {
     localStorage.setItem('agent-playground-current-model', JSON.stringify(model))
     setCurrentModel(model)
+    // Notify other parts of the app (same-tab) that current model changed
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('agent-playground-current-model-changed', { detail: model }))
+    }
   }
 
   const handleModelSelect = (model: AvailableModel) => {
@@ -85,9 +109,7 @@ export function ModelSelector({ onConfigLLM, autoMode = false, onAutoModeChange,
     )
 
     if (!model) {
-      // Current model is no longer available, clear it
-      setCurrentModel(null)
-      localStorage.removeItem('agent-playground-current-model')
+      // Current model is no longer available
       return 'Select Model'
     }
 
@@ -101,7 +123,7 @@ export function ModelSelector({ onConfigLLM, autoMode = false, onAutoModeChange,
       <div className="relative" ref={dropdownRef}>
         <button
           onClick={() => setIsOpen(!isOpen)}
-          className="flex items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors border-none bg-gray-100 rounded-full"
+          className="flex items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors border border-border bg-muted rounded-full"
         >
           {currentModel && (() => {
             const model = availableModels.find(
@@ -114,7 +136,7 @@ export function ModelSelector({ onConfigLLM, autoMode = false, onAutoModeChange,
                   <img 
                     src={`/${providerConfig.icon}.svg`}
                     alt={model.provider}
-                    className="w-3 h-3 flex-shrink-0"
+                    className="w-3 h-3 flex-shrink-0 dark:invert"
                   />
                 )
               }
@@ -128,7 +150,7 @@ export function ModelSelector({ onConfigLLM, autoMode = false, onAutoModeChange,
         </button>
 
         {isOpen && hasAvailableModels && (
-          <div className="absolute bottom-full left-0 mb-1 bg-background border border-border rounded-md shadow-lg z-50 min-w-[250px] max-h-[300px] overflow-y-auto">
+          <div className="absolute bottom-full left-0 mb-1 bg-card border border-border rounded-md shadow-lg z-50 min-w-[250px] max-h-[300px] overflow-y-auto">
             {Object.entries(groupedModels).map(([provider, models]) => (
               <div key={provider}>
                 <div className="px-3 py-1.5 text-xs font-medium text-muted-foreground bg-muted/50 border-b border-border">
@@ -164,9 +186,9 @@ export function ModelSelector({ onConfigLLM, autoMode = false, onAutoModeChange,
               className="sr-only"
             />
             <div className={`w-11 h-6 rounded-full transition-colors ${
-              autoMode ? 'bg-green-500' : 'bg-gray-200'
+              autoMode ? 'bg-green-500' : 'bg-muted'
             }`}>
-              <div className={`w-4 h-4 bg-white rounded-full shadow transform transition-transform ${
+              <div className={`w-4 h-4 bg-card rounded-full shadow transform transition-transform ${
                 autoMode ? 'translate-x-6' : 'translate-x-1'
               } mt-1`} />
             </div>

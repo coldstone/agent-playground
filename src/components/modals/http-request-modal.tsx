@@ -62,9 +62,9 @@ export function HTTPRequestModal({ isOpen, onClose, config, onSave }: HTTPReques
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] flex flex-col">
+      <div className="bg-background border border-border rounded-lg w-full max-w-2xl max-h-[90vh] flex flex-col">
         {/* Fixed Header */}
-        <div className="flex items-center justify-between p-6 border-b flex-shrink-0">
+        <div className="flex items-center justify-between p-6 border-b border-border flex-shrink-0">
           <h2 className="text-xl font-semibold">Configure HTTP Request</h2>
           <Button variant="ghost" size="sm" onClick={onClose}>
             <X className="w-4 h-4" />
@@ -148,7 +148,7 @@ export function HTTPRequestModal({ isOpen, onClose, config, onSave }: HTTPReques
         </div>
 
         {/* Fixed Footer */}
-        <div className="border-t p-6 flex-shrink-0">
+        <div className="border-t border-border p-6 flex-shrink-0 bg-muted/50">
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={onClose}>
               Cancel

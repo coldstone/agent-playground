@@ -8,7 +8,7 @@ import { AgentsPanel } from './agents-panel'
 import { ToolsPanel, ToolsPanelRef } from './tools-panel'
 import { AuthorizationsPanel, AuthorizationsPanelRef } from './authorizations-panel'
 import { useSystemModel } from '@/hooks/use-system-model'
-import { Settings, Wrench, ChevronDown, ChevronUp, Sparkles, Plus, Download, Upload, Bot, AlertTriangle, Key, BrainCircuit, Trash2 } from 'lucide-react'
+import { Settings, Wrench, ChevronDown, ChevronUp, Sparkles, Plus, Download, Upload, Bot, AlertTriangle, Key, BrainCircuit, Trash2, Sun, Moon, Monitor } from 'lucide-react'
 
 
 interface AccordionPanelProps {
@@ -85,6 +85,59 @@ export function AccordionPanel({
   const toolsPanelRef = useRef<ToolsPanelRef>(null)
   const authorizationsPanelRef = useRef<AuthorizationsPanelRef>(null)
   const { hasSystemModel } = useSystemModel()
+
+  // Theme mode: 'light' | 'dark' | 'system'
+  const [themeMode, setThemeMode] = useState<'light' | 'dark' | 'system'>(() => {
+    if (typeof window === 'undefined') return 'system'
+    const saved = localStorage.getItem('agent-playground-theme') as 'light' | 'dark' | 'system' | null
+    return saved || 'system'
+  })
+
+  const applyTheme = (mode: 'light' | 'dark' | 'system') => {
+    if (typeof window === 'undefined') return
+    const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+    const isDark = mode === 'dark' || (mode === 'system' && prefersDark)
+    const root = document.documentElement
+    if (isDark) {
+      root.classList.add('dark')
+    } else {
+      root.classList.remove('dark')
+    }
+    try {
+      localStorage.setItem('agent-playground-theme', mode)
+    } catch {}
+  }
+
+  // Apply on mount and when themeMode changes
+  React.useEffect(() => {
+    applyTheme(themeMode)
+  }, [themeMode])
+
+  // Listen to system changes when in 'system' mode
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return
+    const media = window.matchMedia('(prefers-color-scheme: dark)')
+    const listener = () => {
+      if (themeMode === 'system') applyTheme('system')
+    }
+    media.addEventListener?.('change', listener)
+    return () => media.removeEventListener?.('change', listener)
+  }, [themeMode])
+
+  const cycleTheme = () => {
+    setThemeMode(prev => (prev === 'light' ? 'dark' : prev === 'dark' ? 'system' : 'light'))
+  }
+
+  const ThemeIcon = () => {
+    switch (themeMode) {
+      case 'light':
+        return <Sun className="w-4 h-4" />
+      case 'dark':
+        return <Moon className="w-4 h-4" />
+      default:
+        return <Monitor className="w-4 h-4" />
+    }
+  }
 
   const togglePanel = (panel: PanelType) => {
     // 总是切换到点击的面板，实现互斥效果
@@ -345,7 +398,7 @@ export function AccordionPanel({
                   <div className="w-full flex flex-col items-center">
                     <button
                       onClick={onBatchDelete}
-                      className="w-full max-w-48 p-3 text-sm bg-gray-100 hover:bg-red-500 hover:text-white rounded-lg flex items-center justify-center gap-2 transition-colors"
+                      className="w-full max-w-48 p-3 text-sm bg-muted hover:bg-red-500 hover:text-white rounded-lg flex items-center justify-center gap-2 transition-colors border border-border"
                     >
                       <Trash2 className="w-4 h-4" />
                       Batch Delete ...
@@ -366,7 +419,7 @@ export function AccordionPanel({
                     <div className="w-full flex flex-col items-center">
                       <button
                         onClick={onExport}
-                        className="w-full max-w-48 p-3 text-sm bg-gray-100 hover:bg-blue-500 hover:text-white rounded-lg flex items-center justify-center gap-2 transition-colors"
+                        className="w-full max-w-48 p-3 text-sm bg-muted hover:bg-blue-500 hover:text-white rounded-lg flex items-center justify-center gap-2 transition-colors border border-border"
                       >
                         <Download className="w-4 h-4" />
                         Export Data ...
@@ -380,7 +433,7 @@ export function AccordionPanel({
                     <div className="w-full flex flex-col items-center">
                       <button
                         onClick={onImport}
-                        className="w-full max-w-48 p-3 text-sm bg-gray-100 hover:bg-green-500 hover:text-white rounded-lg flex items-center justify-center gap-2 transition-colors"
+                        className="w-full max-w-48 p-3 text-sm bg-muted hover:bg-green-500 hover:text-white rounded-lg flex items-center justify-center gap-2 transition-colors border border-border"
                       >
                         <Upload className="w-4 h-4" />
                         Import Data ...
@@ -389,6 +442,49 @@ export function AccordionPanel({
                         Import agents, tools from a JSON file
                       </p>
                     </div>
+                  </div>
+                </div>
+
+                {/* Separator */}
+                <hr className="mt-6 border-t border-border" />
+
+                {/* Theme Group */}
+                <div>
+                  <button
+                    onClick={cycleTheme}
+                    className="w-full flex items-center justify-between mb-3 group"
+                    title="Click to cycle theme"
+                  >
+                    <h4 className="text-sm font-medium text-foreground flex items-center gap-2">
+                      <ThemeIcon />
+                      Theme
+                    </h4>
+                    <span className="text-xs text-muted-foreground capitalize group-hover:text-foreground transition-colors">
+                      {themeMode}
+                    </span>
+                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setThemeMode('light')}
+                      className={`px-3 py-2 rounded-md border text-sm flex items-center gap-2 transition-colors ${themeMode === 'light' ? 'bg-primary/10 text-primary border-primary/50' : 'hover:bg-muted'}`}
+                    >
+                      <Sun className="w-4 h-4" />
+                      Light
+                    </button>
+                    <button
+                      onClick={() => setThemeMode('dark')}
+                      className={`px-3 py-2 rounded-md border text-sm flex items-center gap-2 transition-colors ${themeMode === 'dark' ? 'bg-primary/10 text-primary border-primary/50' : 'hover:bg-muted'}`}
+                    >
+                      <Moon className="w-4 h-4" />
+                      Dark
+                    </button>
+                    <button
+                      onClick={() => setThemeMode('system')}
+                      className={`px-3 py-2 rounded-md border text-sm flex items-center gap-2 transition-colors ${themeMode === 'system' ? 'bg-primary/10 text-primary border-primary/50' : 'hover:bg-muted'}`}
+                    >
+                      <Monitor className="w-4 h-4" />
+                      System
+                    </button>
                   </div>
                 </div>
               </div>
