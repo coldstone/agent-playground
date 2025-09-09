@@ -39,8 +39,8 @@ function Toast({ message, type, onClose }: ToastProps) {
   const styles = getToastStyles()
 
   return (
-    <div className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-2 rounded-full shadow-md animate-slide-down duration-300 ${styles.container}`}>
-      <span className="text-sm font-medium shrink-0">{message}</span>
+    <div className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-50 max-w-md w-auto min-w-0 flex items-start gap-3 px-4 py-3 rounded-lg shadow-lg animate-slide-down duration-300 ${styles.container}`}>
+      <span className="text-sm font-medium flex-1 min-w-0 break-words whitespace-pre-wrap leading-relaxed">{message}</span>
       <Button
         variant="ghost"
         size="sm"
@@ -48,7 +48,7 @@ function Toast({ message, type, onClose }: ToastProps) {
           e.stopPropagation();
           onClose();
         }}
-        className={`h-6 w-6 p-0 ${styles.button}`}
+        className={`h-6 w-6 p-0 flex-shrink-0 mt-0.5 ${styles.button}`}
       >
         <X className="h-4 w-4 shrink-0" />
       </Button>
@@ -79,9 +79,15 @@ export function useToast() {
 
   useEffect(() => {
     if (toast) {
+      // Calculate display duration based on message length
+      // Minimum 4 seconds, add 50ms per character, maximum 12 seconds
+      const baseTime = 4000
+      const additionalTime = Math.min(toast.message.length * 50, 8000)
+      const displayTime = Math.min(baseTime + additionalTime, 12000)
+      
       const timer = setTimeout(() => {
         hideToast()
-      }, 5000)
+      }, displayTime)
       
       return () => clearTimeout(timer)
     }

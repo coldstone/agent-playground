@@ -89,6 +89,10 @@ export function ToolCallDisplay({
   const [httpHeaders, setHttpHeaders] = useState<{ key: string; value: string }[]>([])
   const [httpUrl, setHttpUrl] = useState('')
   const [isManuallyExpanded, setIsManuallyExpanded] = useState(false)
+  const [streamingAiDescription, setStreamingAiDescription] = useState('')
+  const [displayedAiDescription, setDisplayedAiDescription] = useState('')
+  const [lastAiDescriptionLength, setLastAiDescriptionLength] = useState(0)
+  const typewriterTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // Initialize HTTP configuration when tool or authorization changes
   const { mergedHeaders, httpRequestUrl } = useMemo(() => {
@@ -305,7 +309,7 @@ export function ToolCallDisplay({
   }
 
   const getStatusText = () => {
-    if (isStreaming) return 'Streaming arguments...'
+    if (isStreaming) return 'Streaming parameters...'
     if (!execution) return 'Waiting for execution'
 
     switch (execution.status) {
@@ -322,17 +326,91 @@ export function ToolCallDisplay({
 
   let parsedArguments: any = {}
   let argumentsDisplay = toolCall.function.arguments
+  let aiDescription = ''
 
   if (isStreaming) {
     argumentsDisplay = toolCall.function.arguments
+    // Use displayed ai_description (with typewriter effect) if available
+    if (displayedAiDescription) {
+      aiDescription = displayedAiDescription
+    } else if (streamingAiDescription) {
+      aiDescription = streamingAiDescription
+    }
   } else {
     try {
       parsedArguments = JSON.parse(toolCall.function.arguments)
       argumentsDisplay = JSON.stringify(parsedArguments, null, 2)
+      // Extract ai_description from completed arguments
+      if (parsedArguments.ai_description) {
+        aiDescription = parsedArguments.ai_description
+      }
     } catch (e) {
       argumentsDisplay = toolCall.function.arguments
     }
   }
+
+  // Update streaming ai_description based on tool call arguments
+  useEffect(() => {
+    if (isStreaming) {
+      try {
+        const currentArgs = JSON.parse(toolCall.function.arguments)
+        if (currentArgs.ai_description) {
+          const newDescription = currentArgs.ai_description
+          // Check if the description has grown (new content added)
+          if (newDescription.length > lastAiDescriptionLength) {
+            setStreamingAiDescription(newDescription)
+            setLastAiDescriptionLength(newDescription.length)
+          }
+        }
+      } catch (e) {
+        // Try to extract partial ai_description from incomplete JSON during streaming
+        const args = toolCall.function.arguments
+        const aiDescMatch = args.match(/"ai_description"\s*:\s*"([^"]*)/)
+        if (aiDescMatch && aiDescMatch[1]) {
+          const partialDesc = aiDescMatch[1].replace(/\\n/g, '\n')
+          if (partialDesc.length > lastAiDescriptionLength) {
+            setStreamingAiDescription(partialDesc)
+            setLastAiDescriptionLength(partialDesc.length)
+          }
+        }
+      }
+    } else {
+      // Clear streaming state when not streaming
+      setStreamingAiDescription('')
+      setDisplayedAiDescription('')
+      setLastAiDescriptionLength(0)
+      if (typewriterTimeoutRef.current) {
+        clearTimeout(typewriterTimeoutRef.current)
+        typewriterTimeoutRef.current = null
+      }
+    }
+  }, [isStreaming, toolCall.function.arguments, lastAiDescriptionLength])
+
+  // Typewriter effect for displaying ai_description
+  useEffect(() => {
+    if (isStreaming && streamingAiDescription && streamingAiDescription.length > displayedAiDescription.length) {
+      const targetText = streamingAiDescription
+      const currentLength = displayedAiDescription.length
+      
+      if (typewriterTimeoutRef.current) {
+        clearTimeout(typewriterTimeoutRef.current)
+      }
+      
+      typewriterTimeoutRef.current = setTimeout(() => {
+        setDisplayedAiDescription(targetText.slice(0, currentLength + 1))
+      }, 30) // Adjust speed as needed
+    } else if (!isStreaming && streamingAiDescription) {
+      // Immediately show full text when streaming stops
+      setDisplayedAiDescription(streamingAiDescription)
+    }
+    
+    return () => {
+      if (typewriterTimeoutRef.current) {
+        clearTimeout(typewriterTimeoutRef.current)
+        typewriterTimeoutRef.current = null
+      }
+    }
+  }, [isStreaming, streamingAiDescription, displayedAiDescription])
 
   // Collapsed state for auto mode
   if (isCollapsed && !isManuallyExpanded) {
@@ -363,6 +441,16 @@ export function ToolCallDisplay({
                     )}
                   </span>
                 </div>
+                {/* Display ai_description in collapsed mode if available */}
+                {aiDescription && (
+                  <div className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                    <span className="break-words">{aiDescription}</span>
+                    {isStreaming && (
+                      <span className="inline-block w-2 h-4 bg-purple-500 ml-1 align-text-bottom rounded-sm animate-pulse" 
+                            style={{ animationDuration: '0.8s' }} />
+                    )}
+                  </div>
+                )}
               </div>
               
               {/* Expand indicator */}
