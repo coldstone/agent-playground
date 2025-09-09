@@ -58,7 +58,7 @@ export function MessageContent({
       {showMarkdown ? (
         <MarkdownContent content={content} />
       ) : (
-        <pre className="whitespace-pre-wrap text-gray-700 dark:text-gray-300 font-mono text-sm leading-relaxed">
+        <pre className="whitespace-pre-wrap text-gray-700 dark:text-gray-300 font-mono text-base leading-relaxed">
           {content}
         </pre>
       )}

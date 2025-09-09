@@ -352,7 +352,7 @@ export function ChatMessages({
           {isLoading && showAIMessageBox && (!autoMode || (autoMode && !displayMessages.some((msg, index) => 
             'isMerged' in msg && msg.isMerged && index === displayMessages.length - 1
           ))) && (
-            <div className="flex gap-3 p-4 rounded-lg border bg-card border-border">
+            <div className="flex gap-3 p-4 rounded-lg border bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800">
               <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-green-600 bg-card border border-border">
                 <div className="w-4 h-4 border-2 border-green-600 border-t-transparent rounded-full animate-spin" />
               </div>
@@ -543,7 +543,7 @@ function MergedMessageDisplay({
   }
 
   return (
-    <div className="group flex gap-3 p-4 rounded-lg border bg-card border-border min-w-0">
+    <div className="group flex gap-3 p-4 rounded-lg border bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800 min-w-0">
       <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-green-600 bg-card border border-border">
         <Bot className="w-4 h-4" />
       </div>
@@ -641,7 +641,7 @@ function MergedMessageDisplay({
                   showToggle={false}
                 />
               ) : (
-                <pre className="whitespace-pre-wrap text-gray-700 dark:text-gray-300 font-mono text-sm leading-relaxed min-w-0 overflow-x-auto">
+                <pre className="whitespace-pre-wrap text-gray-700 dark:text-gray-300 font-mono text-base leading-relaxed min-w-0 overflow-x-auto">
                   {message.content}
                 </pre>
               )
