@@ -57,7 +57,7 @@ export function StreamingContent({
           </div>
         ) : (
           <div className="relative min-w-0 overflow-hidden">
-            <pre className="whitespace-pre-wrap text-gray-700 dark:text-gray-300 font-mono text-sm leading-relaxed overflow-x-auto">
+            <pre className="whitespace-pre-wrap text-gray-700 dark:text-gray-300 font-mono text-base leading-relaxed overflow-x-auto">
               {displayContent}
               {/* Streaming cursor for raw text */}
               {isStreaming && (

@@ -207,7 +207,19 @@ export function Message({
   }
 
   const getBgColor = () => {
-    // Use tokenized surfaces for theme consistency
+    if (isUser) {
+      // Light blue in light mode, dark blue in dark mode
+      return 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800'
+    }
+    if (message.role === 'assistant') {
+      // Light green in light mode, dark green in dark mode  
+      return 'bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800'
+    }
+    if (isTool) {
+      // Light purple in light mode, dark purple in dark mode for tool results
+      return 'bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800'
+    }
+    // Default for system messages
     return 'bg-card border-border'
   }
 
@@ -424,7 +436,7 @@ export function Message({
                 showToggle={false}
               />
             ) : (
-              <pre className="whitespace-pre-wrap text-gray-700 dark:text-gray-300 font-mono text-sm leading-relaxed min-w-0 overflow-x-auto">
+              <pre className="whitespace-pre-wrap text-gray-700 dark:text-gray-300 font-mono text-base leading-relaxed min-w-0 overflow-x-auto">
                 {message.content}
               </pre>
             )}

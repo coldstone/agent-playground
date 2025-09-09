@@ -56,7 +56,7 @@ function ResultDisplay({ content }: { content: string }) {
         <div className="flex justify-center mt-4 mb-2">
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="text-sm text-primary hover:text-foreground cursor-pointer bg-transparent border-none"
+            className="text-sm text-green-600 hover:text-green-700 cursor-pointer bg-transparent border-none"
           >
             {isExpanded ? 'Display Less' : 'Display More'}
           </button>
@@ -268,34 +268,34 @@ export function ToolCallDisplay({
   const getStatusColor = () => {
     // In merged cards, use consistent subtle background colors
     if (inMergedCard) {
-      if (isStreaming) return 'border-border bg-muted'
-      if (!execution) return 'border-border bg-muted'
+      if (isStreaming) return 'bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800'
+      if (!execution) return 'bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800'
 
       switch (execution.status) {
         case 'pending':
-          return 'border-border bg-muted'
+          return 'bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800'
         case 'completed':
-          return 'border-border bg-card'
+          return 'bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800'
         case 'failed':
           return 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30'
         default:
-          return 'border-border bg-muted'
+          return 'bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800'
       }
     }
 
-    // Standalone tool calls
-    if (isStreaming) return 'border-border bg-muted'
-    if (!execution) return 'border-border bg-muted'
+    // Standalone tool calls - always use purple background
+    if (isStreaming) return 'bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800'
+    if (!execution) return 'bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800'
 
     switch (execution.status) {
       case 'pending':
-        return 'border-border bg-muted'
+        return 'bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800'
       case 'completed':
-        return 'border-border bg-card'
+        return 'bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800'
       case 'failed':
         return 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30'
       default:
-        return 'border-border bg-muted'
+        return 'bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800'
     }
   }
 
@@ -418,23 +418,23 @@ export function ToolCallDisplay({
 
           <div className="space-y-2">
             <div className="min-w-0">
-            <div className="bg-muted px-3 py-2 rounded-t border border-border flex items-center gap-2">
-              <Settings2 className="w-4 h-4 text-purple-600" />
-              <span className="text-sm font-medium text-foreground">Arguments</span>
+            <div className="bg-orange-50 dark:bg-orange-950/50 px-3 py-2 rounded-t border border-border border-orange-100 dark:border-orange-900/30 flex items-center gap-2">
+              <Settings2 className="w-4 h-4 text-yellow-600" />
+              <span className="text-sm font-medium text-yellow-600">Parameters</span>
             </div>
-            <pre className="text-sm bg-card p-3 rounded-b border border-t-0 border-border whitespace-pre-wrap break-all overflow-wrap-anywhere min-w-0 overflow-x-auto">
+            <pre className="text-sm bg-card p-3 rounded-b border border-t-0 border-border  border-orange-100 dark:border-orange-900/50 whitespace-pre-wrap break-all overflow-wrap-anywhere min-w-0 overflow-x-auto">
               {argumentsDisplay}
               {isStreaming && (
-                <span className="inline-block w-2 h-4 bg-purple-600 animate-pulse ml-1" />
+                <span className="inline-block w-2 h-4 bg-yellow-600 animate-pulse ml-1" />
               )}
             </pre>
           </div>
 
             {tool?.httpRequest && (
-            <div className="border border-border rounded space-y-2">
-              <div className="bg-muted px-3 py-2 rounded-t border-b border-border flex items-center gap-2">
+            <div className="border border-border border-blue-100 dark:border-blue-900/50 rounded">
+              <div className="bg-blue-50 dark:bg-blue-950/50 px-3 py-2 rounded-t border-b border-border border-blue-100 dark:border-blue-900/50 flex items-center gap-2">
                 <Globe className="w-4 h-4 text-blue-600" />
-                <span className="text-sm font-medium text-foreground">Get Results via API</span>
+                <span className="text-sm font-medium text-blue-600">Get Results via API</span>
               </div>
 
               <div className="bg-card p-3 rounded-b border-t-0 space-y-2">
@@ -461,9 +461,9 @@ export function ToolCallDisplay({
                       <div className="flex-shrink-0">
                         {!isRequestingHttp ? (
                           <Button
-                            size="sm"
+                            size="xs"
                             onClick={handleHttpRequest}
-                            className="flex items-center gap-1 h-6 px-2 text-xs"
+                            className="flex items-center gap-1 px-2 py-3 text-xs"
                             disabled={isProvidingResult || isProvidingError}
                           >
                             <Send className="w-3 h-3" />
@@ -516,11 +516,11 @@ export function ToolCallDisplay({
 
             {execution?.result && (
               <div className="min-w-0">
-                <div className="bg-muted px-3 py-2 rounded-t border border-border flex items-center gap-2">
+                <div className="bg-green-50 dark:bg-green-950/50 px-3 py-2 rounded-t border border-border border-green-100 dark:border-green-900/50 flex items-center gap-2">
                   <Check className="w-4 h-4 text-green-600" />
-                  <span className="text-sm font-medium text-foreground">Result</span>
+                  <span className="text-sm font-medium text-green-600">Result</span>
                 </div>
-                <div className="bg-card border border-t-0 border-border rounded-b">
+                <div className="bg-card border border-t-0 border-border border-green-100 dark:border-green-900/50 rounded-b">
                   <ResultDisplay content={execution.result} />
                 </div>
               </div>
@@ -528,10 +528,15 @@ export function ToolCallDisplay({
 
             {execution?.error && (
               <div className="min-w-0">
-                <span className="text-sm font-medium text-red-600 dark:text-red-400">Error:</span>
-                <pre className="text-sm bg-red-50 dark:bg-red-950/30 p-2 rounded border border-red-200 dark:border-red-800 mt-1 whitespace-pre-wrap break-all overflow-wrap-anywhere min-w-0 overflow-x-auto">
-                  {execution.error}
-                </pre>
+                <div className="bg-red-100 dark:bg-red-950/50 px-3 py-2 rounded-t border border-border border-red-200 dark:border-red-900/50 flex items-center gap-2">
+                  <X className="w-4 h-4 text-red-600" />
+                  <span className="text-sm font-medium text-red-600">Result</span>
+                </div>
+                <div className="bg-card border border-t-0 border-border border-red-200 dark:border-red-900/50 rounded-b">
+                  <pre className="text-sm p-3 whitespace-pre-wrap break-all overflow-wrap-anywhere min-w-0 overflow-x-auto text-foreground">
+                    {execution.error}
+                  </pre>
+                </div>
               </div>
             )}
           </div>

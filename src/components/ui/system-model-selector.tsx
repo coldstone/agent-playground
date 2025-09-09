@@ -69,7 +69,7 @@ export function SystemModelSelector() {
   return (
     <div className="space-y-2">
       {/* Title and Description */}
-      <div>
+      <div className="mb-5">
         <h4 className="text-sm font-medium text-foreground">System Model</h4>
         <p className="text-xs text-muted-foreground mt-1 ml-1">
           Model used for AI generation of Agents, Tools

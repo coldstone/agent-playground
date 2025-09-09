@@ -45,12 +45,12 @@ export function getMergedHeaders(
   
   // Add tool headers first
   toolHeaders.forEach(header => {
-    headerMap.set(header.key.toLowerCase(), header.value)
+    headerMap.set(header.key, header.value)
   })
   
   // Add/override with authorization headers
   authHeaders.forEach(header => {
-    headerMap.set(header.key.toLowerCase(), header.value)
+    headerMap.set(header.key, header.value)
   })
   
   // Convert back to array format
