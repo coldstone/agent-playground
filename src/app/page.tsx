@@ -51,6 +51,23 @@ export default function HomePage() {
 
   const { showToast, ToastContainer } = useToast()
 
+  // Helper function to extract and format API error messages
+  const formatApiError = (error: unknown): string => {
+    if (error instanceof Error) {
+      // Extract the actual API error message if it's an API error
+      const message = error.message
+      if (message.includes('API Error:')) {
+        // Extract the error details after "API Error:"
+        const apiErrorMatch = message.match(/API Error: (.+)/)
+        if (apiErrorMatch) {
+          return apiErrorMatch[1]
+        }
+      }
+      return message
+    }
+    return 'Unknown error occurred'
+  }
+
   // System Model hook for AI generation
   const { getSystemModelConfig } = useSystemModel()
   const [expandedReasoningMessages, setExpandedReasoningMessages] = useState<Set<string>>(new Set())
@@ -1140,13 +1157,17 @@ export default function HomePage() {
       if (error instanceof Error && error.name === 'AbortError') {
         devLog.log('Request was aborted by user')
       } else {
+        // Show toast with specific error message
+        const formattedError = formatApiError(error)
+        showToast(`Request failed: ${formattedError}`, 'error')
+        
         // Create error message with retry capability
         const errorMessage: Message = {
           id: generateId(),
           role: 'assistant',
-          content: `Request failed: ${error instanceof Error ? error.message : 'Unknown error occurred'}`,
+          content: `Request failed: ${formattedError}`,
           timestamp: Date.now(),
-          error: error instanceof Error ? error.message : 'Unknown error occurred',
+          error: formattedError,
           canRetry: true
         }
 
@@ -1528,13 +1549,17 @@ export default function HomePage() {
       if (error instanceof Error && error.name === 'AbortError') {
         devLog.log('Request was aborted by user')
       } else {
+        // Show toast with specific error message
+        const formattedError = formatApiError(error)
+        showToast(`Request failed: ${formattedError}`, 'error')
+        
         // Create error message with retry capability
         const errorMessage: Message = {
           id: generateId(),
           role: 'assistant',
-          content: `Request failed: ${error instanceof Error ? error.message : 'Unknown error occurred'}`,
+          content: `Request failed: ${formattedError}`,
           timestamp: Date.now(),
-          error: error instanceof Error ? error.message : 'Unknown error occurred',
+          error: formattedError,
           canRetry: true
         }
 
@@ -2015,7 +2040,8 @@ export default function HomePage() {
           }, 100)
 
         } catch (error) {
-          showToast('Failed to retry message.', 'error')
+          const formattedError = formatApiError(error)
+          showToast(`Retry failed: ${formattedError}`, 'error')
           devLog.error('Failed to retry message:', error)
 
           // Don't show error message if request was aborted (user clicked stop)
@@ -2023,19 +2049,19 @@ export default function HomePage() {
             devLog.log('Request was aborted by user')
           } else {
             // Create error message with retry capability
-            const errorMessage: Message = {
+            const retryErrorMessage: Message = {
               id: generateId(),
               role: 'assistant',
-              content: `Retry failed: ${error instanceof Error ? error.message : 'Unknown error occurred'}`,
+              content: `Retry failed: ${formattedError}`,
               timestamp: Date.now(),
-              error: error instanceof Error ? error.message : 'Unknown error occurred',
+              error: formattedError,
               canRetry: true
             }
 
             // Save error message to session
             const sessionWithError = {
               ...updatedSession,
-              messages: [...updatedSession.messages, errorMessage],
+              messages: [...updatedSession.messages, retryErrorMessage],
               updatedAt: Date.now()
             }
 
@@ -2703,7 +2729,8 @@ export default function HomePage() {
       setIsStreamingReasoningExpanded(false)
 
     } catch (error) {
-      showToast('Failed to edit message.', 'error')
+      const errorMessage = formatApiError(error)
+      showToast(`Edit failed: ${errorMessage}`, 'error')
       devLog.error('Failed to edit message:', error)
 
       // Don't show error message if request was aborted (user clicked stop)
