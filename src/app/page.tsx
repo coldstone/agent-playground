@@ -180,16 +180,18 @@ export default function HomePage() {
         }
       }
 
-      // Check if current model is still valid
+      // Check if current model is still valid by checking if it exists in IndexedDB available models
       const currentModelStr = localStorage.getItem('agent-playground-current-model')
       if (currentModelStr) {
         try {
           const currentModel = JSON.parse(currentModelStr)
           const currentModelKey = `${currentModel.provider}-${currentModel.model}`
           
-          // Don't validate Azure OpenAI models as they are user-defined
-          if (currentModel.provider !== 'Azure OpenAI' && !validModelIds.has(currentModelKey)) {
-            devLog.warn('Current model is no longer valid, clearing:', currentModel)
+          // Check if the model exists in the available models from IndexedDB (not just predefined models)
+          const modelExists = availableModels.some(am => am.id === currentModelKey)
+          
+          if (!modelExists) {
+            devLog.warn('Current model is no longer in available models, clearing:', currentModel)
             localStorage.removeItem('agent-playground-current-model')
           }
         } catch (error) {

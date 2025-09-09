@@ -84,7 +84,8 @@ export function useAvailableModels() {
   const hasAvailableModels = availableModels.length > 0
 
   // Check if current model is valid and available
-  const hasValidCurrentModel = !!(currentModel && availableModels.some(
+  // Don't validate if models are still loading
+  const hasValidCurrentModel = !!(currentModel && !isLoading && availableModels.some(
     m => m.provider === currentModel.provider && m.model === currentModel.model
   ))
 
