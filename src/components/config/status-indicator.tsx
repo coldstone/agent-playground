@@ -47,14 +47,10 @@ export function StatusIndicator({ config, selectedModels = [], providerName = ''
         } else if (resourceEndpoint.startsWith('http://')) {
           resourceEndpoint = resourceEndpoint.substring(7)
         }
+    
+        // Remove / at the end of the endpoint
+        resourceEndpoint = resourceEndpoint.replace(/\/$/, '')
         
-        // Remove any trailing path
-        resourceEndpoint = resourceEndpoint.split('/')[0]
-        
-        // If it doesn't include the full domain, add it
-        if (!resourceEndpoint.includes('.openai.azure.com')) {
-          resourceEndpoint = `${resourceEndpoint}.openai.azure.com`
-        }
 
         testEndpoint = `https://${resourceEndpoint}/openai/deployments/${firstSelectedModel}/chat/completions?api-version=${apiVersion}`
         

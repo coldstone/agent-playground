@@ -32,13 +32,8 @@ export class AzureOpenAIClient {
       resourceEndpoint = resourceEndpoint.substring(7)
     }
     
-    // Remove any trailing path
-    resourceEndpoint = resourceEndpoint.split('/')[0]
-    
-    // If it doesn't include the full domain, add it
-    if (!resourceEndpoint.includes('.openai.azure.com')) {
-      resourceEndpoint = `${resourceEndpoint}.openai.azure.com`
-    }
+    // Remove / at the end of the endpoint
+    resourceEndpoint = resourceEndpoint.replace(/\/$/, '')
 
     return `https://${resourceEndpoint}/openai/deployments/${model}/chat/completions?api-version=${apiVersion}`
   }
