@@ -103,32 +103,34 @@ export function ChatMessages({
   const prevToolCallsLengthRef = useRef(0)
 
   // 监听streamingToolCalls变化，当Tool Call卡片出现时立即滚动到底部
+  // 注意：这里改为使用智能滚动逻辑，而不是强制滚动
   useEffect(() => {
     if (streamingToolCalls && streamingToolCalls.length > 0) {
-      // 当从没有tool calls变为有tool calls，或者tool calls数量增加时，触发滚动
+      // 当从没有tool calls变为有tool calls，或者tool calls数量增加时，更新依赖项让智能滚动处理
       if (prevToolCallsLengthRef.current === 0 || streamingToolCalls.length > prevToolCallsLengthRef.current) {
-        // 使用setTimeout确保Tool Call卡片DOM渲染完成
-        setTimeout(() => {
-          onScrollToBottom?.()
-        }, 100)
+        // 这里不再强制滚动，依赖智能滚动Hook的dependencies变化来处理
+        // setTimeout(() => {
+        //   onScrollToBottom?.()
+        // }, 100)
       }
       prevToolCallsLengthRef.current = streamingToolCalls.length
     } else {
       prevToolCallsLengthRef.current = 0
     }
-  }, [streamingToolCalls, onScrollToBottom])
+  }, [streamingToolCalls])
 
   // 监听合并消息的流式内容变化，确保在Auto模式下流式内容开始时正确滚动
-  useEffect(() => {
-    if (autoMode && isLoading && streamingContent) {
-      // 在Auto模式下，当流式内容开始时，确保滚动到底部
-      const timer = setTimeout(() => {
-        onScrollToBottom?.()
-      }, 50)
-      
-      return () => clearTimeout(timer)
-    }
-  }, [autoMode, isLoading, streamingContent, onScrollToBottom])
+  // 注意：这里不应该强制滚动，让智能滚动Hook处理即可
+  // useEffect(() => {
+  //   if (autoMode && isLoading && streamingContent) {
+  //     // 在Auto模式下，当流式内容开始时，确保滚动到底部
+  //     const timer = setTimeout(() => {
+  //       onScrollToBottom?.()
+  //     }, 50)
+  //
+  //     return () => clearTimeout(timer)
+  //   }
+  // }, [autoMode, isLoading, streamingContent, onScrollToBottom])
 
   // 监听scrollToTopTrigger变化，滚动到顶部
   useEffect(() => {
