@@ -457,7 +457,12 @@ export default function HomePage() {
       // Parse arguments
       let parsedArguments: any = {}
       try {
-        parsedArguments = JSON.parse(toolCall.function.arguments)
+        // Handle empty arguments for no-param tools
+        if (toolCall.function.arguments.trim() === '') {
+          parsedArguments = {}
+        } else {
+          parsedArguments = JSON.parse(toolCall.function.arguments)
+        }
       } catch (e) {
         throw new Error('Invalid arguments format')
       }
@@ -922,7 +927,6 @@ export default function HomePage() {
   const continueConversationAfterTool = async (sessionData: ChatSession) => {
     setIsLoading(true)
     setStreamingContent('')
-    setStreamingToolCalls([])
     setShowAIMessageBox(false)
     hasApiResponseStartedRef.current = false
 
@@ -1065,14 +1069,14 @@ export default function HomePage() {
           }
 
           toolCalls = updatedToolCalls
-          // Show streaming tool calls immediately (with typing effect for arguments)
+          // Show tool calls immediately during streaming for parameter typing effect
           setStreamingToolCalls([...updatedToolCalls])
         }
       }
 
-      // Filter out incomplete tool calls (those without arguments)
+      // Filter out incomplete tool calls - allow empty arguments for no-param tools
       const completeToolCalls = toolCalls.filter(tc =>
-        tc.function?.arguments && tc.function.arguments.trim() !== ''
+        tc.function && tc.function.hasOwnProperty('arguments')
       )
 
       // 流结束后，如果有推理内容但时间还没计算，就计算时间
@@ -1111,7 +1115,6 @@ export default function HomePage() {
         // Clear streaming states after creating the message
         setStreamingContent('')
         setStreamingReasoningContent('')
-        setStreamingToolCalls([])
         setIsStreamingReasoningExpanded(false)
         setReasoningDuration(null)
 
@@ -1147,7 +1150,6 @@ export default function HomePage() {
       } else {
         // Clear streaming states even if no message to save
         setStreamingContent('')
-        setStreamingToolCalls([])
       }
 
     } catch (error) {
@@ -1194,8 +1196,10 @@ export default function HomePage() {
     } finally {
       setIsLoading(false)
       setStreamingContent('')
-      setStreamingToolCalls([])
       setShowAIMessageBox(false)
+
+      // Clear streaming tool calls after streaming is complete
+      setStreamingToolCalls([])
 
       // 清理AI消息框显示的timeout
       if (aiMessageTimeoutRef.current) {
@@ -1327,7 +1331,6 @@ export default function HomePage() {
     if (!isInitializedFromOverlayRef.current) {
       setIsLoading(true)
       setStreamingContent('')
-      setStreamingToolCalls([])
       setShowAIMessageBox(false)
       hasApiResponseStartedRef.current = false
 
@@ -1460,7 +1463,7 @@ export default function HomePage() {
       }
 
       const completeToolCalls = toolCalls.filter(tc =>
-        tc.function?.arguments && tc.function.arguments.trim() !== ''
+        tc.function && tc.function.hasOwnProperty('arguments')
       )
 
       // 流结束后，如果有推理内容但时间还没计算，就计算时间
@@ -1496,7 +1499,6 @@ export default function HomePage() {
         // Clear streaming states after creating the message
         setStreamingContent('')
         setStreamingReasoningContent('')
-        setStreamingToolCalls([])
         setIsStreamingReasoningExpanded(false)
 
         setReasoningDuration(null)
@@ -1536,7 +1538,6 @@ export default function HomePage() {
         // Clear streaming states even if no message to save
         setStreamingContent('')
         setStreamingReasoningContent('')
-        setStreamingToolCalls([])
         setIsStreamingReasoningExpanded(false)
 
         setReasoningDuration(null)
@@ -1589,8 +1590,10 @@ export default function HomePage() {
       setIsLoading(false)
       setStreamingContent('')
       setStreamingReasoningContent('')
-      setStreamingToolCalls([])
       setIsStreamingReasoningExpanded(false)
+
+      // Clear streaming tool calls after streaming is complete
+      setStreamingToolCalls([])
       setShowAIMessageBox(false)
 
       setReasoningDuration(null)
@@ -1651,8 +1654,10 @@ export default function HomePage() {
     setIsLoading(false)
     setStreamingContent('')
     setStreamingReasoningContent('')
-    setStreamingToolCalls([])
     setIsStreamingReasoningExpanded(false)
+
+    // Clear streaming tool calls after streaming is complete
+    setStreamingToolCalls([])
 
     setReasoningDuration(null)
   }
@@ -1774,6 +1779,12 @@ export default function HomePage() {
     }
 
     // Continue conversation with AI after all tool results
+    // Immediately set thinking state to show user that AI is processing
+    setIsLoading(true)
+    setStreamingContent('')
+    setStreamingReasoningContent('')
+    setStreamingToolCalls([])
+
     await continueConversationAfterTool(sessionWithToolResults)
   }
 
@@ -1853,7 +1864,6 @@ export default function HomePage() {
           // Directly regenerate response without using handleSendMessage
           setIsLoading(true)
           setStreamingContent('')
-          setStreamingToolCalls([])
           setShowAIMessageBox(true)
           hasApiResponseStartedRef.current = false
 
@@ -1954,13 +1964,13 @@ export default function HomePage() {
               }
 
               toolCalls = updatedToolCalls
-              setStreamingToolCalls([...updatedToolCalls])
+          setStreamingToolCalls([...updatedToolCalls])
             }
           }
 
-          // Filter out incomplete tool calls
+          // Filter out incomplete tool calls - allow empty arguments for no-param tools
           const completeToolCalls = toolCalls.filter(tc =>
-            tc.function?.arguments && tc.function.arguments.trim() !== ''
+            tc.function && tc.function.hasOwnProperty('arguments')
           )
 
           // 流结束后，如果有推理内容但时间还没计算，就计算时间
@@ -1997,7 +2007,6 @@ export default function HomePage() {
             // Clear streaming states after creating the message
             setStreamingContent('')
             setStreamingReasoningContent('')
-            setStreamingToolCalls([])
             setIsStreamingReasoningExpanded(false)
 
             setReasoningDuration(null)
@@ -2031,8 +2040,9 @@ export default function HomePage() {
           setIsLoading(false)
           setStreamingContent('')
           setStreamingReasoningContent('')
-          setStreamingToolCalls([])
           setIsStreamingReasoningExpanded(false)
+
+          // Clear streaming tool calls after streaming is complete
 
           // Focus input after retry response is complete
           setTimeout(() => {
@@ -2078,8 +2088,9 @@ export default function HomePage() {
           setIsLoading(false)
           setStreamingContent('')
           setStreamingReasoningContent('')
-          setStreamingToolCalls([])
           setIsStreamingReasoningExpanded(false)
+
+          // Clear streaming tool calls after streaming is complete
           setShowAIMessageBox(false)
 
           if (aiMessageTimeoutRef.current) {
@@ -2542,7 +2553,6 @@ export default function HomePage() {
 
       setIsLoading(true)
       setStreamingContent('')
-      setStreamingToolCalls([])
       setShowAIMessageBox(false)
       hasApiResponseStartedRef.current = false
 
@@ -2622,12 +2632,16 @@ export default function HomePage() {
 
             if (targetIndex >= 0 && updatedToolCalls[targetIndex]) {
               const existing = updatedToolCalls[targetIndex]
-              updatedToolCalls[targetIndex] = {
-                ...existing,
-                function: {
-                  ...existing.function,
-                  arguments: (existing.function?.arguments || '') + (streamingToolCall.function?.arguments || '')
+              // Only update if this chunk has arguments to append
+              if (streamingToolCall.function?.hasOwnProperty('arguments')) {
+                updatedToolCalls[targetIndex] = {
+                  ...existing,
+                  function: {
+                    ...existing.function,
+                    arguments: (existing.function?.arguments || '') + (streamingToolCall.function?.arguments || '')
+                  }
                 }
+              } else {
               }
             } else {
               const completeToolCall: ToolCall = {
@@ -2654,7 +2668,7 @@ export default function HomePage() {
 
       // Filter out incomplete tool calls
       const completeToolCalls = toolCalls.filter(tc =>
-        tc.function?.arguments && tc.function.arguments.trim() !== ''
+        tc.function && tc.function.hasOwnProperty('arguments')
       )
 
       // 流结束后，如果有推理内容但时间还没计算，就计算时间
@@ -2688,10 +2702,11 @@ export default function HomePage() {
           model: currentConfig.model
         }
 
+
         // Clear streaming states after creating the message
         setStreamingContent('')
         setStreamingReasoningContent('')
-        setStreamingToolCalls([])
+        // Keep streaming tool calls - they should persist as part of the message history
         setIsStreamingReasoningExpanded(false)
 
         setReasoningDuration(null)
@@ -2725,7 +2740,6 @@ export default function HomePage() {
       setIsLoading(false)
       setStreamingContent('')
       setStreamingReasoningContent('')
-      setStreamingToolCalls([])
       setIsStreamingReasoningExpanded(false)
 
     } catch (error) {
@@ -2772,7 +2786,6 @@ export default function HomePage() {
       setIsLoading(false)
       setStreamingContent('')
       setStreamingReasoningContent('')
-      setStreamingToolCalls([])
       setIsStreamingReasoningExpanded(false)
       setShowAIMessageBox(false)
 

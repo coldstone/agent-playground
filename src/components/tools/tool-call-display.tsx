@@ -251,13 +251,24 @@ export function ToolCallDisplay({
 
   const getMainStatusIcon = () => {
     if (isStreaming) {
+      // If we have execution state while streaming, prioritize execution status
+      if (execution?.status === 'pending') {
+        return <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+      }
+      if (execution?.status === 'completed') {
+        return <Check className="w-6 h-6 text-green-600" />
+      }
+      if (execution?.status === 'failed') {
+        return <X className="w-6 h-6 text-red-600" />
+      }
+      // Default streaming state
       return <div className="w-6 h-6 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />
     }
     if (!execution) return <Clock className="w-6 h-6 text-blue-600" />
 
     switch (execution.status) {
       case 'pending':
-        return autoMode 
+        return autoMode
           ? <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
           : <Clock className="w-6 h-6 text-blue-600" />
       case 'completed':
@@ -309,7 +320,11 @@ export function ToolCallDisplay({
   }
 
   const getStatusText = () => {
-    if (isStreaming) return 'Streaming parameters...'
+    if (isStreaming) {
+      // If we have execution state while streaming, it means we're in a transition state
+      if (execution?.status === 'pending') return 'Executing...'
+      return 'Streaming parameters...'
+    }
     if (!execution) return 'Waiting for execution'
 
     switch (execution.status) {
@@ -329,7 +344,19 @@ export function ToolCallDisplay({
   let aiDescription = ''
 
   if (isStreaming) {
-    argumentsDisplay = toolCall.function.arguments
+    // For streaming, try to parse and remove ai_description from display
+    try {
+      const tempParsed = JSON.parse(toolCall.function.arguments)
+      if (tempParsed.ai_description) {
+        const { ai_description, ...displayArgs } = tempParsed
+        argumentsDisplay = JSON.stringify(displayArgs, null, 2)
+      } else {
+        argumentsDisplay = toolCall.function.arguments
+      }
+    } catch (e) {
+      argumentsDisplay = toolCall.function.arguments
+    }
+
     // Use displayed ai_description (with typewriter effect) if available
     if (displayedAiDescription) {
       aiDescription = displayedAiDescription
@@ -339,10 +366,14 @@ export function ToolCallDisplay({
   } else {
     try {
       parsedArguments = JSON.parse(toolCall.function.arguments)
-      argumentsDisplay = JSON.stringify(parsedArguments, null, 2)
       // Extract ai_description from completed arguments
       if (parsedArguments.ai_description) {
         aiDescription = parsedArguments.ai_description
+        // Remove ai_description from arguments display to avoid duplication
+        const { ai_description, ...displayArgs } = parsedArguments
+        argumentsDisplay = JSON.stringify(displayArgs, null, 2)
+      } else {
+        argumentsDisplay = JSON.stringify(parsedArguments, null, 2)
       }
     } catch (e) {
       argumentsDisplay = toolCall.function.arguments
@@ -391,19 +422,25 @@ export function ToolCallDisplay({
     if (isStreaming && streamingAiDescription && streamingAiDescription.length > displayedAiDescription.length) {
       const targetText = streamingAiDescription
       const currentLength = displayedAiDescription.length
-      
+
       if (typewriterTimeoutRef.current) {
         clearTimeout(typewriterTimeoutRef.current)
       }
-      
+
       typewriterTimeoutRef.current = setTimeout(() => {
-        setDisplayedAiDescription(targetText.slice(0, currentLength + 1))
+        setDisplayedAiDescription(prev => {
+          // Only update if we're still in the same streaming state
+          if (targetText.length > prev.length) {
+            return targetText.slice(0, prev.length + 1)
+          }
+          return prev
+        })
       }, 30) // Adjust speed as needed
-    } else if (!isStreaming && streamingAiDescription) {
+    } else if (!isStreaming && streamingAiDescription && displayedAiDescription !== streamingAiDescription) {
       // Immediately show full text when streaming stops
       setDisplayedAiDescription(streamingAiDescription)
     }
-    
+
     return () => {
       if (typewriterTimeoutRef.current) {
         clearTimeout(typewriterTimeoutRef.current)
@@ -491,6 +528,16 @@ export function ToolCallDisplay({
                   )}
                 </span>
               </div>
+              {/* Display ai_description in expanded mode if available */}
+              {aiDescription && (
+                <div className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                  <span className="break-words">{aiDescription}</span>
+                  {isStreaming && (
+                    <span className="inline-block w-2 h-4 bg-purple-500 ml-1 align-text-bottom rounded-sm animate-pulse"
+                          style={{ animationDuration: '0.8s' }} />
+                  )}
+                </div>
+              )}
             </div>
             {/* Collapse indicator for manually expanded cards */}
             {isCollapsed && isManuallyExpanded ? (

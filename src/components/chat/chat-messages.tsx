@@ -654,14 +654,14 @@ function MergedMessageDisplay({
               <div className="space-y-3">
                 {message.toolCalls
                   .filter((toolCall: ToolCall) =>
-                    toolCall.function?.arguments && toolCall.function.arguments.trim() !== ''
+                    toolCall.function && toolCall.function.hasOwnProperty('arguments')
                   )
                   .map((toolCall: ToolCall) => {
                     // Handle backward compatibility
                     let execution = message.toolCallExecutions?.find(
                       exec => exec.toolCall.id === toolCall.id
                     )
-                    
+
                     if (!execution && message.toolCalls) {
                       execution = {
                         id: toolCall.id + '_compat',
@@ -670,8 +670,13 @@ function MergedMessageDisplay({
                         timestamp: message.timestamp
                       }
                     }
-                    
+
                     const tool = tools.find(t => t.name === toolCall.function.name)
+
+                    // Check if this tool call is currently streaming (for merged display)
+                    // Use stable reference to prevent unnecessary re-renders
+                    const isCurrentlyStreaming = isLastMergedGroup && isStreaming &&
+                      streamingToolCalls?.some(stc => stc.id === toolCall.id) || false
 
                     return (
                       <ToolCallDisplay
@@ -687,6 +692,7 @@ function MergedMessageDisplay({
                         autoMode={autoMode}
                         isCollapsed={autoMode}
                         inMergedCard={true}
+                        isStreaming={isCurrentlyStreaming}
                       />
                     )
                   })}
@@ -755,24 +761,31 @@ function MergedMessageDisplay({
               </div>
             )}
 
-            {/* Streaming tool calls */}
+            {/* Streaming tool calls - only show those not already displayed in saved tool calls */}
             {streamingToolCalls && streamingToolCalls.length > 0 && (
               <div className="space-y-3 mt-4">
-                {streamingToolCalls.map((toolCall, index) => (
-                  <ToolCallDisplay
-                    key={`streaming-${toolCall.id}-${index}`}
-                    toolCall={toolCall}
-                    execution={undefined}
-                    agent={agent}
-                    authorizations={authorizations}
-                    onProvideResult={() => {}}
-                    onMarkFailed={() => {}}
-                    isStreaming={true}
-                    autoMode={autoMode}
-                    isCollapsed={autoMode}
-                    inMergedCard={true}
-                  />
-                ))}
+                {streamingToolCalls
+                  .filter(streamingToolCall => {
+                    // Only show streaming tool calls that don't have a corresponding saved tool call
+                    const lastMessage = mergedMessage.messages[mergedMessage.messages.length - 1]
+                    const savedToolCallIds = lastMessage.toolCalls?.map(tc => tc.id) || []
+                    return !savedToolCallIds.includes(streamingToolCall.id)
+                  })
+                  .map((toolCall, index) => (
+                    <ToolCallDisplay
+                      key={`streaming-${toolCall.id}-${index}`}
+                      toolCall={toolCall}
+                      execution={undefined}
+                      agent={agent}
+                      authorizations={authorizations}
+                      onProvideResult={() => {}}
+                      onMarkFailed={() => {}}
+                      isStreaming={true}
+                      autoMode={autoMode}
+                      isCollapsed={autoMode}
+                      inMergedCard={true}
+                    />
+                  ))}
               </div>
             )}
 

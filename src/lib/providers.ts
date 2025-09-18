@@ -6,7 +6,7 @@ export interface Provider {
   requiresApiKey: boolean
   docsLink: string
   icon: string
-  client: 'openai' | 'anthropic' | 'azure-openai'
+  client: 'openai' | 'anthropic' | 'azure-openai' | 'openrouter'
 }
 
 export const MODEL_PROVIDERS: Provider[] = [
@@ -79,6 +79,16 @@ export const MODEL_PROVIDERS: Provider[] = [
     docsLink: 'https://www.xfyun.cn/doc/spark/HTTP调用文档.html',
     icon: 'llm-spark',
     client: 'openai'
+  },
+  {
+    name: 'OpenRouter',
+    endpoint: 'https://openrouter.ai/api/v1/chat/completions',
+    models: ['anthropic/claude-sonnet-4', 'anthropic/claude-opus-4.1', 'openai/gpt-5', 'google/gemini-2.5-pro', 'google/gemini-2.5-flash', 'x-ai/grok-4', 'x-ai/grok-3-mini', 'z-ai/glm-4.5', 'moonshotai/kimi-k2-0905', 'deepseek/deepseek-chat-v3.1:free', 'deepseek/deepseek-chat-v3-0324:free', 'deepseek/deepseek-r1:free', 'z-ai/glm-4.5-air:free', 'qwen/qwen3-coder:free', 'qwen/qwen3-235b-a22b:free', 'moonshotai/kimi-k2:free', 'google/gemini-2.0-flash-exp:free'],
+    defaultModel: 'anthropic/claude-sonnet-4',
+    requiresApiKey: true,
+    docsLink: 'https://openrouter.ai/docs/api-reference/chat-completion',
+    icon: 'llm-openrouter',
+    client: 'openrouter'
   },
   {
     name: 'Ollama (Local)',
