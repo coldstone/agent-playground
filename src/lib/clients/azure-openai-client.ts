@@ -39,9 +39,6 @@ export class AzureOpenAIClient {
   }
 
   async *streamChatCompletion(messages: (Message | AgentMessage)[], abortSignal?: AbortSignal): AsyncGenerator<{ content?: string; reasoningContent?: string; toolCalls?: ToolCall[]; usage?: any }, void, unknown> {
-    // Ensure max_completion_tokens is at least 4 for Azure OpenAI
-    const maxTokens = Math.max(4, this.config.maxTokens)
-    
     // Check if model should exclude temperature and top_p (o series and gpt-5 series)
     const modelName = this.config.model.toLowerCase()
     const shouldExcludeAdvancedParams = modelName.startsWith('o') || modelName.startsWith('gpt-5')
@@ -75,11 +72,15 @@ export class AzureOpenAIClient {
 
         return baseMessage
       }),
-      max_completion_tokens: maxTokens,
       frequency_penalty: this.config.frequencyPenalty,
       presence_penalty: this.config.presencePenalty,
       stream: true,
       stream_options: { include_usage: true }
+    }
+
+    const hasMaxTokens = typeof this.config.maxTokens === 'number'
+    if (hasMaxTokens) {
+      requestBody.max_completion_tokens = Math.max(4, this.config.maxTokens as number)
     }
 
     // Only add temperature and top_p for models that support them
@@ -192,9 +193,6 @@ export class AzureOpenAIClient {
   }
 
   async chatCompletion(messages: (Message | AgentMessage)[]): Promise<string> {
-    // Ensure max_completion_tokens is at least 4 for Azure OpenAI
-    const maxTokens = Math.max(4, this.config.maxTokens)
-    
     // Check if model should exclude temperature and top_p (o series and gpt-5 series)
     const modelName = this.config.model.toLowerCase()
     const shouldExcludeAdvancedParams = modelName.startsWith('o') || modelName.startsWith('gpt-5')
@@ -228,10 +226,13 @@ export class AzureOpenAIClient {
 
         return baseMessage
       }),
-      max_completion_tokens: maxTokens,
       frequency_penalty: this.config.frequencyPenalty,
       presence_penalty: this.config.presencePenalty,
       stream: false
+    }
+
+    if (typeof this.config.maxTokens === 'number') {
+      requestBody.max_completion_tokens = Math.max(4, this.config.maxTokens as number)
     }
 
     // Only add temperature and top_p for models that support them

@@ -264,7 +264,7 @@ export default function HomePage() {
 
         const systemPrompt = llmConfig.systemPrompt || DEFAULT_CONFIG.systemPrompt
         const temperature = llmConfig.temperature || DEFAULT_CONFIG.temperature
-        const maxTokens = llmConfig.maxTokens || DEFAULT_CONFIG.maxTokens
+        const maxTokens = typeof llmConfig.maxTokens === 'number' ? llmConfig.maxTokens : DEFAULT_CONFIG.maxTokens
         const topP = llmConfig.topP || DEFAULT_CONFIG.topP
         const frequencyPenalty = llmConfig.frequencyPenalty || DEFAULT_CONFIG.frequencyPenalty
         const presencePenalty = llmConfig.presencePenalty || DEFAULT_CONFIG.presencePenalty

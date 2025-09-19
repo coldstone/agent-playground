@@ -46,9 +46,12 @@ export class OpenRouterClient {
       presence_penalty: this.config.presencePenalty,
       temperature: this.config.temperature,
       top_p: this.config.topP,
-      max_tokens: this.config.maxTokens,
       stream: true,
       stream_options: { include_usage: true }
+    }
+
+    if (typeof this.config.maxTokens === 'number') {
+      requestBody.max_tokens = this.config.maxTokens
     }
 
     // Add tools if available
@@ -209,8 +212,11 @@ export class OpenRouterClient {
       presence_penalty: this.config.presencePenalty,
       temperature: this.config.temperature,
       top_p: this.config.topP,
-      max_tokens: this.config.maxTokens,
       stream: false
+    }
+
+    if (typeof this.config.maxTokens === 'number') {
+      requestBody.max_tokens = this.config.maxTokens
     }
 
     try {

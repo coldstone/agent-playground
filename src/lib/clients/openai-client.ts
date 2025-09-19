@@ -57,9 +57,11 @@ export class OpenAIClient {
       stream_options: { include_usage: true }
     }
 
-    // Add max_tokens field based on provider
-    const maxTokensField = this.getMaxTokensField()
-    ;(requestBody as any)[maxTokensField] = this.config.maxTokens
+    // Add max_tokens field when configured
+    if (typeof this.config.maxTokens === 'number') {
+      const maxTokensField = this.getMaxTokensField()
+      ;(requestBody as any)[maxTokensField] = this.config.maxTokens
+    }
 
     // Only add temperature and top_p for models that support them
     if (!shouldExcludeAdvancedParams) {
@@ -209,9 +211,11 @@ export class OpenAIClient {
       stream: false
     }
 
-    // Add max_tokens field based on provider
-    const maxTokensField = this.getMaxTokensField()
-    ;(requestBody as any)[maxTokensField] = this.config.maxTokens
+    // Add max_tokens field when configured
+    if (typeof this.config.maxTokens === 'number') {
+      const maxTokensField = this.getMaxTokensField()
+      ;(requestBody as any)[maxTokensField] = this.config.maxTokens
+    }
 
     // Only add temperature and top_p for models that support them
     if (!shouldExcludeAdvancedParams) {

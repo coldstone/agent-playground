@@ -115,7 +115,7 @@ export const MODEL_PROVIDERS: Provider[] = [
 export const DEFAULT_CONFIG = {
   systemPrompt: 'You are a helpful assistant.',
   temperature: 0.7,
-  maxTokens: 2000,
+  maxTokens: undefined as number | undefined,
   topP: 1,
   frequencyPenalty: 0,
   presencePenalty: 0,
