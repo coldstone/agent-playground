@@ -51,6 +51,23 @@ export default function HomePage() {
 
   const { showToast, ToastContainer } = useToast()
 
+  // Helper function to extract and format API error messages
+  const formatApiError = (error: unknown): string => {
+    if (error instanceof Error) {
+      // Extract the actual API error message if it's an API error
+      const message = error.message
+      if (message.includes('API Error:')) {
+        // Extract the error details after "API Error:"
+        const apiErrorMatch = message.match(/API Error: (.+)/)
+        if (apiErrorMatch) {
+          return apiErrorMatch[1]
+        }
+      }
+      return message
+    }
+    return 'Unknown error occurred'
+  }
+
   // System Model hook for AI generation
   const { getSystemModelConfig } = useSystemModel()
   const [expandedReasoningMessages, setExpandedReasoningMessages] = useState<Set<string>>(new Set())
@@ -180,16 +197,18 @@ export default function HomePage() {
         }
       }
 
-      // Check if current model is still valid
+      // Check if current model is still valid by checking if it exists in IndexedDB available models
       const currentModelStr = localStorage.getItem('agent-playground-current-model')
       if (currentModelStr) {
         try {
           const currentModel = JSON.parse(currentModelStr)
           const currentModelKey = `${currentModel.provider}-${currentModel.model}`
           
-          // Don't validate Azure OpenAI models as they are user-defined
-          if (currentModel.provider !== 'Azure OpenAI' && !validModelIds.has(currentModelKey)) {
-            devLog.warn('Current model is no longer valid, clearing:', currentModel)
+          // Check if the model exists in the available models from IndexedDB (not just predefined models)
+          const modelExists = availableModels.some(am => am.id === currentModelKey)
+          
+          if (!modelExists) {
+            devLog.warn('Current model is no longer in available models, clearing:', currentModel)
             localStorage.removeItem('agent-playground-current-model')
           }
         } catch (error) {
@@ -245,7 +264,7 @@ export default function HomePage() {
 
         const systemPrompt = llmConfig.systemPrompt || DEFAULT_CONFIG.systemPrompt
         const temperature = llmConfig.temperature || DEFAULT_CONFIG.temperature
-        const maxTokens = llmConfig.maxTokens || DEFAULT_CONFIG.maxTokens
+        const maxTokens = typeof llmConfig.maxTokens === 'number' ? llmConfig.maxTokens : DEFAULT_CONFIG.maxTokens
         const topP = llmConfig.topP || DEFAULT_CONFIG.topP
         const frequencyPenalty = llmConfig.frequencyPenalty || DEFAULT_CONFIG.frequencyPenalty
         const presencePenalty = llmConfig.presencePenalty || DEFAULT_CONFIG.presencePenalty
@@ -438,7 +457,12 @@ export default function HomePage() {
       // Parse arguments
       let parsedArguments: any = {}
       try {
-        parsedArguments = JSON.parse(toolCall.function.arguments)
+        // Handle empty arguments for no-param tools
+        if (toolCall.function.arguments.trim() === '') {
+          parsedArguments = {}
+        } else {
+          parsedArguments = JSON.parse(toolCall.function.arguments)
+        }
       } catch (e) {
         throw new Error('Invalid arguments format')
       }
@@ -903,7 +927,6 @@ export default function HomePage() {
   const continueConversationAfterTool = async (sessionData: ChatSession) => {
     setIsLoading(true)
     setStreamingContent('')
-    setStreamingToolCalls([])
     setShowAIMessageBox(false)
     hasApiResponseStartedRef.current = false
 
@@ -1046,14 +1069,14 @@ export default function HomePage() {
           }
 
           toolCalls = updatedToolCalls
-          // Show streaming tool calls immediately (with typing effect for arguments)
+          // Show tool calls immediately during streaming for parameter typing effect
           setStreamingToolCalls([...updatedToolCalls])
         }
       }
 
-      // Filter out incomplete tool calls (those without arguments)
+      // Filter out incomplete tool calls - allow empty arguments for no-param tools
       const completeToolCalls = toolCalls.filter(tc =>
-        tc.function?.arguments && tc.function.arguments.trim() !== ''
+        tc.function && tc.function.hasOwnProperty('arguments')
       )
 
       // 流结束后，如果有推理内容但时间还没计算，就计算时间
@@ -1092,7 +1115,6 @@ export default function HomePage() {
         // Clear streaming states after creating the message
         setStreamingContent('')
         setStreamingReasoningContent('')
-        setStreamingToolCalls([])
         setIsStreamingReasoningExpanded(false)
         setReasoningDuration(null)
 
@@ -1128,7 +1150,6 @@ export default function HomePage() {
       } else {
         // Clear streaming states even if no message to save
         setStreamingContent('')
-        setStreamingToolCalls([])
       }
 
     } catch (error) {
@@ -1138,13 +1159,17 @@ export default function HomePage() {
       if (error instanceof Error && error.name === 'AbortError') {
         devLog.log('Request was aborted by user')
       } else {
+        // Show toast with specific error message
+        const formattedError = formatApiError(error)
+        showToast(`Request failed: ${formattedError}`, 'error')
+        
         // Create error message with retry capability
         const errorMessage: Message = {
           id: generateId(),
           role: 'assistant',
-          content: `Request failed: ${error instanceof Error ? error.message : 'Unknown error occurred'}`,
+          content: `Request failed: ${formattedError}`,
           timestamp: Date.now(),
-          error: error instanceof Error ? error.message : 'Unknown error occurred',
+          error: formattedError,
           canRetry: true
         }
 
@@ -1171,8 +1196,10 @@ export default function HomePage() {
     } finally {
       setIsLoading(false)
       setStreamingContent('')
-      setStreamingToolCalls([])
       setShowAIMessageBox(false)
+
+      // Clear streaming tool calls after streaming is complete
+      setStreamingToolCalls([])
 
       // 清理AI消息框显示的timeout
       if (aiMessageTimeoutRef.current) {
@@ -1304,7 +1331,6 @@ export default function HomePage() {
     if (!isInitializedFromOverlayRef.current) {
       setIsLoading(true)
       setStreamingContent('')
-      setStreamingToolCalls([])
       setShowAIMessageBox(false)
       hasApiResponseStartedRef.current = false
 
@@ -1437,7 +1463,7 @@ export default function HomePage() {
       }
 
       const completeToolCalls = toolCalls.filter(tc =>
-        tc.function?.arguments && tc.function.arguments.trim() !== ''
+        tc.function && tc.function.hasOwnProperty('arguments')
       )
 
       // 流结束后，如果有推理内容但时间还没计算，就计算时间
@@ -1473,7 +1499,6 @@ export default function HomePage() {
         // Clear streaming states after creating the message
         setStreamingContent('')
         setStreamingReasoningContent('')
-        setStreamingToolCalls([])
         setIsStreamingReasoningExpanded(false)
 
         setReasoningDuration(null)
@@ -1513,7 +1538,6 @@ export default function HomePage() {
         // Clear streaming states even if no message to save
         setStreamingContent('')
         setStreamingReasoningContent('')
-        setStreamingToolCalls([])
         setIsStreamingReasoningExpanded(false)
 
         setReasoningDuration(null)
@@ -1526,13 +1550,17 @@ export default function HomePage() {
       if (error instanceof Error && error.name === 'AbortError') {
         devLog.log('Request was aborted by user')
       } else {
+        // Show toast with specific error message
+        const formattedError = formatApiError(error)
+        showToast(`Request failed: ${formattedError}`, 'error')
+        
         // Create error message with retry capability
         const errorMessage: Message = {
           id: generateId(),
           role: 'assistant',
-          content: `Request failed: ${error instanceof Error ? error.message : 'Unknown error occurred'}`,
+          content: `Request failed: ${formattedError}`,
           timestamp: Date.now(),
-          error: error instanceof Error ? error.message : 'Unknown error occurred',
+          error: formattedError,
           canRetry: true
         }
 
@@ -1562,8 +1590,10 @@ export default function HomePage() {
       setIsLoading(false)
       setStreamingContent('')
       setStreamingReasoningContent('')
-      setStreamingToolCalls([])
       setIsStreamingReasoningExpanded(false)
+
+      // Clear streaming tool calls after streaming is complete
+      setStreamingToolCalls([])
       setShowAIMessageBox(false)
 
       setReasoningDuration(null)
@@ -1624,8 +1654,10 @@ export default function HomePage() {
     setIsLoading(false)
     setStreamingContent('')
     setStreamingReasoningContent('')
-    setStreamingToolCalls([])
     setIsStreamingReasoningExpanded(false)
+
+    // Clear streaming tool calls after streaming is complete
+    setStreamingToolCalls([])
 
     setReasoningDuration(null)
   }
@@ -1747,6 +1779,12 @@ export default function HomePage() {
     }
 
     // Continue conversation with AI after all tool results
+    // Immediately set thinking state to show user that AI is processing
+    setIsLoading(true)
+    setStreamingContent('')
+    setStreamingReasoningContent('')
+    setStreamingToolCalls([])
+
     await continueConversationAfterTool(sessionWithToolResults)
   }
 
@@ -1826,7 +1864,6 @@ export default function HomePage() {
           // Directly regenerate response without using handleSendMessage
           setIsLoading(true)
           setStreamingContent('')
-          setStreamingToolCalls([])
           setShowAIMessageBox(true)
           hasApiResponseStartedRef.current = false
 
@@ -1927,13 +1964,13 @@ export default function HomePage() {
               }
 
               toolCalls = updatedToolCalls
-              setStreamingToolCalls([...updatedToolCalls])
+          setStreamingToolCalls([...updatedToolCalls])
             }
           }
 
-          // Filter out incomplete tool calls
+          // Filter out incomplete tool calls - allow empty arguments for no-param tools
           const completeToolCalls = toolCalls.filter(tc =>
-            tc.function?.arguments && tc.function.arguments.trim() !== ''
+            tc.function && tc.function.hasOwnProperty('arguments')
           )
 
           // 流结束后，如果有推理内容但时间还没计算，就计算时间
@@ -1970,7 +2007,6 @@ export default function HomePage() {
             // Clear streaming states after creating the message
             setStreamingContent('')
             setStreamingReasoningContent('')
-            setStreamingToolCalls([])
             setIsStreamingReasoningExpanded(false)
 
             setReasoningDuration(null)
@@ -2004,8 +2040,9 @@ export default function HomePage() {
           setIsLoading(false)
           setStreamingContent('')
           setStreamingReasoningContent('')
-          setStreamingToolCalls([])
           setIsStreamingReasoningExpanded(false)
+
+          // Clear streaming tool calls after streaming is complete
 
           // Focus input after retry response is complete
           setTimeout(() => {
@@ -2013,7 +2050,8 @@ export default function HomePage() {
           }, 100)
 
         } catch (error) {
-          showToast('Failed to retry message.', 'error')
+          const formattedError = formatApiError(error)
+          showToast(`Retry failed: ${formattedError}`, 'error')
           devLog.error('Failed to retry message:', error)
 
           // Don't show error message if request was aborted (user clicked stop)
@@ -2021,19 +2059,19 @@ export default function HomePage() {
             devLog.log('Request was aborted by user')
           } else {
             // Create error message with retry capability
-            const errorMessage: Message = {
+            const retryErrorMessage: Message = {
               id: generateId(),
               role: 'assistant',
-              content: `Retry failed: ${error instanceof Error ? error.message : 'Unknown error occurred'}`,
+              content: `Retry failed: ${formattedError}`,
               timestamp: Date.now(),
-              error: error instanceof Error ? error.message : 'Unknown error occurred',
+              error: formattedError,
               canRetry: true
             }
 
             // Save error message to session
             const sessionWithError = {
               ...updatedSession,
-              messages: [...updatedSession.messages, errorMessage],
+              messages: [...updatedSession.messages, retryErrorMessage],
               updatedAt: Date.now()
             }
 
@@ -2050,8 +2088,9 @@ export default function HomePage() {
           setIsLoading(false)
           setStreamingContent('')
           setStreamingReasoningContent('')
-          setStreamingToolCalls([])
           setIsStreamingReasoningExpanded(false)
+
+          // Clear streaming tool calls after streaming is complete
           setShowAIMessageBox(false)
 
           if (aiMessageTimeoutRef.current) {
@@ -2514,7 +2553,6 @@ export default function HomePage() {
 
       setIsLoading(true)
       setStreamingContent('')
-      setStreamingToolCalls([])
       setShowAIMessageBox(false)
       hasApiResponseStartedRef.current = false
 
@@ -2594,12 +2632,16 @@ export default function HomePage() {
 
             if (targetIndex >= 0 && updatedToolCalls[targetIndex]) {
               const existing = updatedToolCalls[targetIndex]
-              updatedToolCalls[targetIndex] = {
-                ...existing,
-                function: {
-                  ...existing.function,
-                  arguments: (existing.function?.arguments || '') + (streamingToolCall.function?.arguments || '')
+              // Only update if this chunk has arguments to append
+              if (streamingToolCall.function?.hasOwnProperty('arguments')) {
+                updatedToolCalls[targetIndex] = {
+                  ...existing,
+                  function: {
+                    ...existing.function,
+                    arguments: (existing.function?.arguments || '') + (streamingToolCall.function?.arguments || '')
+                  }
                 }
+              } else {
               }
             } else {
               const completeToolCall: ToolCall = {
@@ -2626,7 +2668,7 @@ export default function HomePage() {
 
       // Filter out incomplete tool calls
       const completeToolCalls = toolCalls.filter(tc =>
-        tc.function?.arguments && tc.function.arguments.trim() !== ''
+        tc.function && tc.function.hasOwnProperty('arguments')
       )
 
       // 流结束后，如果有推理内容但时间还没计算，就计算时间
@@ -2660,10 +2702,11 @@ export default function HomePage() {
           model: currentConfig.model
         }
 
+
         // Clear streaming states after creating the message
         setStreamingContent('')
         setStreamingReasoningContent('')
-        setStreamingToolCalls([])
+        // Keep streaming tool calls - they should persist as part of the message history
         setIsStreamingReasoningExpanded(false)
 
         setReasoningDuration(null)
@@ -2697,11 +2740,11 @@ export default function HomePage() {
       setIsLoading(false)
       setStreamingContent('')
       setStreamingReasoningContent('')
-      setStreamingToolCalls([])
       setIsStreamingReasoningExpanded(false)
 
     } catch (error) {
-      showToast('Failed to edit message.', 'error')
+      const errorMessage = formatApiError(error)
+      showToast(`Edit failed: ${errorMessage}`, 'error')
       devLog.error('Failed to edit message:', error)
 
       // Don't show error message if request was aborted (user clicked stop)
@@ -2743,7 +2786,6 @@ export default function HomePage() {
       setIsLoading(false)
       setStreamingContent('')
       setStreamingReasoningContent('')
-      setStreamingToolCalls([])
       setIsStreamingReasoningExpanded(false)
       setShowAIMessageBox(false)
 

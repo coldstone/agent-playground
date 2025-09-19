@@ -4,7 +4,7 @@ import React, { useState, forwardRef, useImperativeHandle, useMemo } from 'react
 import { APIConfig, Tool } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { CustomSelect } from '@/components/ui/custom-select'
 import { HttpRequestModal as HTTPRequestModal } from '@/components/modals'
 import { ToolGeneratorModal } from '@/components/tools/tool-generator-modal'
 import { ToolFormModal } from '@/components/tools/tool-form-modal'
@@ -237,18 +237,20 @@ export const ToolsPanel = forwardRef<ToolsPanelRef, ToolsPanelProps>(({
 
         {/* 标签过滤器 */}
         <div className="flex gap-2">
-          <Select value={selectedTag} onValueChange={setSelectedTag}>
-            <SelectTrigger className="flex-1">
-              <SelectValue placeholder="Filter by tag" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Tools</SelectItem>
-              <SelectItem value="untagged">Untagged</SelectItem>
-              {Array.from(new Set(tools.map(t => t.tag).filter(Boolean))).sort().map(tag => (
-                <SelectItem key={tag} value={tag!}>{tag}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <CustomSelect
+            value={selectedTag}
+            onChange={setSelectedTag}
+            placeholder="Filter by tag"
+            options={[
+              { value: 'all', label: 'All Tools' },
+              { value: 'untagged', label: 'Untagged' },
+              ...Array.from(new Set(tools.map(t => t.tag).filter(Boolean))).sort().map(tag => ({
+                value: tag!,
+                label: tag!
+              }))
+            ]}
+            size="md"
+          />
         </div>
 
         {tools.length === 0 ? (

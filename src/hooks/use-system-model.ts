@@ -59,7 +59,7 @@ export function useSystemModel() {
         apiKey,
         model: systemModel.model,
         temperature: 0.7, // 默认值，用于 AI 生成
-        maxTokens: 2000,
+        maxTokens: undefined,
         topP: 1,
         frequencyPenalty: 0,
         presencePenalty: 0,

@@ -46,6 +46,7 @@ export function useSmartScroll({
   const scrollDebounceRef = useRef<NodeJS.Timeout>()
   const isScrollingToBottomRef = useRef(false)
   const wasStreamingRef = useRef(false)
+  const userManuallyLeftBottomDuringStreamingRef = useRef(false) // 用户在流式输出期间是否手动离开了底部
 
   // 检查是否接近底部
   const isNearBottom = useCallback(() => {
@@ -61,6 +62,11 @@ export function useSmartScroll({
     const container = containerRef.current
     if (!container || (!isAutoScrollEnabled && !forceScroll) || isScrollingToBottomRef.current) return
 
+    // 如果用户在流式输出期间手动离开了底部，则不执行自动滚动
+    if (isStreaming && userManuallyLeftBottomDuringStreamingRef.current && !forceScroll) {
+      return
+    }
+
     // 清除之前的防抖
     if (scrollDebounceRef.current) {
       clearTimeout(scrollDebounceRef.current)
@@ -70,12 +76,16 @@ export function useSmartScroll({
     scrollDebounceRef.current = setTimeout(() => {
       if (!container || (!isAutoScrollEnabled && !forceScroll)) return
 
+      // 再次检查用户是否手动离开了底部
+      if (isStreaming && userManuallyLeftBottomDuringStreamingRef.current && !forceScroll) {
+        return
+      }
+
       isScrollingToBottomRef.current = true
 
       // 使用requestAnimationFrame确保DOM更新完成后再滚动
       requestAnimationFrame(() => {
         if (!container) return
-        
         const scrollTop = container.scrollHeight - container.clientHeight
         container.scrollTo({
           top: Math.max(0, scrollTop),
@@ -88,7 +98,7 @@ export function useSmartScroll({
         isScrollingToBottomRef.current = false
       }, useSmooth ? 300 : 50)
     }, 16) // 约一帧的时间
-  }, [isAutoScrollEnabled, containerRef])
+  }, [isAutoScrollEnabled, containerRef, isStreaming])
 
   // 滚动到顶部
   const scrollToTop = useCallback((useSmooth = true) => {
@@ -112,13 +122,13 @@ export function useSmartScroll({
 
     // 检查是否接近底部
     const nearBottom = isNearBottom()
-    
+
     // 检查是否远离顶部
     const farFromTop = currentScrollTop > threshold
 
     // 更新滚动到底部按钮的显示状态
     setShowScrollToBottom(!nearBottom)
-    
+
     // 更新滚动到顶部按钮的显示状态
     setShowScrollToTop(farFromTop)
 
@@ -135,20 +145,44 @@ export function useSmartScroll({
       setIsUserScrolling(false)
     }, 500)
 
-    // 检查滚动方向和位置
-    if (scrollDirection === 'up') {
-      // 用户向上滚动，只有当滚动距离足够大时才禁用自动滚动
-      // 这样可以避免微小的滚动变化影响自动跟随
-      const { scrollTop, scrollHeight, clientHeight } = container
-      const distanceFromBottom = scrollHeight - scrollTop - clientHeight
-      if (distanceFromBottom > threshold) {
-        setIsAutoScrollEnabled(false)
+    // 特殊处理流式输出期间的滚动行为
+    if (isStreaming) {
+      // 用户向上滚动，判断是否真的想离开底部
+      if (scrollDirection === 'up') {
+        const { scrollTop, scrollHeight, clientHeight } = container
+        const distanceFromBottom = scrollHeight - scrollTop - clientHeight
+
+        // 只有当用户向上滚动超过阈值距离时，才认为是有意离开底部
+        if (distanceFromBottom > threshold * 2) { // 使用更大的阈值确保是有意滚动
+          userManuallyLeftBottomDuringStreamingRef.current = true
+          setIsAutoScrollEnabled(false)
+
+          // 清除任何待执行的自动滚动
+          if (scrollDebounceRef.current) {
+            clearTimeout(scrollDebounceRef.current)
+          }
+        }
+      } else if (scrollDirection === 'down' && nearBottom) {
+        // 用户重新滚动回底部，恢复自动滚动
+        userManuallyLeftBottomDuringStreamingRef.current = false
+        setIsAutoScrollEnabled(true)
       }
-    } else if (scrollDirection === 'down' && nearBottom) {
-      // 用户向下滚动且接近底部，启用自动滚动
-      setIsAutoScrollEnabled(true)
+    } else {
+      // 非流式输出期间的原有逻辑
+      if (scrollDirection === 'up') {
+        // 用户向上滚动，只有当滚动距离足够大时才禁用自动滚动
+        // 这样可以避免微小的滚动变化影响自动跟随
+        const { scrollTop, scrollHeight, clientHeight } = container
+        const distanceFromBottom = scrollHeight - scrollTop - clientHeight
+        if (distanceFromBottom > threshold) {
+          setIsAutoScrollEnabled(false)
+        }
+      } else if (scrollDirection === 'down' && nearBottom) {
+        // 用户向下滚动且接近底部，启用自动滚动
+        setIsAutoScrollEnabled(true)
+      }
     }
-  }, [isNearBottom, containerRef, threshold])
+  }, [isNearBottom, containerRef, threshold, isStreaming])
 
   // 监听滚动事件
   useEffect(() => {
@@ -172,23 +206,36 @@ export function useSmartScroll({
   useEffect(() => {
     // 检查是否从流式输出状态变为非流式输出状态
     const justStoppedStreaming = wasStreamingRef.current && !isStreaming
+
+    // 检查是否刚开始流式输出
+    const justStartedStreaming = !wasStreamingRef.current && isStreaming
+
     wasStreamingRef.current = isStreaming
 
-    // 如果刚刚停止流式输出，不做任何滚动操作，保持当前位置
+    // 如果刚刚停止流式输出，重置手动离开标志，不做滚动操作，保持当前位置
     if (justStoppedStreaming) {
+      userManuallyLeftBottomDuringStreamingRef.current = false
       return
     }
 
+    // 如果刚开始流式输出，重置手动离开标志
+    if (justStartedStreaming) {
+      userManuallyLeftBottomDuringStreamingRef.current = false
+    }
+
     // 在流式输出过程中需要保持滚动到底部
-    if (isStreaming && isAutoScrollEnabled && !isUserScrolling) {
+    if (isStreaming && isAutoScrollEnabled && !userManuallyLeftBottomDuringStreamingRef.current) {
       // 对于流式内容，使用更短的防抖延迟来实现更流畅的跟随
       if (scrollDebounceRef.current) {
         clearTimeout(scrollDebounceRef.current)
       }
-      
+
       scrollDebounceRef.current = setTimeout(() => {
-        scrollToBottom(false) // 使用instant滚动，避免smooth动画与流式内容冲突
-      }, 8) // 更短的延迟，更流畅的跟随
+        // 在执行滚动前再次确认用户没有手动离开底部
+        if (!userManuallyLeftBottomDuringStreamingRef.current) {
+          scrollToBottom(false) // 使用instant滚动，避免smooth动画与流式内容冲突
+        }
+      }, 50) // 增加延迟，给用户滚动操作更多时间
     }
     // 如果内容高度发生变化但不是在流式输出，仍然需要调整滚动位置
     else if (!isStreaming && isAutoScrollEnabled && !isUserScrolling) {
@@ -196,7 +243,6 @@ export function useSmartScroll({
       if (scrollDebounceRef.current) {
         clearTimeout(scrollDebounceRef.current)
       }
-      
       scrollDebounceRef.current = setTimeout(() => {
         scrollToBottom(true) // 非流式状态使用smooth滚动
       }, 50) // 给DOM更多时间渲染
@@ -210,6 +256,9 @@ export function useSmartScroll({
       setIsAutoScrollEnabled(true)
       setIsUserScrolling(false)
       setShowScrollToTop(false)
+
+      // 重置手动离开标志
+      userManuallyLeftBottomDuringStreamingRef.current = false
 
       // 清除之前记录的滚动位置，进入自动跟随模式
       lastScrollTopRef.current = 0
@@ -231,6 +280,9 @@ export function useSmartScroll({
       setIsUserScrolling(false)
       setShowScrollToBottom(false)
       setShowScrollToTop(false)
+
+      // 重置手动离开标志
+      userManuallyLeftBottomDuringStreamingRef.current = false
 
       // 清除之前记录的滚动位置，进入自动跟随模式
       lastScrollTopRef.current = 0
@@ -265,6 +317,7 @@ export function useSmartScroll({
     scrollToBottom: () => {
       setIsAutoScrollEnabled(true)
       setShowScrollToBottom(false)
+      userManuallyLeftBottomDuringStreamingRef.current = false // 重置手动离开标志
       scrollToBottom(true)
     },
     scrollToTop: () => {
@@ -276,6 +329,7 @@ export function useSmartScroll({
       if (container) {
         setIsAutoScrollEnabled(true)
         setShowScrollToBottom(false)
+        userManuallyLeftBottomDuringStreamingRef.current = false // 重置手动离开标志
         isScrollingToBottomRef.current = true
         container.scrollTo({
           top: container.scrollHeight,

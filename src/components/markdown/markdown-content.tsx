@@ -248,11 +248,24 @@ const MarkdownContentComponent = function MarkdownContent({ content, className =
             </thead>
           ),
 
-          th: ({ children }: any) => (
-            <th className="border-r border-b border-gray-300 dark:border-gray-600 px-3 py-2 text-left font-semibold text-gray-900 dark:text-gray-100 bg-gray-50 dark:bg-gray-800">
-              {children}
-            </th>
-          ),
+          th: ({ children, style, align, className: thClassName = '', ...rest }: any) => {
+            const alignment = (style && style.textAlign) || align
+            const alignmentClass = alignment === 'center'
+              ? 'text-center'
+              : alignment === 'right'
+                ? 'text-right'
+                : 'text-left'
+
+            return (
+              <th
+                {...rest}
+                className={`border-r border-b border-gray-300 dark:border-gray-600 px-3 py-2 font-semibold text-gray-900 dark:text-gray-100 bg-gray-50 dark:bg-gray-800 ${alignmentClass} ${thClassName}`.trim()}
+                style={style}
+              >
+                {children}
+              </th>
+            )
+          },
 
           tbody: ({ children }: any) => (
             <tbody>
@@ -276,11 +289,24 @@ const MarkdownContentComponent = function MarkdownContent({ content, className =
             )
           },
 
-          td: ({ children }: any) => (
-            <td className="border-r border-b border-gray-300 dark:border-gray-600 px-3 py-2 text-gray-700 dark:text-gray-300">
-              {children}
-            </td>
-          ),
+          td: ({ children, style, align, className: tdClassName = '', ...rest }: any) => {
+            const alignment = (style && style.textAlign) || align
+            const alignmentClass = alignment === 'center'
+              ? 'text-center'
+              : alignment === 'right'
+                ? 'text-right'
+                : 'text-left'
+
+            return (
+              <td
+                {...rest}
+                className={`border-r border-b border-gray-300 dark:border-gray-600 px-3 py-2 text-gray-700 dark:text-gray-300 ${alignmentClass} ${tdClassName}`.trim()}
+                style={style}
+              >
+                {children}
+              </td>
+            )
+          },
 
           // Lists with proper spacing
           ul: ({ children }: any) => (

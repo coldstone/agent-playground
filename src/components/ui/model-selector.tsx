@@ -27,10 +27,15 @@ export function ModelSelector({ onConfigLLM, autoMode = false, onAutoModeChange,
   // When available models change, ensure currentModel is still valid
   useEffect(() => {
     if (!currentModel) return
+    
+    // Don't check if availableModels is empty (still loading)
+    if (availableModels.length === 0) return
+    
     const stillAvailable = availableModels.some(
       m => m.provider === currentModel.provider && m.model === currentModel.model
     )
     if (!stillAvailable) {
+      devLog.warn('Current model is no longer available, clearing:', currentModel, 'Available models:', availableModels)
       setCurrentModel(null)
       try {
         localStorage.removeItem('agent-playground-current-model')

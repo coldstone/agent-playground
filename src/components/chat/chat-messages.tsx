@@ -103,20 +103,34 @@ export function ChatMessages({
   const prevToolCallsLengthRef = useRef(0)
 
   // 监听streamingToolCalls变化，当Tool Call卡片出现时立即滚动到底部
+  // 注意：这里改为使用智能滚动逻辑，而不是强制滚动
   useEffect(() => {
     if (streamingToolCalls && streamingToolCalls.length > 0) {
-      // 当从没有tool calls变为有tool calls，或者tool calls数量增加时，触发滚动
+      // 当从没有tool calls变为有tool calls，或者tool calls数量增加时，更新依赖项让智能滚动处理
       if (prevToolCallsLengthRef.current === 0 || streamingToolCalls.length > prevToolCallsLengthRef.current) {
-        // 使用setTimeout确保Tool Call卡片DOM渲染完成
-        setTimeout(() => {
-          onScrollToBottom?.()
-        }, 100)
+        // 这里不再强制滚动，依赖智能滚动Hook的dependencies变化来处理
+        // setTimeout(() => {
+        //   onScrollToBottom?.()
+        // }, 100)
       }
       prevToolCallsLengthRef.current = streamingToolCalls.length
     } else {
       prevToolCallsLengthRef.current = 0
     }
-  }, [streamingToolCalls, onScrollToBottom])
+  }, [streamingToolCalls])
+
+  // 监听合并消息的流式内容变化，确保在Auto模式下流式内容开始时正确滚动
+  // 注意：这里不应该强制滚动，让智能滚动Hook处理即可
+  // useEffect(() => {
+  //   if (autoMode && isLoading && streamingContent) {
+  //     // 在Auto模式下，当流式内容开始时，确保滚动到底部
+  //     const timer = setTimeout(() => {
+  //       onScrollToBottom?.()
+  //     }, 50)
+  //
+  //     return () => clearTimeout(timer)
+  //   }
+  // }, [autoMode, isLoading, streamingContent, onScrollToBottom])
 
   // 监听合并消息的流式内容变化，确保在Auto模式下流式内容开始时正确滚动
   useEffect(() => {
@@ -352,7 +366,7 @@ export function ChatMessages({
           {isLoading && showAIMessageBox && (!autoMode || (autoMode && !displayMessages.some((msg, index) => 
             'isMerged' in msg && msg.isMerged && index === displayMessages.length - 1
           ))) && (
-            <div className="flex gap-3 p-4 rounded-lg border bg-card border-border">
+            <div className="flex gap-3 p-4 rounded-lg border bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800">
               <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-green-600 bg-card border border-border">
                 <div className="w-4 h-4 border-2 border-green-600 border-t-transparent rounded-full animate-spin" />
               </div>
@@ -543,7 +557,7 @@ function MergedMessageDisplay({
   }
 
   return (
-    <div className="group flex gap-3 p-4 rounded-lg border bg-card border-border min-w-0">
+    <div className="group flex gap-3 p-4 rounded-lg border bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800 min-w-0">
       <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-green-600 bg-card border border-border">
         <Bot className="w-4 h-4" />
       </div>
@@ -641,7 +655,7 @@ function MergedMessageDisplay({
                   showToggle={false}
                 />
               ) : (
-                <pre className="whitespace-pre-wrap text-gray-700 dark:text-gray-300 font-mono text-sm leading-relaxed min-w-0 overflow-x-auto">
+                <pre className="whitespace-pre-wrap text-gray-700 dark:text-gray-300 font-mono text-base leading-relaxed min-w-0 overflow-x-auto">
                   {message.content}
                 </pre>
               )
@@ -652,14 +666,13 @@ function MergedMessageDisplay({
               <div className="space-y-3">
                 {message.toolCalls
                   .filter((toolCall: ToolCall) =>
-                    toolCall.function?.arguments && toolCall.function.arguments.trim() !== ''
+                    toolCall.function && toolCall.function.hasOwnProperty('arguments')
                   )
                   .map((toolCall: ToolCall) => {
                     // Handle backward compatibility
                     let execution = message.toolCallExecutions?.find(
                       exec => exec.toolCall.id === toolCall.id
                     )
-                    
                     if (!execution && message.toolCalls) {
                       execution = {
                         id: toolCall.id + '_compat',
@@ -668,8 +681,13 @@ function MergedMessageDisplay({
                         timestamp: message.timestamp
                       }
                     }
-                    
+
                     const tool = tools.find(t => t.name === toolCall.function.name)
+
+                    // Check if this tool call is currently streaming (for merged display)
+                    // Use stable reference to prevent unnecessary re-renders
+                    const isCurrentlyStreaming = isLastMergedGroup && isStreaming &&
+                      streamingToolCalls?.some(stc => stc.id === toolCall.id) || false
 
                     return (
                       <ToolCallDisplay
@@ -685,6 +703,7 @@ function MergedMessageDisplay({
                         autoMode={autoMode}
                         isCollapsed={autoMode}
                         inMergedCard={true}
+                        isStreaming={isCurrentlyStreaming}
                       />
                     )
                   })}
@@ -753,24 +772,31 @@ function MergedMessageDisplay({
               </div>
             )}
 
-            {/* Streaming tool calls */}
+            {/* Streaming tool calls - only show those not already displayed in saved tool calls */}
             {streamingToolCalls && streamingToolCalls.length > 0 && (
               <div className="space-y-3 mt-4">
-                {streamingToolCalls.map((toolCall, index) => (
-                  <ToolCallDisplay
-                    key={`streaming-${toolCall.id}-${index}`}
-                    toolCall={toolCall}
-                    execution={undefined}
-                    agent={agent}
-                    authorizations={authorizations}
-                    onProvideResult={() => {}}
-                    onMarkFailed={() => {}}
-                    isStreaming={true}
-                    autoMode={autoMode}
-                    isCollapsed={autoMode}
-                    inMergedCard={true}
-                  />
-                ))}
+                {streamingToolCalls
+                  .filter(streamingToolCall => {
+                    // Only show streaming tool calls that don't have a corresponding saved tool call
+                    const lastMessage = mergedMessage.messages[mergedMessage.messages.length - 1]
+                    const savedToolCallIds = lastMessage.toolCalls?.map(tc => tc.id) || []
+                    return !savedToolCallIds.includes(streamingToolCall.id)
+                  })
+                  .map((toolCall, index) => (
+                    <ToolCallDisplay
+                      key={`streaming-${toolCall.id}-${index}`}
+                      toolCall={toolCall}
+                      execution={undefined}
+                      agent={agent}
+                      authorizations={authorizations}
+                      onProvideResult={() => {}}
+                      onMarkFailed={() => {}}
+                      isStreaming={true}
+                      autoMode={autoMode}
+                      isCollapsed={autoMode}
+                      inMergedCard={true}
+                    />
+                  ))}
               </div>
             )}
 

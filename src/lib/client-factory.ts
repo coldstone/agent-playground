@@ -1,5 +1,6 @@
 import { APIConfig, Tool } from '@/types'
 import { OpenAIClient, AzureOpenAIClient } from '@/lib/clients'
+import { OpenRouterClient } from '@/lib/clients/openrouter-client'
 import { MODEL_PROVIDERS } from '@/lib/providers'
 
 export function createClient(config: APIConfig, tools: Tool[] = [], providerName: string) {
@@ -13,6 +14,8 @@ export function createClient(config: APIConfig, tools: Tool[] = [], providerName
   switch (provider.client) {
     case 'azure-openai':
       return new AzureOpenAIClient(config, tools)
+    case 'openrouter':
+      return new OpenRouterClient(config, tools, providerName)
     case 'openai':
     default:
       return new OpenAIClient(config, tools, providerName)

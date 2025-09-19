@@ -56,7 +56,7 @@ function ResultDisplay({ content }: { content: string }) {
         <div className="flex justify-center mt-4 mb-2">
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="text-sm text-primary hover:text-foreground cursor-pointer bg-transparent border-none"
+            className="text-sm text-green-600 hover:text-green-700 cursor-pointer bg-transparent border-none"
           >
             {isExpanded ? 'Display Less' : 'Display More'}
           </button>
@@ -89,6 +89,10 @@ export function ToolCallDisplay({
   const [httpHeaders, setHttpHeaders] = useState<{ key: string; value: string }[]>([])
   const [httpUrl, setHttpUrl] = useState('')
   const [isManuallyExpanded, setIsManuallyExpanded] = useState(false)
+  const [streamingAiDescription, setStreamingAiDescription] = useState('')
+  const [displayedAiDescription, setDisplayedAiDescription] = useState('')
+  const [lastAiDescriptionLength, setLastAiDescriptionLength] = useState(0)
+  const typewriterTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // Initialize HTTP configuration when tool or authorization changes
   const { mergedHeaders, httpRequestUrl } = useMemo(() => {
@@ -247,13 +251,24 @@ export function ToolCallDisplay({
 
   const getMainStatusIcon = () => {
     if (isStreaming) {
+      // If we have execution state while streaming, prioritize execution status
+      if (execution?.status === 'pending') {
+        return <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+      }
+      if (execution?.status === 'completed') {
+        return <Check className="w-6 h-6 text-green-600" />
+      }
+      if (execution?.status === 'failed') {
+        return <X className="w-6 h-6 text-red-600" />
+      }
+      // Default streaming state
       return <div className="w-6 h-6 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />
     }
     if (!execution) return <Clock className="w-6 h-6 text-blue-600" />
 
     switch (execution.status) {
       case 'pending':
-        return autoMode 
+        return autoMode
           ? <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
           : <Clock className="w-6 h-6 text-blue-600" />
       case 'completed':
@@ -268,34 +283,34 @@ export function ToolCallDisplay({
   const getStatusColor = () => {
     // In merged cards, use consistent subtle background colors
     if (inMergedCard) {
-      if (isStreaming) return 'border-border bg-muted'
-      if (!execution) return 'border-border bg-muted'
+      if (isStreaming) return 'bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800'
+      if (!execution) return 'bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800'
 
       switch (execution.status) {
         case 'pending':
-          return 'border-border bg-muted'
+          return 'bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800'
         case 'completed':
-          return 'border-border bg-card'
+          return 'bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800'
         case 'failed':
           return 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30'
         default:
-          return 'border-border bg-muted'
+          return 'bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800'
       }
     }
 
-    // Standalone tool calls
-    if (isStreaming) return 'border-border bg-muted'
-    if (!execution) return 'border-border bg-muted'
+    // Standalone tool calls - always use purple background
+    if (isStreaming) return 'bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800'
+    if (!execution) return 'bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800'
 
     switch (execution.status) {
       case 'pending':
-        return 'border-border bg-muted'
+        return 'bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800'
       case 'completed':
-        return 'border-border bg-card'
+        return 'bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800'
       case 'failed':
         return 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30'
       default:
-        return 'border-border bg-muted'
+        return 'bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800'
     }
   }
 
@@ -305,7 +320,11 @@ export function ToolCallDisplay({
   }
 
   const getStatusText = () => {
-    if (isStreaming) return 'Streaming arguments...'
+    if (isStreaming) {
+      // If we have execution state while streaming, it means we're in a transition state
+      if (execution?.status === 'pending') return 'Executing...'
+      return 'Streaming parameters...'
+    }
     if (!execution) return 'Waiting for execution'
 
     switch (execution.status) {
@@ -322,17 +341,113 @@ export function ToolCallDisplay({
 
   let parsedArguments: any = {}
   let argumentsDisplay = toolCall.function.arguments
+  let aiDescription = ''
 
   if (isStreaming) {
-    argumentsDisplay = toolCall.function.arguments
+    // For streaming, try to parse and remove ai_description from display
+    try {
+      const tempParsed = JSON.parse(toolCall.function.arguments)
+      if (tempParsed.ai_description) {
+        const { ai_description, ...displayArgs } = tempParsed
+        argumentsDisplay = JSON.stringify(displayArgs, null, 2)
+      } else {
+        argumentsDisplay = toolCall.function.arguments
+      }
+    } catch (e) {
+      argumentsDisplay = toolCall.function.arguments
+    }
+
+    // Use displayed ai_description (with typewriter effect) if available
+    if (displayedAiDescription) {
+      aiDescription = displayedAiDescription
+    } else if (streamingAiDescription) {
+      aiDescription = streamingAiDescription
+    }
   } else {
     try {
       parsedArguments = JSON.parse(toolCall.function.arguments)
-      argumentsDisplay = JSON.stringify(parsedArguments, null, 2)
+      // Extract ai_description from completed arguments
+      if (parsedArguments.ai_description) {
+        aiDescription = parsedArguments.ai_description
+        // Remove ai_description from arguments display to avoid duplication
+        const { ai_description, ...displayArgs } = parsedArguments
+        argumentsDisplay = JSON.stringify(displayArgs, null, 2)
+      } else {
+        argumentsDisplay = JSON.stringify(parsedArguments, null, 2)
+      }
     } catch (e) {
       argumentsDisplay = toolCall.function.arguments
     }
   }
+
+  // Update streaming ai_description based on tool call arguments
+  useEffect(() => {
+    if (isStreaming) {
+      try {
+        const currentArgs = JSON.parse(toolCall.function.arguments)
+        if (currentArgs.ai_description) {
+          const newDescription = currentArgs.ai_description
+          // Check if the description has grown (new content added)
+          if (newDescription.length > lastAiDescriptionLength) {
+            setStreamingAiDescription(newDescription)
+            setLastAiDescriptionLength(newDescription.length)
+          }
+        }
+      } catch (e) {
+        // Try to extract partial ai_description from incomplete JSON during streaming
+        const args = toolCall.function.arguments
+        const aiDescMatch = args.match(/"ai_description"\s*:\s*"([^"]*)/)
+        if (aiDescMatch && aiDescMatch[1]) {
+          const partialDesc = aiDescMatch[1].replace(/\\n/g, '\n')
+          if (partialDesc.length > lastAiDescriptionLength) {
+            setStreamingAiDescription(partialDesc)
+            setLastAiDescriptionLength(partialDesc.length)
+          }
+        }
+      }
+    } else {
+      // Clear streaming state when not streaming
+      setStreamingAiDescription('')
+      setDisplayedAiDescription('')
+      setLastAiDescriptionLength(0)
+      if (typewriterTimeoutRef.current) {
+        clearTimeout(typewriterTimeoutRef.current)
+        typewriterTimeoutRef.current = null
+      }
+    }
+  }, [isStreaming, toolCall.function.arguments, lastAiDescriptionLength])
+
+  // Typewriter effect for displaying ai_description
+  useEffect(() => {
+    if (isStreaming && streamingAiDescription && streamingAiDescription.length > displayedAiDescription.length) {
+      const targetText = streamingAiDescription
+      const currentLength = displayedAiDescription.length
+
+      if (typewriterTimeoutRef.current) {
+        clearTimeout(typewriterTimeoutRef.current)
+      }
+
+      typewriterTimeoutRef.current = setTimeout(() => {
+        setDisplayedAiDescription(prev => {
+          // Only update if we're still in the same streaming state
+          if (targetText.length > prev.length) {
+            return targetText.slice(0, prev.length + 1)
+          }
+          return prev
+        })
+      }, 30) // Adjust speed as needed
+    } else if (!isStreaming && streamingAiDescription && displayedAiDescription !== streamingAiDescription) {
+      // Immediately show full text when streaming stops
+      setDisplayedAiDescription(streamingAiDescription)
+    }
+
+    return () => {
+      if (typewriterTimeoutRef.current) {
+        clearTimeout(typewriterTimeoutRef.current)
+        typewriterTimeoutRef.current = null
+      }
+    }
+  }, [isStreaming, streamingAiDescription, displayedAiDescription])
 
   // Collapsed state for auto mode
   if (isCollapsed && !isManuallyExpanded) {
@@ -363,6 +478,16 @@ export function ToolCallDisplay({
                     )}
                   </span>
                 </div>
+                {/* Display ai_description in collapsed mode if available */}
+                {aiDescription && (
+                  <div className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                    <span className="break-words">{aiDescription}</span>
+                    {isStreaming && (
+                      <span className="inline-block w-2 h-4 bg-purple-500 ml-1 align-text-bottom rounded-sm animate-pulse" 
+                            style={{ animationDuration: '0.8s' }} />
+                    )}
+                  </div>
+                )}
               </div>
               
               {/* Expand indicator */}
@@ -403,6 +528,16 @@ export function ToolCallDisplay({
                   )}
                 </span>
               </div>
+              {/* Display ai_description in expanded mode if available */}
+              {aiDescription && (
+                <div className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                  <span className="break-words">{aiDescription}</span>
+                  {isStreaming && (
+                    <span className="inline-block w-2 h-4 bg-purple-500 ml-1 align-text-bottom rounded-sm animate-pulse"
+                          style={{ animationDuration: '0.8s' }} />
+                  )}
+                </div>
+              )}
             </div>
             {/* Collapse indicator for manually expanded cards */}
             {isCollapsed && isManuallyExpanded ? (
@@ -418,23 +553,23 @@ export function ToolCallDisplay({
 
           <div className="space-y-2">
             <div className="min-w-0">
-            <div className="bg-muted px-3 py-2 rounded-t border border-border flex items-center gap-2">
-              <Settings2 className="w-4 h-4 text-purple-600" />
-              <span className="text-sm font-medium text-foreground">Arguments</span>
+            <div className="bg-orange-50 dark:bg-orange-950/50 px-3 py-2 rounded-t border border-border border-orange-100 dark:border-orange-900/30 flex items-center gap-2">
+              <Settings2 className="w-4 h-4 text-yellow-600" />
+              <span className="text-sm font-medium text-yellow-600">Parameters</span>
             </div>
-            <pre className="text-sm bg-card p-3 rounded-b border border-t-0 border-border whitespace-pre-wrap break-all overflow-wrap-anywhere min-w-0 overflow-x-auto">
+            <pre className="text-sm bg-card p-3 rounded-b border border-t-0 border-border  border-orange-100 dark:border-orange-900/50 whitespace-pre-wrap break-all overflow-wrap-anywhere min-w-0 overflow-x-auto">
               {argumentsDisplay}
               {isStreaming && (
-                <span className="inline-block w-2 h-4 bg-purple-600 animate-pulse ml-1" />
+                <span className="inline-block w-2 h-4 bg-yellow-600 animate-pulse ml-1" />
               )}
             </pre>
           </div>
 
             {tool?.httpRequest && (
-            <div className="border border-border rounded space-y-2">
-              <div className="bg-muted px-3 py-2 rounded-t border-b border-border flex items-center gap-2">
+            <div className="border border-border border-blue-100 dark:border-blue-900/50 rounded">
+              <div className="bg-blue-50 dark:bg-blue-950/50 px-3 py-2 rounded-t border-b border-border border-blue-100 dark:border-blue-900/50 flex items-center gap-2">
                 <Globe className="w-4 h-4 text-blue-600" />
-                <span className="text-sm font-medium text-foreground">Get Results via API</span>
+                <span className="text-sm font-medium text-blue-600">Get Results via API</span>
               </div>
 
               <div className="bg-card p-3 rounded-b border-t-0 space-y-2">
@@ -461,9 +596,9 @@ export function ToolCallDisplay({
                       <div className="flex-shrink-0">
                         {!isRequestingHttp ? (
                           <Button
-                            size="sm"
+                            size="xs"
                             onClick={handleHttpRequest}
-                            className="flex items-center gap-1 h-6 px-2 text-xs"
+                            className="flex items-center gap-1 px-2 py-3 text-xs"
                             disabled={isProvidingResult || isProvidingError}
                           >
                             <Send className="w-3 h-3" />
@@ -516,11 +651,11 @@ export function ToolCallDisplay({
 
             {execution?.result && (
               <div className="min-w-0">
-                <div className="bg-muted px-3 py-2 rounded-t border border-border flex items-center gap-2">
+                <div className="bg-green-50 dark:bg-green-950/50 px-3 py-2 rounded-t border border-border border-green-100 dark:border-green-900/50 flex items-center gap-2">
                   <Check className="w-4 h-4 text-green-600" />
-                  <span className="text-sm font-medium text-foreground">Result</span>
+                  <span className="text-sm font-medium text-green-600">Result</span>
                 </div>
-                <div className="bg-card border border-t-0 border-border rounded-b">
+                <div className="bg-card border border-t-0 border-border border-green-100 dark:border-green-900/50 rounded-b">
                   <ResultDisplay content={execution.result} />
                 </div>
               </div>
@@ -528,10 +663,15 @@ export function ToolCallDisplay({
 
             {execution?.error && (
               <div className="min-w-0">
-                <span className="text-sm font-medium text-red-600 dark:text-red-400">Error:</span>
-                <pre className="text-sm bg-red-50 dark:bg-red-950/30 p-2 rounded border border-red-200 dark:border-red-800 mt-1 whitespace-pre-wrap break-all overflow-wrap-anywhere min-w-0 overflow-x-auto">
-                  {execution.error}
-                </pre>
+                <div className="bg-red-100 dark:bg-red-950/50 px-3 py-2 rounded-t border border-border border-red-200 dark:border-red-900/50 flex items-center gap-2">
+                  <X className="w-4 h-4 text-red-600" />
+                  <span className="text-sm font-medium text-red-600">Result</span>
+                </div>
+                <div className="bg-card border border-t-0 border-border border-red-200 dark:border-red-900/50 rounded-b">
+                  <pre className="text-sm p-3 whitespace-pre-wrap break-all overflow-wrap-anywhere min-w-0 overflow-x-auto text-foreground">
+                    {execution.error}
+                  </pre>
+                </div>
               </div>
             )}
           </div>

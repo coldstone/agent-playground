@@ -41,23 +41,23 @@ export function getMergedHeaders(
   const authHeaders = authorization?.headers || []
   
   // Merge headers, authorization headers override tool headers
-  const headerMap = new Map<string, string>()
+  // Use lowercase keys for comparison but preserve original casing
+  const headerMap = new Map<string, { key: string; value: string }>()
   
   // Add tool headers first
   toolHeaders.forEach(header => {
-    headerMap.set(header.key.toLowerCase(), header.value)
+    const lowerKey = header.key.toLowerCase()
+    headerMap.set(lowerKey, { key: header.key, value: header.value })
   })
   
-  // Add/override with authorization headers
+  // Add/override with authorization headers (preserve auth header casing when overriding)
   authHeaders.forEach(header => {
-    headerMap.set(header.key.toLowerCase(), header.value)
+    const lowerKey = header.key.toLowerCase()
+    headerMap.set(lowerKey, { key: header.key, value: header.value })
   })
   
-  // Convert back to array format
-  return Array.from(headerMap.entries()).map(([key, value]) => ({
-    key,
-    value
-  }))
+  // Convert back to array format, preserving the final key casing
+  return Array.from(headerMap.values())
 }
 
 /**

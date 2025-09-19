@@ -124,9 +124,6 @@ export function AccordionPanel({
     return () => media.removeEventListener?.('change', listener)
   }, [themeMode])
 
-  const cycleTheme = () => {
-    setThemeMode(prev => (prev === 'light' ? 'dark' : prev === 'dark' ? 'system' : 'light'))
-  }
 
   const ThemeIcon = () => {
     switch (themeMode) {
@@ -394,16 +391,16 @@ export function AccordionPanel({
 
                 {/* Batch Delete Group */}
                 <div>
-                  <h4 className="text-sm font-medium text-foreground mb-3">Data Management</h4>
+                  <h4 className="text-sm font-medium text-foreground mb-5">Data Management</h4>
                   <div className="w-full flex flex-col items-center">
                     <button
                       onClick={onBatchDelete}
-                      className="w-full max-w-48 p-3 text-sm bg-muted hover:bg-red-500 hover:text-white rounded-lg flex items-center justify-center gap-2 transition-colors border border-border"
+                      className="w-full max-w-36 p-2 text-xs bg-muted hover:bg-red-500 hover:text-white rounded-lg flex items-center justify-center gap-2 transition-colors border border-border"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="w-3 h-3" />
                       Batch Delete ...
                     </button>
-                    <p className="text-sm text-muted-foreground mt-2 text-center">
+                    <p className="text-xs text-muted-foreground mt-2 text-center">
                       Delete agents, tools, or conversations
                     </p>
                   </div>
@@ -413,18 +410,18 @@ export function AccordionPanel({
 
                 {/* Export & Import Group */}
                 <div>
-                  <h4 className="text-sm font-medium text-foreground mb-3">Export & Import</h4>
+                  <h4 className="text-sm font-medium text-foreground mb-5">Export & Import</h4>
                   <div className="space-y-4">
                     {/* Export Section */}
                     <div className="w-full flex flex-col items-center">
                       <button
                         onClick={onExport}
-                        className="w-full max-w-48 p-3 text-sm bg-muted hover:bg-blue-500 hover:text-white rounded-lg flex items-center justify-center gap-2 transition-colors border border-border"
+                        className="w-full max-w-36 p-2 text-xs bg-muted hover:bg-blue-500 hover:text-white rounded-lg flex items-center justify-center gap-2 transition-colors border border-border"
                       >
-                        <Download className="w-4 h-4" />
+                        <Download className="w-3 h-3" />
                         Export Data ...
                       </button>
-                      <p className="text-sm text-muted-foreground mt-2 text-center">
+                      <p className="text-xs text-muted-foreground mt-2 text-center">
                         Export all agents, tools to a JSON file
                       </p>
                     </div>
@@ -433,12 +430,12 @@ export function AccordionPanel({
                     <div className="w-full flex flex-col items-center">
                       <button
                         onClick={onImport}
-                        className="w-full max-w-48 p-3 text-sm bg-muted hover:bg-green-500 hover:text-white rounded-lg flex items-center justify-center gap-2 transition-colors border border-border"
+                        className="w-full max-w-36 p-2 text-xs bg-muted hover:bg-green-500 hover:text-white rounded-lg flex items-center justify-center gap-2 transition-colors border border-border"
                       >
-                        <Upload className="w-4 h-4" />
+                        <Upload className="w-3 h-3" />
                         Import Data ...
                       </button>
-                      <p className="text-sm text-muted-foreground mt-2 text-center">
+                      <p className="text-xs text-muted-foreground mt-2 text-center">
                         Import agents, tools from a JSON file
                       </p>
                     </div>
@@ -450,39 +447,46 @@ export function AccordionPanel({
 
                 {/* Theme Group */}
                 <div>
-                  <button
-                    onClick={cycleTheme}
-                    className="w-full flex items-center justify-between mb-3 group"
-                    title="Click to cycle theme"
-                  >
+                  <div className="flex items-center justify-between mb-5">
                     <h4 className="text-sm font-medium text-foreground flex items-center gap-2">
                       <ThemeIcon />
                       Theme
                     </h4>
-                    <span className="text-xs text-muted-foreground capitalize group-hover:text-foreground transition-colors">
-                      {themeMode}
-                    </span>
-                  </button>
-                  <div className="flex items-center gap-2">
+                  </div>
+                  <div className="relative flex items-center border border-border rounded-full overflow-hidden bg-background w-fit mx-auto">
                     <button
                       onClick={() => setThemeMode('light')}
-                      className={`px-3 py-2 rounded-md border text-sm flex items-center gap-2 transition-colors ${themeMode === 'light' ? 'bg-primary/10 text-primary border-primary/50' : 'hover:bg-muted'}`}
+                      className={`relative px-3 py-1.5 text-xs flex items-center justify-center gap-1.5 transition-all duration-200 min-w-16 ${
+                        themeMode === 'light' 
+                          ? 'bg-primary text-primary-foreground shadow-sm z-10' 
+                          : 'hover:bg-muted/50 text-muted-foreground hover:text-foreground'
+                      }`}
                     >
-                      <Sun className="w-4 h-4" />
+                      <Sun className="w-3 h-3" />
                       Light
                     </button>
+                    <div className="w-px bg-border"></div>
                     <button
                       onClick={() => setThemeMode('dark')}
-                      className={`px-3 py-2 rounded-md border text-sm flex items-center gap-2 transition-colors ${themeMode === 'dark' ? 'bg-primary/10 text-primary border-primary/50' : 'hover:bg-muted'}`}
+                      className={`relative px-3 py-1.5 text-xs flex items-center justify-center gap-1.5 transition-all duration-200 min-w-16 ${
+                        themeMode === 'dark' 
+                          ? 'bg-primary text-primary-foreground shadow-sm z-10' 
+                          : 'hover:bg-muted/50 text-muted-foreground hover:text-foreground'
+                      }`}
                     >
-                      <Moon className="w-4 h-4" />
+                      <Moon className="w-3 h-3" />
                       Dark
                     </button>
+                    <div className="w-px bg-border"></div>
                     <button
                       onClick={() => setThemeMode('system')}
-                      className={`px-3 py-2 rounded-md border text-sm flex items-center gap-2 transition-colors ${themeMode === 'system' ? 'bg-primary/10 text-primary border-primary/50' : 'hover:bg-muted'}`}
+                      className={`relative px-3 py-1.5 text-xs flex items-center justify-center gap-1.5 transition-all duration-200 min-w-16 ${
+                        themeMode === 'system' 
+                          ? 'bg-primary text-primary-foreground shadow-sm z-10' 
+                          : 'hover:bg-muted/50 text-muted-foreground hover:text-foreground'
+                      }`}
                     >
-                      <Monitor className="w-4 h-4" />
+                      <Monitor className="w-3 h-3" />
                       System
                     </button>
                   </div>
