@@ -28,7 +28,7 @@ export interface APIConfig {
   apiKey: string;
   model: string;
   temperature: number;
-  maxTokens: number;
+  maxTokens?: number;
   topP: number;
   frequencyPenalty: number;
   presencePenalty: number;

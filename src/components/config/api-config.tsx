@@ -232,13 +232,32 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
           // Save common settings to consolidated storage
           const llmConfigStr = localStorage.getItem('agent-playground-llm-config')
           const llmConfig = llmConfigStr ? JSON.parse(llmConfigStr) : {}
-          llmConfig[field] = value
+          if (value === undefined || value === null || (typeof value === 'number' && Number.isNaN(value))) {
+            delete llmConfig[field]
+          } else {
+            llmConfig[field] = value
+          }
           localStorage.setItem('agent-playground-llm-config', JSON.stringify(llmConfig))
         }
       } catch (error) {
         console.error('Failed to save config:', error)
       }
     }
+  }
+
+  const handleMaxTokensInput = (value: string) => {
+    if (value.trim() === '') {
+      handleConfigChange('maxTokens', undefined)
+      return
+    }
+
+    const parsed = parseInt(value, 10)
+
+    if (Number.isNaN(parsed)) {
+      return
+    }
+
+    handleConfigChange('maxTokens', parsed)
   }
 
   const saveProviderConfig = async (updates: Partial<ProviderCustomConfig>) => {
@@ -540,8 +559,8 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
               <Input
                 id="maxTokens"
                 type="number"
-                value={config.maxTokens}
-                onChange={(e) => handleConfigChange('maxTokens', parseInt(e.target.value))}
+                value={config.maxTokens ?? ''}
+                onChange={(e) => handleMaxTokensInput(e.target.value)}
                 min={1}
                 max={32000}
               />

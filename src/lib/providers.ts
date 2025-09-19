@@ -6,7 +6,7 @@ export interface Provider {
   requiresApiKey: boolean
   docsLink: string
   icon: string
-  client: 'openai' | 'anthropic' | 'azure-openai'
+  client: 'openai' | 'anthropic' | 'azure-openai' | 'openrouter'
 }
 
 export const MODEL_PROVIDERS: Provider[] = [
@@ -81,6 +81,16 @@ export const MODEL_PROVIDERS: Provider[] = [
     client: 'openai'
   },
   {
+    name: 'OpenRouter',
+    endpoint: 'https://openrouter.ai/api/v1/chat/completions',
+    models: ['anthropic/claude-sonnet-4', 'anthropic/claude-opus-4.1', 'openai/gpt-5', 'google/gemini-2.5-pro', 'google/gemini-2.5-flash', 'x-ai/grok-4', 'x-ai/grok-3-mini', 'z-ai/glm-4.5', 'moonshotai/kimi-k2-0905', 'deepseek/deepseek-chat-v3.1:free', 'deepseek/deepseek-chat-v3-0324:free', 'deepseek/deepseek-r1:free', 'z-ai/glm-4.5-air:free', 'qwen/qwen3-coder:free', 'qwen/qwen3-235b-a22b:free', 'moonshotai/kimi-k2:free', 'google/gemini-2.0-flash-exp:free'],
+    defaultModel: 'anthropic/claude-sonnet-4',
+    requiresApiKey: true,
+    docsLink: 'https://openrouter.ai/docs/api-reference/chat-completion',
+    icon: 'llm-openrouter',
+    client: 'openrouter'
+  },
+  {
     name: 'Ollama (Local)',
     endpoint: 'http://localhost:11434/v1/chat/completions',
     models: ['qwen3:8b', 'deepseek-r1:8b', 'llama2', 'llama2:13b', 'llama2:70b', 'codellama', 'mistral', 'mixtral', 'neural-chat', 'starling-lm'],
@@ -105,7 +115,7 @@ export const MODEL_PROVIDERS: Provider[] = [
 export const DEFAULT_CONFIG = {
   systemPrompt: 'You are a helpful assistant.',
   temperature: 0.7,
-  maxTokens: 2000,
+  maxTokens: undefined as number | undefined,
   topP: 1,
   frequencyPenalty: 0,
   presencePenalty: 0,
