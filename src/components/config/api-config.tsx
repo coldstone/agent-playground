@@ -638,12 +638,12 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
 
       {/* Model Settings Modal */}
       {showModelSettings && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-96 max-w-[90vw]">
-            <h3 className="text-lg font-semibold mb-4">Edit Models for {selectedProvider.name}</h3>
+        <div className="fixed inset-0 bg-black/60 dark:bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-900 rounded-lg p-6 w-96 max-w-[90vw] shadow-xl border border-gray-200 dark:border-gray-700">
+            <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-gray-100">Edit Models for {selectedProvider.name}</h3>
             <div className="space-y-4">
               <div>
-                <Label htmlFor="models">Models (one per line)</Label>
+                <Label htmlFor="models" className="text-gray-700 dark:text-gray-300">Models (one per line)</Label>
                 <Textarea
                   id="models"
                   value={editingModels}
