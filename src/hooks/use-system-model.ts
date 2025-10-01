@@ -49,7 +49,9 @@ export function useSystemModel() {
       if (!provider) return null
 
       const apiKey = savedKeys[systemModel.provider] || 'test-key'
-      const endpoint = savedEndpoints[systemModel.provider] || provider.endpoint
+      // For Azure OpenAI and Custom, don't use placeholder endpoint
+      const endpoint = savedEndpoints[systemModel.provider] ||
+        (provider.name === 'Azure OpenAI' || provider.name === 'Custom' ? '' : provider.endpoint)
 
       if (!endpoint) return null
 

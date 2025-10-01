@@ -98,6 +98,9 @@ export default function HomePage() {
   const [autoModeInitialized, setAutoModeInitialized] = useState(false)
   const [isExecutingToolCalls, setIsExecutingToolCalls] = useState(false)
 
+  // Config validation state
+  const [isConfigured, setIsConfigured] = useState(false)
+
   // Initialize auto mode from localStorage on client side
   useEffect(() => {
     try {
@@ -295,6 +298,23 @@ export default function HomePage() {
             reasoningEffort,
             verbosity
           }
+        } else if (provider.name === 'Azure OpenAI') {
+          // For Azure OpenAI, load Azure-specific fields from provider config
+          finalConfig = {
+            provider: provider.name,
+            endpoint: providerConfig?.endpoint || '',
+            apiKey,
+            model: providerConfig?.currentModel || provider.defaultModel,
+            systemPrompt,
+            temperature,
+            maxTokens,
+            topP,
+            frequencyPenalty,
+            presencePenalty,
+            reasoningEffort,
+            verbosity,
+            azureApiVersion: (providerConfig as any)?.azureApiVersion || '2025-04-01-preview'
+          }
         } else {
           finalConfig = {
             provider: provider.name,
@@ -346,6 +366,10 @@ export default function HomePage() {
           localStorage.removeItem('agent-playground-current-agent')
         }
 
+        // Check if config is properly configured
+        const currentModelConfig = await getCurrentModelConfig()
+        const configured = !!(currentModelConfig.endpoint.trim() && (currentModelConfig.apiKey.trim() || !currentModelConfig.endpoint.includes('openai.com')))
+        setIsConfigured(configured)
 
       } catch (error) {
         devLog.error('Failed to load data from IndexedDB:', error)
@@ -354,6 +378,19 @@ export default function HomePage() {
 
     loadData()
   }, [isMounted])
+
+  // Update isConfigured when config changes
+  useEffect(() => {
+    const updateConfigStatus = async () => {
+      const currentModelConfig = await getCurrentModelConfig()
+      const configured = !!(currentModelConfig.endpoint.trim() && (currentModelConfig.apiKey.trim() || !currentModelConfig.endpoint.includes('openai.com')))
+      setIsConfigured(configured)
+    }
+
+    if (isMounted) {
+      updateConfigStatus()
+    }
+  }, [config, isMounted])
 
   // Save provider selection when it changes (but not during initial load)
   useEffect(() => {
@@ -950,7 +987,7 @@ export default function HomePage() {
       const currentTools = getCurrentTools()
 
       // Get complete config for current model (includes correct endpoint and API key)
-      const currentConfig = getCurrentModelConfig()
+      const currentConfig = await getCurrentModelConfig()
 
       const client = createClient(currentConfig, currentTools, currentConfig.provider)
 
@@ -1216,7 +1253,7 @@ export default function HomePage() {
 
   const handleSendMessage = async (content: string, toolIds?: string[]) => {
     // Get complete config for current model to check if it's properly configured
-    const currentConfig = getCurrentModelConfig()
+    const currentConfig = await getCurrentModelConfig()
     if (!currentConfig.apiKey.trim() || !currentConfig.endpoint.trim()) {
       return
     }
@@ -1358,7 +1395,7 @@ export default function HomePage() {
       }
 
       // Get complete config for current model (includes correct endpoint and API key)
-      const currentConfig = getCurrentModelConfig()
+      const currentConfig = await getCurrentModelConfig()
 
       const client = createClient(currentConfig, availableTools, currentConfig.provider)
 
@@ -1620,7 +1657,7 @@ export default function HomePage() {
     if ((streamingContent.trim() || streamingReasoningContent.trim()) && currentSessionId) {
       const session = sessions.find(s => s.id === currentSessionId)
       if (session) {
-        const currentConfig = getCurrentModelConfig()
+        const currentConfig = await getCurrentModelConfig()
         const partialMessage: AgentMessage = {
           id: generateId(),
           role: 'assistant',
@@ -1874,7 +1911,7 @@ export default function HomePage() {
           const currentTools = getCurrentTools()
 
           // Get complete config for current model (includes correct endpoint and API key)
-          const currentConfig = getCurrentModelConfig()
+          const currentConfig = await getCurrentModelConfig()
 
           const client = createClient(currentConfig, currentTools, currentConfig.provider)
 
@@ -2380,7 +2417,7 @@ export default function HomePage() {
   }
 
   // Get complete config for current model
-  const getCurrentModelConfig = (): APIConfig => {
+  const getCurrentModelConfig = async (): Promise<APIConfig> => {
     // Check if we're in browser environment
     if (typeof window === 'undefined') {
       // Server-side rendering, return default config
@@ -2407,36 +2444,43 @@ export default function HomePage() {
       const apiKeys = apiKeysStr ? JSON.parse(apiKeysStr) : {}
       const apiKey = apiKeys[provider.name] || ''
 
-      // For Azure OpenAI, we need to get the provider-specific config from localStorage/IndexedDB
-      // since it contains azureApiVersion and other Azure-specific settings
-      if (provider.name === 'Azure OpenAI') {
-        try {
-          const llmConfigStr = localStorage.getItem('agent-playground-llm-config')
-          const llmConfig = llmConfigStr ? JSON.parse(llmConfigStr) : {}
-          
-          // Get Azure-specific config from the current config if this is the selected provider
-          const endpoint = config.provider === provider.name ? config.endpoint : provider.endpoint
-          const azureApiVersion = config.provider === provider.name ? config.azureApiVersion : '2025-04-01-preview'
-          
-          return {
-            ...config,
-            provider: provider.name,
-            endpoint,
-            apiKey,
-            model: currentModel.model,
-            azureApiVersion: azureApiVersion || '2025-04-01-preview',
-            // Ensure GPT-5 specific parameters are included
-            reasoningEffort: config.reasoningEffort,
-            verbosity: config.verbosity
-          }
-        } catch (error) {
-          devLog.error('Failed to get Azure OpenAI config:', error)
+      // Get endpoint from provider config in IndexedDB if switching provider
+      let endpoint: string
+      let azureApiVersion: string | undefined
+
+      if (config.provider === provider.name) {
+        // Same provider, use current config
+        endpoint = config.endpoint
+        azureApiVersion = config.azureApiVersion
+      } else {
+        // Switching provider, load from IndexedDB
+        const providerConfig = await dbManager.getProviderConfig(provider.name)
+
+        if (provider.name === 'Azure OpenAI') {
+          // For Azure OpenAI, don't use the placeholder endpoint
+          endpoint = providerConfig?.endpoint || ''
+          azureApiVersion = (providerConfig as any)?.azureApiVersion || '2025-04-01-preview'
+        } else if (provider.name === 'Custom') {
+          endpoint = providerConfig?.endpoint || ''
+        } else {
+          endpoint = providerConfig?.endpoint || provider.endpoint
         }
       }
 
-      // Get endpoint from current config (which is updated by API config panel)
-      // The API config panel updates the config state directly, so we should use that
-      const endpoint = config.provider === provider.name ? config.endpoint : provider.endpoint
+      // For Azure OpenAI, ensure we include Azure-specific settings
+      if (provider.name === 'Azure OpenAI') {
+        return {
+          ...config,
+          provider: provider.name,
+          endpoint,
+          apiKey,
+          model: currentModel.model,
+          azureApiVersion: azureApiVersion || '2025-04-01-preview',
+          // Ensure GPT-5 specific parameters are included
+          reasoningEffort: config.reasoningEffort,
+          verbosity: config.verbosity
+        }
+      }
 
       // Create config with selected model's provider settings
       return {
@@ -2567,7 +2611,7 @@ export default function HomePage() {
       const currentTools = getCurrentTools()
 
       // Get complete config for current model (includes correct endpoint and API key)
-      const currentConfig = getCurrentModelConfig()
+      const currentConfig = await getCurrentModelConfig()
 
       const client = createClient(currentConfig, currentTools, currentConfig.provider)
 
@@ -2839,10 +2883,6 @@ export default function HomePage() {
   }
 
 
-
-  // Check if current model is properly configured
-  const currentModelConfig = getCurrentModelConfig()
-  const isConfigured = currentModelConfig.endpoint.trim() && (currentModelConfig.apiKey.trim() || !currentModelConfig.endpoint.includes('openai.com'))
 
   // No automatic session creation - sessions are created when user sends first message
 
