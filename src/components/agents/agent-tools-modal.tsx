@@ -19,7 +19,7 @@ interface AgentToolsModalProps {
   agent: Agent | null
   allTools: Tool[]
   authorizations: Authorization[]
-  onSave: (agentId: string, toolIds: string[]) => void
+  onSave: (agentId: string, toolIds: string[], toolBindings: AgentToolBinding[]) => void
   onToolCreate?: (tool: Tool) => Promise<Tool> | Tool | void
 }
 
@@ -80,12 +80,10 @@ export function AgentToolsModal({ isOpen, onClose, agent, allTools, authorizatio
 
   const handleSave = async () => {
     if (!agent) return
-    
+
     setIsSaving(true)
     try {
-      // For now, just pass tool IDs for backward compatibility
-      // TODO: Update onSave to accept toolBindings
-      await onSave(agent.id, toolBindings.map(binding => binding.toolId))
+      onSave(agent.id, toolBindings.map(binding => binding.toolId), toolBindings)
       onClose()
     } catch (error) {
       console.error('Failed to save tools:', error)
@@ -184,6 +182,23 @@ export function AgentToolsModal({ isOpen, onClose, agent, allTools, authorizatio
     if (selectedTag === 'untagged') return !tool.tag
     return tool.tag === selectedTag
   })
+
+  // Select all filtered tools incrementally (does not deselect tools outside current filter)
+  const handleSelectAll = () => {
+    setToolBindings(prev => {
+      const toAdd = filteredTools.filter(
+        tool => !prev.some(binding => binding.toolId === tool.id)
+      )
+      const newBindings: AgentToolBinding[] = toAdd.map(tool => ({
+        toolId: tool.id,
+        authorizationId: undefined
+      }))
+      return [...prev, ...newBindings]
+    })
+  }
+
+  const allFilteredSelected = filteredTools.length > 0 &&
+    filteredTools.every(tool => toolBindings.some(binding => binding.toolId === tool.id))
 
   // 排序逻辑：已保存的工具在顶部，其他工具按名称排序
   const sortedTools = [...filteredTools].sort((a, b) => {
@@ -296,15 +311,27 @@ export function AgentToolsModal({ isOpen, onClose, agent, allTools, authorizatio
                 Select the tools that this agent can use. Tools provide additional capabilities like API calls, data processing, and external integrations.
               </p>
               {/* Search Box */}
-              <div className="relative">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
-                <input
-                  type="text"
-                  placeholder="Search tools by name or description..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-input rounded-md text-sm focus:ring-2 focus:ring-ring focus:border-transparent bg-card text-foreground placeholder:text-muted-foreground"
-                />
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    type="text"
+                    placeholder="Search tools by name or description..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border border-input rounded-md text-sm focus:ring-2 focus:ring-ring focus:border-transparent bg-card text-foreground placeholder:text-muted-foreground"
+                  />
+                </div>
+                {filteredTools.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleSelectAll}
+                    disabled={allFilteredSelected}
+                    className="px-3 py-2 text-sm border border-input rounded-md bg-card text-foreground hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+                  >
+                    Select All ({filteredTools.length})
+                  </button>
+                )}
               </div>
             </div>
 

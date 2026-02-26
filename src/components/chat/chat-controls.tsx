@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Agent, Tool, APIConfig, Authorization } from '@/types'
+import { Agent, Tool, APIConfig, Authorization, AgentToolBinding } from '@/types'
 import { Button } from '@/components/ui/button'
 import { BookUser, Wrench as ToolIcon, Bot } from 'lucide-react'
 import { AgentInstructionModal, AgentToolsModal } from '@/components/agents'
@@ -15,7 +15,7 @@ interface ChatControlsProps {
   apiConfig: APIConfig
   onAgentSelect: (agentId: string | null) => void
   onAgentInstructionUpdate: (agentId: string, instruction: string) => void
-  onAgentToolsUpdate: (agentId: string, toolIds: string[]) => void
+  onAgentToolsUpdate: (agentId: string, toolIds: string[], toolBindings: AgentToolBinding[]) => void
   onCreateAgent: () => void
   onSystemPromptEdit?: () => void
 }
@@ -138,7 +138,7 @@ export function ChatControls({
             agent={currentAgent}
             allTools={tools}
             authorizations={authorizations}
-            onSave={(agentId: string, toolIds: string[]) => onAgentToolsUpdate(agentId, toolIds)}
+            onSave={(agentId: string, toolIds: string[], toolBindings: AgentToolBinding[]) => onAgentToolsUpdate(agentId, toolIds, toolBindings)}
           />
         </>
       )}

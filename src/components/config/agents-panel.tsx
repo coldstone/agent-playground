@@ -3,7 +3,7 @@
 import React, { useState, useCallback } from 'react'
 import { DndProvider, useDrag, useDrop } from 'react-dnd'
 import { HTML5Backend } from 'react-dnd-html5-backend'
-import { Agent, Tool, Authorization } from '@/types'
+import { Agent, Tool, Authorization, AgentToolBinding } from '@/types'
 import { AgentFormModal } from '@/components/agents/agent-form-modal'
 import { AgentInstructionModal, AgentToolsModal } from '@/components/agents'
 import { Trash2, Edit2, Bot, BookUser, Wrench as ToolIcon, GripVertical } from 'lucide-react'
@@ -278,8 +278,8 @@ export function AgentsPanel({
     setSelectedAgent(null)
   }
 
-  const handleToolsUpdate = (agentId: string, toolIds: string[]) => {
-    onAgentUpdate(agentId, { tools: toolIds })
+  const handleToolsUpdate = (agentId: string, toolIds: string[], toolBindings: AgentToolBinding[]) => {
+    onAgentUpdate(agentId, { tools: toolIds, toolBindings })
     setShowToolsModal(false)
     setSelectedAgent(null)
   }

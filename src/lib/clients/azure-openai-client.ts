@@ -11,31 +11,23 @@ export class AzureOpenAIClient {
   }
 
   private buildEndpoint(): string {
-    // Azure OpenAI endpoint format: 
-    // https://{resource-name}.openai.azure.com/openai/deployments/{deployment-name}/chat/completions?api-version={api-version}
+    // Azure OpenAI endpoint format:
+    // {base-endpoint}/openai/deployments/{deployment-name}/chat/completions?api-version={api-version}
     // deployment-name is the current model name
     const { endpoint, model } = this.config
     const apiVersion = (this.config.azureApiVersion && this.config.azureApiVersion.trim()) || '2025-04-01-preview'
-    
+
     if (!endpoint || !model) {
       throw new Error('Azure OpenAI requires endpoint and model (deployment name)')
     }
 
-    // Extract resource name from endpoint
-    // Expected format: your-resource-name.openai.azure.com or https://your-resource-name.openai.azure.com
-    let resourceEndpoint = endpoint
-    
-    // Remove protocol if present
-    if (resourceEndpoint.startsWith('https://')) {
-      resourceEndpoint = resourceEndpoint.substring(8)
-    } else if (resourceEndpoint.startsWith('http://')) {
-      resourceEndpoint = resourceEndpoint.substring(7)
-    }
-    
-    // Remove / at the end of the endpoint
-    resourceEndpoint = resourceEndpoint.replace(/\/$/, '')
+    // Use the endpoint directly as provided by user, supporting custom domains and nginx reverse proxy
+    let baseEndpoint = endpoint
 
-    return `https://${resourceEndpoint}/openai/deployments/${model}/chat/completions?api-version=${apiVersion}`
+    // Remove trailing slash if present
+    baseEndpoint = baseEndpoint.replace(/\/$/, '')
+
+    return `${baseEndpoint}/openai/deployments/${model}/chat/completions?api-version=${apiVersion}`
   }
 
   async *streamChatCompletion(messages: (Message | AgentMessage)[], abortSignal?: AbortSignal): AsyncGenerator<{ content?: string; reasoningContent?: string; toolCalls?: ToolCall[]; usage?: any }, void, unknown> {

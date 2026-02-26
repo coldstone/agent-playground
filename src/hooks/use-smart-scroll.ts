@@ -86,6 +86,7 @@ export function useSmartScroll({
       // 使用requestAnimationFrame确保DOM更新完成后再滚动
       requestAnimationFrame(() => {
         if (!container) return
+
         const scrollTop = container.scrollHeight - container.clientHeight
         container.scrollTo({
           top: Math.max(0, scrollTop),
@@ -243,6 +244,7 @@ export function useSmartScroll({
       if (scrollDebounceRef.current) {
         clearTimeout(scrollDebounceRef.current)
       }
+
       scrollDebounceRef.current = setTimeout(() => {
         scrollToBottom(true) // 非流式状态使用smooth滚动
       }, 50) // 给DOM更多时间渲染

@@ -132,18 +132,6 @@ export function ChatMessages({
   //   }
   // }, [autoMode, isLoading, streamingContent, onScrollToBottom])
 
-  // 监听合并消息的流式内容变化，确保在Auto模式下流式内容开始时正确滚动
-  useEffect(() => {
-    if (autoMode && isLoading && streamingContent) {
-      // 在Auto模式下，当流式内容开始时，确保滚动到底部
-      const timer = setTimeout(() => {
-        onScrollToBottom?.()
-      }, 50)
-      
-      return () => clearTimeout(timer)
-    }
-  }, [autoMode, isLoading, streamingContent, onScrollToBottom])
-
   // 监听scrollToTopTrigger变化，滚动到顶部
   useEffect(() => {
     if (scrollToTopTrigger && scrollToTopTrigger > 0) {
@@ -673,6 +661,7 @@ function MergedMessageDisplay({
                     let execution = message.toolCallExecutions?.find(
                       exec => exec.toolCall.id === toolCall.id
                     )
+
                     if (!execution && message.toolCalls) {
                       execution = {
                         id: toolCall.id + '_compat',
