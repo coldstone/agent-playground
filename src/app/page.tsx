@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef, useMemo } from 'react'
-import { APIConfig, Message, ChatSession, Agent, Tool, AgentMessage, ToolCall, Authorization } from '@/types'
+import { APIConfig, Message, ChatSession, Agent, Tool, AgentMessage, ToolCall, Authorization, AgentToolBinding } from '@/types'
 import { DEFAULT_CONFIG, MODEL_PROVIDERS, generateId } from '@/lib'
 import { createClient } from '@/lib/client-factory'
 import { TitleGenerator } from '@/lib/generators'
@@ -741,9 +741,9 @@ export default function HomePage() {
     }
   }
 
-  const handleAgentToolsUpdate = async (agentId: string, toolIds: string[]) => {
+  const handleAgentToolsUpdate = async (agentId: string, toolIds: string[], toolBindings: AgentToolBinding[]) => {
     try {
-      await updateAgent(agentId, { tools: toolIds })
+      await updateAgent(agentId, { tools: toolIds, toolBindings })
     } catch (error) {
       devLog.error('Failed to update agent tools:', error)
     }
