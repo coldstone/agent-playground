@@ -1,3 +1,5 @@
+
+
 # Agent Playground 🤖
 
 [![Agent Playground](https://img.shields.io/badge/Agent-Playground-blue.svg)](https://github.com/coldstone/agent-playground)
@@ -44,7 +46,7 @@ A comprehensive development and debugging platform for AI Agents and Tools. Agen
 - **Session Management**: Multiple chat sessions with auto-save
 
 ### 🔧 Developer-Friendly Features
-- **Local Storage**: All data stored locally in browser (IndexedDB)
+- **Local Storage**: All data stored locally in browser (IndexedDB and localStorage)
 - **Import/Export**: Backup and share agent/tool configurations
 - **Hot Reload**: Instant updates during development
 - **Error Handling**: Comprehensive error messages and debugging info
