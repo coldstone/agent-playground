@@ -1,9 +1,14 @@
 'use client'
 
 import React, { useState, useEffect, useRef, useMemo } from 'react'
-import { APIConfig, Message, ChatSession, Agent, Tool, AgentMessage, ToolCall, Authorization, AgentToolBinding } from '@/types'
+import { APIConfig, Message, ChatSession, Agent, Tool, AgentMessage, ToolCall, Authorization, AgentToolBinding, TokenUsage, MCPServer, MCPElicitationRequest, MCPElicitResult, ToolCallExecution, Skill, SkillFileRecord } from '@/types'
 import { DEFAULT_CONFIG, MODEL_PROVIDERS, generateId } from '@/lib'
+import { normalizeUsage } from '@/lib/usage'
+import { buildMCPTools, connectMCPServer as apiConnectMCPServer, disconnectMCPServer, callMCPTool, respondMCPElicitation, formatMCPToolResult } from '@/lib/mcp'
+import { buildSkillTools, appendSkillsPrompt, executeSkillTool, parseSkillInvocation, buildSkillInvocationMessage } from '@/lib/skills'
+import { MCPElicitationModal } from '@/components/tools/mcp-elicitation-modal'
 import { createClient } from '@/lib/client-factory'
+import { bindToolCallToOfferedTool, resolveBoundTool, excludeShadowedTools } from '@/lib/tool-binding'
 import { TitleGenerator } from '@/lib/generators'
 import { IndexedDBManager } from '@/lib/storage'
 import { devLog } from '@/lib/dev-utils'
@@ -39,7 +44,76 @@ export default function HomePage() {
   const [currentAgentId, setCurrentAgentId] = useState<string | null>(null)
   const [tools, setTools] = useState<Tool[]>([])
   const [authorizations, setAuthorizations] = useState<Authorization[]>([])
+  const [mcpServers, setMcpServers] = useState<MCPServer[]>([])
+  const mcpServersRef = useRef<MCPServer[]>([])
+  const [skills, setSkills] = useState<Skill[]>([])
+  const skillsRef = useRef<Skill[]>([])
+  const [elicitation, setElicitation] = useState<MCPElicitationRequest | null>(null)
+  const [elicitationServerName, setElicitationServerName] = useState<string | undefined>(undefined)
   const [dbManager] = useState(() => IndexedDBManager.getInstance())
+
+  useEffect(() => {
+    mcpServersRef.current = mcpServers
+  }, [mcpServers])
+
+  // Tools contributed by enabled MCP servers; always offered alongside local tools
+  const enabledSkills = useMemo(() => skills.filter(skill => skill.enabled), [skills])
+  const skillTools = useMemo(() => buildSkillTools(skills), [skills])
+  // Built-in skill tool names are fixed, so they win: a local tool with the same name is not
+  // offered to the model at all rather than being silently shadowed.
+  const offerableTools = useMemo(
+    () => excludeShadowedTools(tools, skillTools, tool =>
+      devLog.warn(`Local tool "${tool.name}" is not offered: the name is taken by a built-in skill tool`)
+    ),
+    [tools, skillTools]
+  )
+  // MCP tools are renamed when they would collide with a local or built-in name
+  const mcpTools = useMemo(
+    () => buildMCPTools(mcpServers, offerableTools.map(tool => tool.name).concat(skillTools.map(tool => tool.name))),
+    [mcpServers, offerableTools, skillTools]
+  )
+  // Every tool the app knows about, used only to look a bound tool up by id
+  const chatTools = useMemo(() => [...tools, ...mcpTools, ...skillTools], [tools, mcpTools, skillTools])
+  /**
+   * Bind each tool call to the concrete tool that was offered for that request. Resolving by name
+   * later is unsafe: local tools that were never offered can share a name with an MCP tool, and
+   * executing the local one would hit its real endpoint with its real credentials.
+   */
+  const buildToolCallExecutions = (toolCalls: ToolCall[], offeredTools: Tool[]): ToolCallExecution[] =>
+    toolCalls.map(toolCall => {
+      const toolId = bindToolCallToOfferedTool(toolCall, offeredTools)
+      if (!toolId) {
+        devLog.warn(`Tool call "${toolCall.function.name}" does not match any offered tool; it stays unbound`)
+      }
+      return {
+        id: generateId(),
+        toolCall,
+        toolId,
+        status: 'pending' as const,
+        timestamp: Date.now()
+      }
+    })
+
+  /**
+   * The tool an execution is bound to. Falls back to a name lookup over the currently offered
+   * tools only (for executions saved before binding existed) and returns undefined otherwise —
+   * never a global lookup.
+   */
+  const resolveExecutionTool = (execution?: ToolCallExecution, toolCall?: ToolCall): Tool | undefined =>
+    resolveBoundTool(execution, toolCall, chatTools, getCurrentTools())
+
+  // Skills already loaded per conversation, so a second load_skill returns a short note
+  const skillActivationsRef = useRef<Map<string, Set<string>>>(new Map())
+  const NEW_SESSION_ACTIVATION_KEY = 'new-session'
+
+  const getSkillActivations = (sessionKey: string): Set<string> => {
+    let activated = skillActivationsRef.current.get(sessionKey)
+    if (!activated) {
+      activated = new Set<string>()
+      skillActivationsRef.current.set(sessionKey, activated)
+    }
+    return activated
+  }
 
   const [isMounted, setIsMounted] = useState(false)
   const [showAgentModal, setShowAgentModal] = useState(false)
@@ -340,17 +414,29 @@ export default function HomePage() {
         }
 
         // Load all data in parallel
-        const [loadedSessions, loadedAgents, loadedTools, loadedAuthorizations] = await Promise.all([
+        const [loadedSessions, loadedAgents, loadedTools, loadedAuthorizations, loadedMCPServers, loadedSkills] = await Promise.all([
           dbManager.getAllSessions(),
           dbManager.getAllAgents(),
           dbManager.getAllTools(),
-          dbManager.getAllAuthorizations()
+          dbManager.getAllAuthorizations(),
+          dbManager.getAllMCPServers(),
+          dbManager.getAllSkills()
         ])
 
         setSessions(loadedSessions)
         setAgents(loadedAgents)
         setTools(loadedTools)
         setAuthorizations(loadedAuthorizations)
+        skillsRef.current = loadedSkills
+        setSkills(loadedSkills)
+
+        // MCP connections do not survive a reload: reset status, then reconnect enabled servers in the background
+        const resetMCPServers = loadedMCPServers.map(server => ({ ...server, status: 'idle' as const, error: undefined }))
+        mcpServersRef.current = resetMCPServers
+        setMcpServers(resetMCPServers)
+        resetMCPServers
+          .filter(server => server.enabled)
+          .forEach(server => { void connectMCPServerById(server.id) })
 
         // Don't auto-load previous session - always start with new chat overlay
         // Clear any saved session state but keep agent selection
@@ -455,11 +541,25 @@ export default function HomePage() {
             setIsExecutingToolCalls(true)
             try {
               for (const toolCall of pendingToolCalls) {
-                const tool = tools.find(t => t.name === toolCall.function.name)
-                if (tool?.httpRequest) {
+                // Use the tool this call was bound to when it was created; an unbound legacy call
+                // is only matched against the currently offered tools, and is left pending when
+                // nothing matches so it can never hit an unrelated tool of the same name.
+                const execution = agentMessage.toolCallExecutions?.find(exec => exec.toolCall.id === toolCall.id)
+                const tool = resolveExecutionTool(execution, toolCall)
+                if (!tool) {
+                  devLog.warn(`Skipping auto-execution of "${toolCall.function.name}": no tool is bound to this call`)
+                  continue
+                }
+                if (tool.httpRequest || tool.mcp || tool.builtin) {
                   try {
                     devLog.log(`Executing tool call: ${toolCall.function.name} (${toolCall.id})`)
-                    await autoExecuteHttpToolCall(toolCall, tool)
+                    if (tool.mcp) {
+                      await executeMCPToolCall(toolCall, tool)
+                    } else if (tool.builtin) {
+                      await executeSkillToolCall(toolCall, tool)
+                    } else {
+                      await autoExecuteHttpToolCall(toolCall, tool)
+                    }
                     devLog.log(`Completed tool call: ${toolCall.function.name} (${toolCall.id})`)
                     
                     // Wait for state to settle before proceeding to next tool call
@@ -797,6 +897,287 @@ export default function HomePage() {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Skills
+  // ---------------------------------------------------------------------------
+  const createSkill = async (skill: Skill, files: SkillFileRecord[]) => {
+    try {
+      await dbManager.saveSkillFiles(files)
+      await dbManager.saveSkill(skill)
+      skillsRef.current = [...skillsRef.current, skill]
+      setSkills(prev => [...prev, skill])
+    } catch (error) {
+      showToast('Failed to save skill.', 'error')
+      devLog.error('Failed to save skill:', error)
+      throw error
+    }
+  }
+
+  // The file index is owned by createSkill / saveSkillFile, so keep the stored one: callers of
+  // this handler only change metadata or the enabled flag and may hold a stale copy.
+  const updateSkill = async (skill: Skill) => {
+    try {
+      const current = skillsRef.current.filter(s => s.id === skill.id)[0]
+      const merged = current ? { ...skill, files: current.files } : skill
+      await dbManager.saveSkill(merged)
+      skillsRef.current = skillsRef.current.map(s => s.id === merged.id ? merged : s)
+      setSkills(prev => prev.map(s => s.id === merged.id ? merged : s))
+    } catch (error) {
+      showToast('Failed to update skill.', 'error')
+      devLog.error('Failed to update skill:', error)
+      throw error
+    }
+  }
+
+  const deleteSkill = async (skillId: string) => {
+    try {
+      await dbManager.deleteSkill(skillId)
+      skillsRef.current = skillsRef.current.filter(s => s.id !== skillId)
+      setSkills(prev => prev.filter(s => s.id !== skillId))
+    } catch (error) {
+      showToast('Failed to delete skill.', 'error')
+      devLog.error('Failed to delete skill:', error)
+      throw error
+    }
+  }
+
+  const getSkillFiles = async (skillId: string) => {
+    return dbManager.getSkillFiles(skillId)
+  }
+
+  const saveSkillFile = async (skillId: string, path: string, text: string) => {
+    const skill = skillsRef.current.filter(s => s.id === skillId)[0]
+    if (!skill) return
+
+    try {
+      const existing = await dbManager.getSkillFile(skillId, path)
+      const size = typeof TextEncoder === 'undefined' ? text.length : new TextEncoder().encode(text).byteLength
+      const mimeType = existing ? existing.mimeType : 'text/plain'
+
+      await dbManager.saveSkillFiles([{
+        id: skillId + ':' + path,
+        skillId,
+        path,
+        size,
+        mimeType,
+        isText: true,
+        text
+      }])
+
+      const files = skill.files.slice()
+      let indexed = false
+      for (let i = 0; i < files.length; i++) {
+        if (files[i].path === path) {
+          files[i] = { path, size, mimeType, isText: true }
+          indexed = true
+          break
+        }
+      }
+      if (!indexed) {
+        files.push({ path, size, mimeType, isText: true })
+      }
+
+      const updated = { ...skill, files, updatedAt: Date.now() }
+      await dbManager.saveSkill(updated)
+      skillsRef.current = skillsRef.current.map(s => s.id === skillId ? updated : s)
+      setSkills(prev => prev.map(s => s.id === skillId ? updated : s))
+    } catch (error) {
+      showToast('Failed to save the skill file.', 'error')
+      devLog.error('Failed to save skill file:', error)
+      throw error
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // MCP servers
+  // ---------------------------------------------------------------------------
+  const createMCPServer = async (server: MCPServer) => {
+    try {
+      await dbManager.saveMCPServer(server)
+      mcpServersRef.current = [...mcpServersRef.current, server]
+      setMcpServers(prev => [...prev, server])
+    } catch (error) {
+      showToast('Failed to save MCP server.', 'error')
+      devLog.error('Failed to save MCP server:', error)
+      throw error
+    }
+  }
+
+  const updateMCPServer = async (server: MCPServer) => {
+    try {
+      await dbManager.saveMCPServer(server)
+      mcpServersRef.current = mcpServersRef.current.map(s => s.id === server.id ? server : s)
+      setMcpServers(prev => prev.map(s => s.id === server.id ? server : s))
+    } catch (error) {
+      showToast('Failed to update MCP server.', 'error')
+      devLog.error('Failed to update MCP server:', error)
+      throw error
+    }
+  }
+
+  const patchMCPServer = async (serverId: string, updates: Partial<MCPServer>) => {
+    const current = mcpServersRef.current.find(s => s.id === serverId)
+    if (!current) return
+    const merged = { ...current, ...updates }
+    mcpServersRef.current = mcpServersRef.current.map(s => s.id === serverId ? merged : s)
+    setMcpServers(prev => prev.map(s => s.id === serverId ? { ...s, ...updates } : s))
+    try {
+      await dbManager.saveMCPServer(merged)
+    } catch (error) {
+      devLog.error('Failed to persist MCP server:', error)
+    }
+  }
+
+  const deleteMCPServer = async (serverId: string) => {
+    const server = mcpServersRef.current.find(s => s.id === serverId)
+    try {
+      await dbManager.deleteMCPServer(serverId)
+      mcpServersRef.current = mcpServersRef.current.filter(s => s.id !== serverId)
+      setMcpServers(prev => prev.filter(s => s.id !== serverId))
+      if (server) {
+        disconnectMCPServer(server).catch(() => { /* best effort */ })
+      }
+    } catch (error) {
+      showToast('Failed to delete MCP server.', 'error')
+      devLog.error('Failed to delete MCP server:', error)
+      throw error
+    }
+  }
+
+  const connectMCPServerById = async (serverId: string, refresh = false) => {
+    const server = mcpServersRef.current.find(s => s.id === serverId)
+    if (!server) return
+    await patchMCPServer(serverId, { status: 'connecting', error: undefined })
+    try {
+      const info = await apiConnectMCPServer(server, refresh)
+      await patchMCPServer(serverId, {
+        status: 'connected',
+        error: undefined,
+        tools: info.tools || [],
+        resources: info.resources || [],
+        resourceTemplates: info.resourceTemplates || [],
+        prompts: info.prompts || [],
+        serverInfo: info.serverInfo,
+        protocolVersion: info.protocolVersion,
+        protocolEra: info.protocolEra,
+        capabilities: info.capabilities,
+        instructions: info.instructions,
+        lastConnectedAt: Date.now(),
+        updatedAt: Date.now()
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Connection failed'
+      devLog.error('MCP connect failed:', error)
+      await patchMCPServer(serverId, { status: 'error', error: message })
+    }
+  }
+
+  // Update a tool call execution in the current session without persisting (used for transient progress)
+  const updateToolCallExecution = (toolCallId: string, updates: Partial<ToolCallExecution>) => {
+    if (!currentSessionId) return
+    setSessions(prev => prev.map(session => {
+      if (session.id !== currentSessionId) return session
+      return {
+        ...session,
+        messages: session.messages.map(msg => {
+          const agentMsg = msg as AgentMessage
+          if (!agentMsg.toolCallExecutions?.some(exec => exec.toolCall.id === toolCallId)) return msg
+          return {
+            ...agentMsg,
+            toolCallExecutions: agentMsg.toolCallExecutions.map(exec =>
+              exec.toolCall.id === toolCallId ? { ...exec, ...updates } : exec
+            )
+          }
+        })
+      }
+    }))
+  }
+
+  // Execute a tool call that is backed by an MCP server (used in both auto and manual mode)
+  const executeMCPToolCall = async (toolCall: ToolCall, tool: Tool) => {
+    if (!tool.mcp) return
+    const binding = tool.mcp
+    const server = mcpServersRef.current.find(s => s.id === binding.serverId)
+    if (!server) {
+      await handleMarkToolFailed(toolCall.id, `MCP server for tool "${tool.name}" is no longer configured`)
+      return
+    }
+
+    let parsedArguments: Record<string, unknown> = {}
+    try {
+      parsedArguments = toolCall.function.arguments.trim() === '' ? {} : JSON.parse(toolCall.function.arguments)
+    } catch {
+      await handleMarkToolFailed(toolCall.id, 'Invalid arguments format')
+      return
+    }
+
+    try {
+      const result = await callMCPTool(server, binding.toolName, parsedArguments, {
+        onProgress: (progress) => updateToolCallExecution(toolCall.id, { progress }),
+        onElicitation: (request) => {
+          setElicitationServerName(server.name)
+          setElicitation(request)
+        },
+        onElicitationDone: () => setElicitation(null)
+      })
+      const text = formatMCPToolResult(result)
+      if (result.isError) {
+        await handleMarkToolFailed(toolCall.id, text || 'The MCP tool reported an error')
+      } else {
+        await handleProvideToolResult(toolCall.id, text || '(empty result)', {
+          mcpContent: result.content,
+          structuredContent: result.structuredContent
+        })
+      }
+    } catch (error) {
+      setElicitation(null)
+      await handleMarkToolFailed(toolCall.id, error instanceof Error ? error.message : 'MCP tool call failed')
+    }
+  }
+
+  // Execute a built-in skill tool. Runs entirely in the page against the IndexedDB copy of the
+  // skill; used in both auto and manual mode, like the MCP path.
+  const executeSkillToolCall = async (toolCall: ToolCall, tool: Tool) => {
+    if (!tool.builtin) return
+
+    let parsedArguments: Record<string, unknown> = {}
+    try {
+      parsedArguments = toolCall.function.arguments.trim() === '' ? {} : JSON.parse(toolCall.function.arguments)
+    } catch {
+      await handleMarkToolFailed(toolCall.id, 'Invalid arguments format')
+      return
+    }
+
+    // One activation set per conversation, so a reloaded skill is not repeated in full
+    const activated = getSkillActivations(currentSessionId || NEW_SESSION_ACTIVATION_KEY)
+
+    try {
+      const result = await executeSkillTool(tool.builtin.kind, parsedArguments, {
+        skills: skillsRef.current,
+        getFiles: (skillId: string) => dbManager.getSkillFiles(skillId),
+        activated
+      })
+      if (result.isError) {
+        await handleMarkToolFailed(toolCall.id, result.text || 'The skill tool reported an error')
+      } else {
+        await handleProvideToolResult(toolCall.id, result.text || '(empty result)')
+      }
+    } catch (error) {
+      await handleMarkToolFailed(toolCall.id, error instanceof Error ? error.message : 'Skill tool call failed')
+    }
+  }
+
+  const handleElicitationResponse = async (result: MCPElicitResult) => {
+    const request = elicitation
+    setElicitation(null)
+    if (!request) return
+    try {
+      await respondMCPElicitation(request.id, result)
+    } catch (error) {
+      showToast(`Failed to send the answer to the MCP server: ${error instanceof Error ? error.message : 'unknown error'}`, 'error')
+    }
+  }
+
   const reorderAgents = async (reorderedAgents: Agent[]) => {
     try {
       // Update the order in state immediately for UI responsiveness
@@ -889,7 +1270,7 @@ export default function HomePage() {
   }
 
   // Import/Export functions
-  const handleImport = async (importAgents: Agent[], importTools: Tool[]) => {
+  const handleImport = async (importAgents: Agent[], importTools: Tool[], importSkills: Skill[] = [], importSkillFiles: SkillFileRecord[] = []) => {
     try {
       // Import tools first (agents may reference them)
       for (const tool of importTools) {
@@ -901,16 +1282,31 @@ export default function HomePage() {
         await dbManager.saveAgent(agent)
       }
 
+      // Import skills: ids are kept, but a skill with the same name replaces the installed one
+      for (const skill of importSkills) {
+        const clash = skillsRef.current.filter(existing => existing.name === skill.name && existing.id !== skill.id)[0]
+        if (clash) {
+          await dbManager.deleteSkill(clash.id)
+        }
+        await dbManager.deleteSkillFiles(skill.id)
+        await dbManager.saveSkillFiles(importSkillFiles.filter(file => file.skillId === skill.id))
+        await dbManager.saveSkill(skill)
+      }
+
       // Reload data from database
-      const [loadedAgents, loadedTools] = await Promise.all([
+      const [loadedAgents, loadedTools, loadedSkills] = await Promise.all([
         dbManager.getAllAgents(),
-        dbManager.getAllTools()
+        dbManager.getAllTools(),
+        dbManager.getAllSkills()
       ])
 
       setAgents(loadedAgents)
       setTools(loadedTools)
+      skillsRef.current = loadedSkills
+      setSkills(loadedSkills)
 
-      showToast(`Imported ${importAgents.length} agents and ${importTools.length} tools`, 'success')
+      const skillNote = importSkills.length > 0 ? ` and ${importSkills.length} skill${importSkills.length !== 1 ? 's' : ''}` : ''
+      showToast(`Imported ${importAgents.length} agents and ${importTools.length} tools${skillNote}`, 'success')
     } catch (error) {
       showToast('Failed to import data.', 'error')
       devLog.error('Failed to import data:', error)
@@ -918,7 +1314,7 @@ export default function HomePage() {
   }
 
   // Batch Delete function
-  const handleBatchDelete = async (selectedAgents: string[], selectedTools: string[], selectedSessions: string[]) => {
+  const handleBatchDelete = async (selectedAgents: string[], selectedTools: string[], selectedSessions: string[], selectedSkills: string[] = []) => {
     try {
       let deletedCount = 0
 
@@ -951,6 +1347,14 @@ export default function HomePage() {
         if (currentSessionId === sessionId) {
           setCurrentSessionId(null)
         }
+      }
+
+      // Delete skills (also removes their files)
+      for (const skillId of selectedSkills) {
+        await dbManager.deleteSkill(skillId)
+        skillsRef.current = skillsRef.current.filter(skill => skill.id !== skillId)
+        setSkills(prev => prev.filter(skill => skill.id !== skillId))
+        deletedCount++
       }
 
       showToast(`Successfully deleted ${deletedCount} item${deletedCount !== 1 ? 's' : ''}`, 'success')
@@ -1018,7 +1422,7 @@ export default function HomePage() {
 
       // Use agent system prompt if in agent mode, otherwise use config system prompt
       // When agent is selected, ONLY use agent's system prompt, ignore config system prompt
-      const systemPrompt = currentAgent ? currentAgent.systemPrompt : config.systemPrompt
+      const systemPrompt = appendSkillsPrompt(currentAgent ? currentAgent.systemPrompt : config.systemPrompt, skillsRef.current)
       const allMessages = systemPrompt.trim()
         ? [{ id: generateId(), role: 'system' as const, content: systemPrompt, timestamp: Date.now() }, ...messagesWithoutSystem]
         : messagesWithoutSystem
@@ -1026,7 +1430,7 @@ export default function HomePage() {
       let assistantContent = ''
       let reasoningContent = ''
       let toolCalls: ToolCall[] = []
-      let usage: any = null
+      let usage: TokenUsage | null = null
       let localReasoningStartTime: number | null = null
       let localReasoningDuration: number | null = null
 
@@ -1061,7 +1465,7 @@ export default function HomePage() {
           setStreamingContent(assistantContent)
         }
         if (chunk.usage) {
-          usage = chunk.usage
+          usage = normalizeUsage(chunk.usage) || usage
         }
         if (chunk.toolCalls) {
           // Handle tool calls streaming according to OpenAI API format
@@ -1136,12 +1540,9 @@ export default function HomePage() {
           content: assistantContent,
           timestamp: Date.now(),
           toolCalls: completeToolCalls.length > 0 ? completeToolCalls : undefined,
-          toolCallExecutions: completeToolCalls.length > 0 ? completeToolCalls.map(tc => ({
-            id: generateId(),
-            toolCall: tc,
-            status: 'pending' as const,
-            timestamp: Date.now()
-          })) : undefined,
+          toolCallExecutions: completeToolCalls.length > 0
+            ? buildToolCallExecutions(completeToolCalls, currentTools)
+            : undefined,
           usage: usage || undefined,
           reasoningContent: reasoningContent || undefined,
           reasoningDuration: localReasoningDuration || undefined,
@@ -1283,6 +1684,13 @@ export default function HomePage() {
         setCurrentSessionId(newSession.id)
         sessionId = newSession.id
         currentSessionData = newSession
+
+        // Move activations recorded before the session existed under its real id
+        const pendingActivations = skillActivationsRef.current.get(NEW_SESSION_ACTIVATION_KEY)
+        if (pendingActivations) {
+          skillActivationsRef.current.set(newSession.id, pendingActivations)
+          skillActivationsRef.current.delete(NEW_SESSION_ACTIVATION_KEY)
+        }
       } catch (error) {
         devLog.error('Failed to create session:', error)
         return
@@ -1294,12 +1702,36 @@ export default function HomePage() {
       return
     }
 
+    // Explicit invocation: "/skill-name [request]" injects the skill instructions into the
+    // message so the model does not have to call load_skill first. The persisted content keeps
+    // the injected block (retries and edits must resend exactly what the model saw); the chip
+    // in the UI is driven by skillInvocation.
+    const invocation = parseSkillInvocation(content, skillsRef.current)
+    let outgoingContent = content
+    let skillInvocationInfo: { name: string; rest: string } | undefined
+
+    if (invocation) {
+      try {
+        const skillFiles = await dbManager.getSkillFiles(invocation.skill.id)
+        outgoingContent = buildSkillInvocationMessage(
+          invocation.skill,
+          invocation.rest,
+          skillFiles.map(file => file.path)
+        )
+        skillInvocationInfo = { name: invocation.skill.name, rest: invocation.rest }
+        getSkillActivations(sessionId).add(invocation.skill.id)
+      } catch (error) {
+        devLog.error('Failed to inject skill content:', error)
+      }
+    }
+
     // Create user message
     const userMessage: Message = {
       id: generateId(),
       role: 'user',
-      content,
-      timestamp: Date.now()
+      content: outgoingContent,
+      timestamp: Date.now(),
+      skillInvocation: skillInvocationInfo
     }
 
     // Update the session data with the new user message
@@ -1386,13 +1818,18 @@ export default function HomePage() {
       // Get tools for agent mode or no-agent mode
       let availableTools: Tool[] = []
       if (currentAgentWithTools) {
-        // Agent mode: use agent's tools
-        availableTools = currentAgentWithTools.tools
+        // Agent mode: use agent's tools, minus any name taken by a built-in skill tool
+        availableTools = currentAgentWithTools.tools.filter(tool =>
+          offerableTools.some(offerable => offerable.id === tool.id)
+        )
       } else {
         // No-agent mode: use selected tools from session or current selection
         const sessionToolIds = updatedSessionData.toolIds || toolIds || []
-        availableTools = tools.filter(tool => sessionToolIds.includes(tool.id))
+        availableTools = offerableTools.filter(tool => sessionToolIds.includes(tool.id))
       }
+
+      // MCP tools and skill tools are always available, in both agent and no-agent mode
+      availableTools = [...availableTools, ...mcpTools, ...skillTools]
 
       // Get complete config for current model (includes correct endpoint and API key)
       const currentConfig = await getCurrentModelConfig()
@@ -1403,8 +1840,10 @@ export default function HomePage() {
       const messagesWithoutSystem = updatedSessionData.messages.filter(m => m.role !== 'system')
 
       // Use session system prompt, agent system prompt, or config system prompt
-      const systemPrompt = updatedSessionData.systemPrompt ||
-                          (currentAgent ? currentAgent.systemPrompt : config.systemPrompt)
+      const systemPrompt = appendSkillsPrompt(
+        updatedSessionData.systemPrompt || (currentAgent ? currentAgent.systemPrompt : config.systemPrompt),
+        skillsRef.current
+      )
 
 
       const allMessages = systemPrompt.trim()
@@ -1414,7 +1853,7 @@ export default function HomePage() {
       let assistantContent = ''
       let reasoningContent = ''
       let toolCalls: ToolCall[] = []
-      let usage: any = null
+      let usage: TokenUsage | null = null
       let localReasoningStartTime: number | null = null
       let localReasoningDuration: number | null = null
 
@@ -1452,7 +1891,7 @@ export default function HomePage() {
           setStreamingContent(assistantContent)
         }
         if (chunk.usage) {
-          usage = chunk.usage
+          usage = normalizeUsage(chunk.usage) || usage
         }
         if (chunk.toolCalls) {
           // Handle tool calls streaming according to OpenAI API format
@@ -1520,12 +1959,9 @@ export default function HomePage() {
           content: assistantContent,
           timestamp: Date.now(),
           toolCalls: completeToolCalls.length > 0 ? completeToolCalls : undefined,
-          toolCallExecutions: completeToolCalls.length > 0 ? completeToolCalls.map(tc => ({
-            id: generateId(),
-            toolCall: tc,
-            status: 'pending' as const,
-            timestamp: Date.now()
-          })) : undefined,
+          toolCallExecutions: completeToolCalls.length > 0
+            ? buildToolCallExecutions(completeToolCalls, availableTools)
+            : undefined,
           usage: usage || undefined,
           reasoningContent: reasoningContent || undefined,
           reasoningDuration: localReasoningDuration || undefined,
@@ -1826,7 +2262,7 @@ export default function HomePage() {
   }
 
   // Tool execution handlers
-  const handleProvideToolResult = async (toolCallId: string, result: string) => {
+  const handleProvideToolResult = async (toolCallId: string, result: string, extras?: Partial<ToolCallExecution>) => {
     if (!currentSessionId) return
 
     const session = sessions.find(s => s.id === currentSessionId)
@@ -1841,7 +2277,7 @@ export default function HomePage() {
             ...agentMsg,
             toolCallExecutions: agentMsg.toolCallExecutions.map(exec =>
               exec.toolCall.id === toolCallId
-                ? { ...exec, status: 'completed' as const, result, timestamp: Date.now() }
+                ? { ...exec, ...(extras || {}), status: 'completed' as const, result, progress: undefined, timestamp: Date.now() }
                 : exec
             )
           }
@@ -1919,7 +2355,7 @@ export default function HomePage() {
           const messagesWithoutSystem = updatedSession.messages.filter(m => m.role !== 'system')
 
           // Use agent system prompt if in agent mode, otherwise use config system prompt
-          const systemPrompt = currentAgent ? currentAgent.systemPrompt : config.systemPrompt
+          const systemPrompt = appendSkillsPrompt(currentAgent ? currentAgent.systemPrompt : config.systemPrompt, skillsRef.current)
           const allMessages = systemPrompt.trim()
             ? [{ id: generateId(), role: 'system' as const, content: systemPrompt, timestamp: Date.now() }, ...messagesWithoutSystem]
             : messagesWithoutSystem
@@ -1927,7 +2363,7 @@ export default function HomePage() {
           let assistantContent = ''
           let reasoningContent = ''
           let toolCalls: ToolCall[] = []
-          let usage: any = null
+          let usage: TokenUsage | null = null
           let localReasoningStartTime: number | null = null
           let localReasoningDuration: number | null = null
 
@@ -1962,7 +2398,7 @@ export default function HomePage() {
               setStreamingContent(assistantContent)
             }
             if (chunk.usage) {
-              usage = chunk.usage
+              usage = normalizeUsage(chunk.usage) || usage
             }
             if (chunk.toolCalls) {
               // Handle tool calls streaming
@@ -2028,12 +2464,9 @@ export default function HomePage() {
               content: assistantContent,
               timestamp: Date.now(),
               toolCalls: completeToolCalls.length > 0 ? completeToolCalls : undefined,
-              toolCallExecutions: completeToolCalls.length > 0 ? completeToolCalls.map(tc => ({
-                id: generateId(),
-                toolCall: tc,
-                status: 'pending' as const,
-                timestamp: Date.now()
-              })) : undefined,
+              toolCallExecutions: completeToolCalls.length > 0
+                ? buildToolCallExecutions(completeToolCalls, currentTools)
+                : undefined,
               usage: usage || undefined,
               reasoningContent: reasoningContent || undefined,
               reasoningDuration: localReasoningDuration || undefined,
@@ -2384,8 +2817,8 @@ export default function HomePage() {
     }
   }
 
-  // Get current tools based on agent mode or no-agent mode selection
-  const getCurrentTools = () => {
+  // Get current tools based on agent mode or no-agent mode selection (local tools only)
+  const getCurrentLocalTools = () => {
     if (currentAgentWithTools) {
       // Agent mode: use agent's tools
       return currentAgentWithTools.tools
@@ -2397,6 +2830,14 @@ export default function HomePage() {
       return []
     }
   }
+
+  // Tools offered to the model: local selection plus every enabled MCP tool
+  // Offered to the model: local selection (minus names shadowed by skill tools) plus MCP and skills
+  const getCurrentTools = () => [
+    ...getCurrentLocalTools().filter(tool => offerableTools.some(offerable => offerable.id === tool.id)),
+    ...mcpTools,
+    ...skillTools
+  ]
 
   // Get current model from localStorage
   const getCurrentModel = () => {
@@ -2528,12 +2969,26 @@ export default function HomePage() {
         s.id === currentSessionId ? updatedSession : s
       ))
 
+      // Keep the skill chip when the edited text still carries the injected block; when the
+      // user removed it, the message goes back to being an ordinary one.
+      const originalMessage = session.messages[messageIndex]
+      let editedInvocation = originalMessage.skillInvocation
+      if (editedInvocation) {
+        const openingTag = '<skill_content name="' + editedInvocation.name + '">'
+        const closingTag = '</skill_content>'
+        const closingIndex = newContent.indexOf(closingTag)
+        editedInvocation = newContent.indexOf(openingTag) === -1 || closingIndex === -1
+          ? undefined
+          : { name: editedInvocation.name, rest: newContent.substring(closingIndex + closingTag.length).trim() }
+      }
+
       // Create user message
       const userMessage: Message = {
         id: generateId(),
         role: 'user',
         content: newContent,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        skillInvocation: editedInvocation
       }
 
       // Update the session data with the new user message
@@ -2620,7 +3075,7 @@ export default function HomePage() {
       const messagesWithoutSystem = [...messagesBeforeEdit, userMessage].filter(m => m.role !== 'system')
 
       // Use agent system prompt if in agent mode, otherwise use config system prompt
-      const systemPrompt = currentAgent ? currentAgent.systemPrompt : config.systemPrompt
+      const systemPrompt = appendSkillsPrompt(currentAgent ? currentAgent.systemPrompt : config.systemPrompt, skillsRef.current)
       const allMessages = systemPrompt.trim()
         ? [{ id: generateId(), role: 'system' as const, content: systemPrompt, timestamp: Date.now() }, ...messagesWithoutSystem]
         : messagesWithoutSystem
@@ -2628,7 +3083,7 @@ export default function HomePage() {
       let assistantContent = ''
       let reasoningContent = ''
       let toolCalls: ToolCall[] = []
-      let usage: any = null
+      let usage: TokenUsage | null = null
       let localReasoningStartTime: number | null = null
       let localReasoningDuration: number | null = null
 
@@ -2663,7 +3118,7 @@ export default function HomePage() {
           setStreamingContent(assistantContent)
         }
         if (chunk.usage) {
-          usage = chunk.usage
+          usage = normalizeUsage(chunk.usage) || usage
         }
         if (chunk.toolCalls) {
           // Handle tool calls streaming
@@ -2733,12 +3188,9 @@ export default function HomePage() {
           content: assistantContent,
           timestamp: Date.now(),
           toolCalls: completeToolCalls.length > 0 ? completeToolCalls : undefined,
-          toolCallExecutions: completeToolCalls.length > 0 ? completeToolCalls.map(tc => ({
-            id: generateId(),
-            toolCall: tc,
-            status: 'pending' as const,
-            timestamp: Date.now()
-          })) : undefined,
+          toolCallExecutions: completeToolCalls.length > 0
+            ? buildToolCallExecutions(completeToolCalls, currentTools)
+            : undefined,
           usage: usage || undefined,
           reasoningContent: reasoningContent || undefined,
           reasoningDuration: localReasoningDuration || undefined,
@@ -2856,7 +3308,7 @@ export default function HomePage() {
             ...agentMsg,
             toolCallExecutions: agentMsg.toolCallExecutions.map(exec =>
               exec.toolCall.id === toolCallId
-                ? { ...exec, status: 'failed' as const, error, timestamp: Date.now() }
+                ? { ...exec, status: 'failed' as const, error, progress: undefined, timestamp: Date.now() }
                 : exec
             )
           }
@@ -2919,6 +3371,9 @@ export default function HomePage() {
             tools={tools}
             autoMode={autoMode}
             onAutoModeChange={setAutoMode}
+            mcpToolCount={mcpTools.length}
+            skillCount={enabledSkills.length}
+            skills={enabledSkills}
           />
         ) : (
           <>
@@ -2951,13 +3406,16 @@ export default function HomePage() {
               reasoningDuration={reasoningDuration}
               formatReasoningDuration={formatReasoningDuration}
               currentAgent={currentAgentWithTools}
-              tools={tools}
+              tools={chatTools}
+              resolveToolForExecution={resolveExecutionTool}
               authorizations={authorizations}
               scrollToBottomTrigger={scrollToBottomTrigger}
               scrollToTopTrigger={scrollToTopTrigger}
               forceScrollTrigger={forceScrollTrigger}
               onProvideToolResult={handleProvideToolResult}
               onMarkToolFailed={handleMarkToolFailed}
+              onExecuteMCPTool={executeMCPToolCall}
+              onExecuteBuiltinTool={executeSkillToolCall}
               onRetryMessage={handleRetryMessage}
               onDeleteMessage={handleDeleteMessage}
               onEditMessage={handleEditMessage}
@@ -2983,6 +3441,9 @@ export default function HomePage() {
               tools={tools}
               selectedToolIds={selectedToolIds}
               onToolsChange={handleToolsChange}
+              mcpToolCount={mcpTools.length}
+              skillCount={enabledSkills.length}
+              skills={enabledSkills}
               autoMode={autoMode}
               onAutoModeChange={setAutoMode}
             />
@@ -3010,12 +3471,28 @@ export default function HomePage() {
         onAuthorizationCreate={createAuthorization}
         onAuthorizationUpdate={updateAuthorization}
         onAuthorizationDelete={deleteAuthorization}
+        mcpServers={mcpServers}
+        onMCPServerCreate={createMCPServer}
+        onMCPServerUpdate={updateMCPServer}
+        onMCPServerDelete={deleteMCPServer}
+        onMCPServerConnect={connectMCPServerById}
+        skills={skills}
+        onSkillCreate={createSkill}
+        onSkillUpdate={updateSkill}
+        onSkillDelete={deleteSkill}
+        onSkillFilesGet={getSkillFiles}
+        onSkillFileSave={saveSkillFile}
         onExport={() => setShowExportModal(true)}
         onImport={() => setShowImportModal(true)}
         onBatchDelete={() => setShowBatchDeleteModal(true)}
       />
 
       {/* Modals */}
+      <MCPElicitationModal
+        request={elicitation}
+        serverName={elicitationServerName}
+        onRespond={handleElicitationResponse}
+      />
       <AgentFormModal
         isOpen={showAgentModal}
         onClose={() => setShowAgentModal(false)}
@@ -3032,6 +3509,8 @@ export default function HomePage() {
         onClose={() => setShowExportModal(false)}
         agents={agents}
         tools={tools}
+        skills={skills}
+        getSkillFiles={getSkillFiles}
       />
 
       <ImportModal
@@ -3040,6 +3519,7 @@ export default function HomePage() {
         onImport={handleImport}
         existingAgents={agents}
         existingTools={tools}
+        existingSkills={skills}
       />
 
       <SystemPromptModal
@@ -3055,6 +3535,7 @@ export default function HomePage() {
         agents={agents}
         tools={tools}
         sessions={sessions}
+        skills={skills}
         onDelete={handleBatchDelete}
       />
 

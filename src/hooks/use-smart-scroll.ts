@@ -1,33 +1,41 @@
 'use client'
 
-import { useRef, useEffect, useCallback, useState } from 'react'
+import { useRef, useEffect, useLayoutEffect, useCallback, useState } from 'react'
 
 interface UseSmartScrollOptions {
   /**
-   * 触发自动滚动的依赖项
+   * Dependencies that trigger an auto-scroll when they change
    */
   dependencies: any[]
   /**
-   * 滚动容器的引用
+   * Ref of the scroll container
    */
   containerRef: React.RefObject<HTMLElement>
   /**
-   * 检测用户是否接近底部的阈值（像素）
+   * Distance (px) from the bottom that still counts as "at the bottom"
    */
   threshold?: number
   /**
-   * 是否正在流式输出
+   * Whether the assistant is currently streaming
    */
   isStreaming?: boolean
   /**
-   * 强制滚动到底部的触发器（立即跳转，无动画）
+   * Trigger for an immediate jump to the bottom (session switch), no animation
    */
   forceScrollTrigger?: number
   /**
-   * 平滑滚动到底部的触发器（用于用户发送消息）
+   * Trigger for a smooth scroll to the bottom (user sent a message)
    */
   scrollToBottomTrigger?: number
 }
+
+// useLayoutEffect warns during server rendering; this component tree only scrolls in the browser
+const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect
+
+// How many frames the bottom stays pinned after a stream ends. The persisted message that
+// replaces the streaming block (with its reasoning collapsed) can land one or two commits
+// later, so a single scroll on the flip is not enough.
+const STREAM_END_PIN_FRAMES = 12
 
 export function useSmartScroll({
   dependencies,
@@ -46,266 +54,361 @@ export function useSmartScroll({
   const scrollDebounceRef = useRef<NodeJS.Timeout>()
   const isScrollingToBottomRef = useRef(false)
   const wasStreamingRef = useRef(false)
-  const userManuallyLeftBottomDuringStreamingRef = useRef(false) // 用户在流式输出期间是否手动离开了底部
+  const wasStreamingLayoutRef = useRef(false)
+  const userManuallyLeftBottomDuringStreamingRef = useRef(false) // User deliberately left the bottom while streaming
+  const followSuspendedRef = useRef(false) // User took over the scroll during the current stream
+  const isAutoScrollEnabledRef = useRef(true) // Mirror of the state, readable from the rAF loop
+  const programmaticTopRef = useRef(-1) // Last scrollTop this hook wrote itself
+  const previousProgrammaticTopRef = useRef(-1) // The one before it: scroll events can lag a frame behind
+  const pinRafRef = useRef<number>()
 
-  // 检查是否接近底部
+  // Always go through this so the rAF follow loop and the scroll listener see the new value
+  // in the same tick instead of waiting for the next render.
+  const setAutoScrollEnabled = useCallback((enabled: boolean) => {
+    isAutoScrollEnabledRef.current = enabled
+    setIsAutoScrollEnabled(enabled)
+  }, [])
+
+  // Whether the bottom should currently be followed
+  const shouldFollowBottom = useCallback(
+    () =>
+      isAutoScrollEnabledRef.current &&
+      !userManuallyLeftBottomDuringStreamingRef.current &&
+      !followSuspendedRef.current,
+    []
+  )
+
+  // Check whether the container is close enough to the bottom
   const isNearBottom = useCallback(() => {
     const container = containerRef.current
     if (!container) return false
-    
+
     const { scrollTop, scrollHeight, clientHeight } = container
     return scrollHeight - scrollTop - clientHeight <= threshold
   }, [threshold, containerRef])
 
-  // 滚动到底部（带防抖）
-  const scrollToBottom = useCallback((useSmooth = true, forceScroll = false) => {
+  // Put the container at the bottom instantly and remember the position we wrote, so the
+  // scroll listener can tell this scroll apart from one the user performed.
+  const pinToBottom = useCallback(() => {
     const container = containerRef.current
-    if (!container || (!isAutoScrollEnabled && !forceScroll) || isScrollingToBottomRef.current) return
+    if (!container) return
 
-    // 如果用户在流式输出期间手动离开了底部，则不执行自动滚动
-    if (isStreaming && userManuallyLeftBottomDuringStreamingRef.current && !forceScroll) {
-      return
+    const target = Math.max(0, container.scrollHeight - container.clientHeight)
+    if (target !== programmaticTopRef.current) {
+      previousProgrammaticTopRef.current = programmaticTopRef.current
+      programmaticTopRef.current = target
     }
-
-    // 清除之前的防抖
-    if (scrollDebounceRef.current) {
-      clearTimeout(scrollDebounceRef.current)
+    if (Math.abs(container.scrollTop - target) > 1) {
+      container.scrollTop = target
     }
+  }, [containerRef])
 
-    // 防抖执行滚动
-    scrollDebounceRef.current = setTimeout(() => {
-      if (!container || (!isAutoScrollEnabled && !forceScroll)) return
+  const cancelPinLoop = useCallback(() => {
+    if (pinRafRef.current !== undefined) {
+      cancelAnimationFrame(pinRafRef.current)
+      pinRafRef.current = undefined
+    }
+  }, [])
 
-      // 再次检查用户是否手动离开了底部
+  // Scroll to the bottom (debounced). Used outside of streaming and by the public API.
+  const scrollToBottom = useCallback(
+    (useSmooth = true, forceScroll = false) => {
+      const container = containerRef.current
+      if (!container || (!isAutoScrollEnabled && !forceScroll) || isScrollingToBottomRef.current) return
+
+      // Do not auto-scroll if the user deliberately left the bottom while streaming
       if (isStreaming && userManuallyLeftBottomDuringStreamingRef.current && !forceScroll) {
         return
       }
 
-      isScrollingToBottomRef.current = true
+      if (scrollDebounceRef.current) {
+        clearTimeout(scrollDebounceRef.current)
+      }
 
-      // 使用requestAnimationFrame确保DOM更新完成后再滚动
-      requestAnimationFrame(() => {
-        if (!container) return
+      scrollDebounceRef.current = setTimeout(() => {
+        if (!container || (!isAutoScrollEnabled && !forceScroll)) return
 
-        const scrollTop = container.scrollHeight - container.clientHeight
-        container.scrollTo({
-          top: Math.max(0, scrollTop),
-          behavior: useSmooth ? 'smooth' : 'auto'
+        if (isStreaming && userManuallyLeftBottomDuringStreamingRef.current && !forceScroll) {
+          return
+        }
+
+        isScrollingToBottomRef.current = true
+
+        // Scroll after the DOM update has been flushed
+        requestAnimationFrame(() => {
+          if (!container) return
+
+          const scrollTop = Math.max(0, container.scrollHeight - container.clientHeight)
+          programmaticTopRef.current = scrollTop
+          container.scrollTo({
+            top: scrollTop,
+            behavior: useSmooth ? 'smooth' : 'auto'
+          })
         })
+
+        setTimeout(() => {
+          isScrollingToBottomRef.current = false
+        }, useSmooth ? 300 : 50)
+      }, 16)
+    },
+    [isAutoScrollEnabled, containerRef, isStreaming]
+  )
+
+  // Scroll to the top
+  const scrollToTop = useCallback(
+    (useSmooth = true) => {
+      const container = containerRef.current
+      if (!container) return
+
+      container.scrollTo({
+        top: 0,
+        behavior: useSmooth ? 'smooth' : 'auto'
       })
+    },
+    [containerRef]
+  )
 
-      // 滚动完成后重置标志
-      setTimeout(() => {
-        isScrollingToBottomRef.current = false
-      }, useSmooth ? 300 : 50)
-    }, 16) // 约一帧的时间
-  }, [isAutoScrollEnabled, containerRef, isStreaming])
-
-  // 滚动到顶部
-  const scrollToTop = useCallback((useSmooth = true) => {
+  // Handle scroll events
+  const handleScroll = useCallback(() => {
     const container = containerRef.current
     if (!container) return
 
-    container.scrollTo({
-      top: 0,
-      behavior: useSmooth ? 'smooth' : 'auto'
-    })
-  }, [containerRef])
-
-  // 处理用户滚动事件
-  const handleScroll = useCallback(() => {
-    const container = containerRef.current
-    if (!container || isScrollingToBottomRef.current) return
-
     const currentScrollTop = container.scrollTop
     const scrollDirection = currentScrollTop > lastScrollTopRef.current ? 'down' : 'up'
+    // Keep the reference position fresh for every scroll, including our own, otherwise the
+    // next user scroll is compared against a stale value and its direction is misread.
     lastScrollTopRef.current = currentScrollTop
 
-    // 检查是否接近底部
     const nearBottom = isNearBottom()
-
-    // 检查是否远离顶部
-    const farFromTop = currentScrollTop > threshold
-
-    // 更新滚动到底部按钮的显示状态
     setShowScrollToBottom(!nearBottom)
+    setShowScrollToTop(currentScrollTop > threshold)
 
-    // 更新滚动到顶部按钮的显示状态
-    setShowScrollToTop(farFromTop)
+    // Scrolls this hook performed itself must never be read as user intent. The previous
+    // target is accepted too: while content grows, the event for one write can arrive after
+    // the next frame has already moved the target.
+    const isProgrammatic =
+      isScrollingToBottomRef.current ||
+      Math.abs(currentScrollTop - programmaticTopRef.current) <= 1 ||
+      Math.abs(currentScrollTop - previousProgrammaticTopRef.current) <= 1
+    if (isProgrammatic) return
 
-    // 设置用户正在滚动的状态
     setIsUserScrolling(true)
 
-    // 清除之前的超时
     if (scrollTimeoutRef.current) {
       clearTimeout(scrollTimeoutRef.current)
     }
 
-    // 500ms后认为用户停止滚动
+    // The user is considered to have stopped scrolling after 500ms
     scrollTimeoutRef.current = setTimeout(() => {
       setIsUserScrolling(false)
     }, 500)
 
-    // 特殊处理流式输出期间的滚动行为
+    // A real user scroll always wins over the post-stream pin
+    cancelPinLoop()
+
+    const distanceFromBottom = container.scrollHeight - currentScrollTop - container.clientHeight
+
     if (isStreaming) {
-      // 用户向上滚动，判断是否真的想离开底部
       if (scrollDirection === 'up') {
-        const { scrollTop, scrollHeight, clientHeight } = container
-        const distanceFromBottom = scrollHeight - scrollTop - clientHeight
+        // Stop following right away so the follow loop cannot pull the user back down while
+        // they are still scrolling. Whether auto-scroll stays off for the rest of the stream
+        // is decided by the larger threshold below.
+        followSuspendedRef.current = true
 
-        // 只有当用户向上滚动超过阈值距离时，才认为是有意离开底部
-        if (distanceFromBottom > threshold * 2) { // 使用更大的阈值确保是有意滚动
+        if (distanceFromBottom > threshold * 2) {
           userManuallyLeftBottomDuringStreamingRef.current = true
-          setIsAutoScrollEnabled(false)
+          setAutoScrollEnabled(false)
 
-          // 清除任何待执行的自动滚动
           if (scrollDebounceRef.current) {
             clearTimeout(scrollDebounceRef.current)
           }
         }
       } else if (scrollDirection === 'down' && nearBottom) {
-        // 用户重新滚动回底部，恢复自动滚动
+        // The user came back to the bottom: resume following
+        followSuspendedRef.current = false
         userManuallyLeftBottomDuringStreamingRef.current = false
-        setIsAutoScrollEnabled(true)
+        setAutoScrollEnabled(true)
       }
     } else {
-      // 非流式输出期间的原有逻辑
       if (scrollDirection === 'up') {
-        // 用户向上滚动，只有当滚动距离足够大时才禁用自动滚动
-        // 这样可以避免微小的滚动变化影响自动跟随
-        const { scrollTop, scrollHeight, clientHeight } = container
-        const distanceFromBottom = scrollHeight - scrollTop - clientHeight
         if (distanceFromBottom > threshold) {
-          setIsAutoScrollEnabled(false)
+          setAutoScrollEnabled(false)
         }
       } else if (scrollDirection === 'down' && nearBottom) {
-        // 用户向下滚动且接近底部，启用自动滚动
-        setIsAutoScrollEnabled(true)
+        setAutoScrollEnabled(true)
       }
     }
-  }, [isNearBottom, containerRef, threshold, isStreaming])
+  }, [isNearBottom, containerRef, threshold, isStreaming, setAutoScrollEnabled, cancelPinLoop])
 
-  // 监听滚动事件
+  // Listen for scroll events
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
 
     container.addEventListener('scroll', handleScroll, { passive: true })
-    
+
     return () => {
       container.removeEventListener('scroll', handleScroll)
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current)
-      }
-      if (scrollDebounceRef.current) {
-        clearTimeout(scrollDebounceRef.current)
-      }
     }
   }, [handleScroll, containerRef])
 
-  // 当依赖项变化时，如果启用了自动滚动，则滚动到底部
+  // Clear pending timers and frames on unmount only, so a re-registered listener or a
+  // re-run effect cannot cancel work that is still needed.
   useEffect(() => {
-    // 检查是否从流式输出状态变为非流式输出状态
-    const justStoppedStreaming = wasStreamingRef.current && !isStreaming
+    return () => {
+      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current)
+      if (scrollDebounceRef.current) clearTimeout(scrollDebounceRef.current)
+      if (pinRafRef.current !== undefined) cancelAnimationFrame(pinRafRef.current)
+    }
+  }, [])
 
-    // 检查是否刚开始流式输出
+  // Follow the bottom for the whole stream.
+  //
+  // This used to be a debounced timer driven by the dependency effect, which never settled:
+  // every streaming chunk cleared the pending timer, so the scroll fired at most once per
+  // stream. A frame loop is immune to chunk frequency, only writes when the position is
+  // actually stale, and stops as soon as the user takes over.
+  useEffect(() => {
+    if (!isStreaming) return
+
+    let frame = requestAnimationFrame(function step() {
+      if (shouldFollowBottom()) {
+        pinToBottom()
+      }
+      frame = requestAnimationFrame(step)
+    })
+
+    return () => cancelAnimationFrame(frame)
+  }, [isStreaming, pinToBottom, shouldFollowBottom])
+
+  // Keep the bottom in view per commit, and across the commit that ends the stream.
+  //
+  // Every streaming chunk changes `dependencies`, so pinning here follows the stream once per
+  // committed chunk, before paint, without depending on animation frames (a background or
+  // occluded tab gets no rAF callbacks at all). The rAF loop above stays as well: it covers
+  // layout changes that happen without a React commit, such as images or markdown re-layout.
+  //
+  // When the stream ends, the streaming block is replaced by the persisted message, whose
+  // reasoning is collapsed, so the content shrinks by the height of the reasoning block.
+  // Pinning before paint (and for a few frames after, because the swap may land in a later
+  // commit) keeps the last line of the reply visible instead of showing older content.
+  useIsomorphicLayoutEffect(() => {
+    const justStoppedStreaming = wasStreamingLayoutRef.current && !isStreaming
+    wasStreamingLayoutRef.current = isStreaming
+
+    if (isStreaming) {
+      if (shouldFollowBottom()) {
+        pinToBottom()
+      }
+      return
+    }
+
+    // Decided once here: the flags are reset by the effect below, but a user who scrolled
+    // away during the stream must keep their position.
+    if (!justStoppedStreaming || !shouldFollowBottom()) return
+
+    cancelPinLoop()
+    pinToBottom()
+
+    let frames = 0
+    const step = () => {
+      pinToBottom()
+      frames += 1
+      pinRafRef.current = frames < STREAM_END_PIN_FRAMES ? requestAnimationFrame(step) : undefined
+    }
+    pinRafRef.current = requestAnimationFrame(step)
+    // No cleanup on purpose: this effect re-runs on the very commits (persisted message,
+    // collapsed reasoning) that the pin has to survive.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isStreaming, pinToBottom, shouldFollowBottom, cancelPinLoop, ...dependencies])
+
+  // Auto-scroll when the dependencies change outside of streaming
+  useEffect(() => {
+    const justStoppedStreaming = wasStreamingRef.current && !isStreaming
     const justStartedStreaming = !wasStreamingRef.current && isStreaming
 
     wasStreamingRef.current = isStreaming
 
-    // 如果刚刚停止流式输出，重置手动离开标志，不做滚动操作，保持当前位置
+    // The layout effect above already placed the view; only clear the streaming-scoped flags
     if (justStoppedStreaming) {
       userManuallyLeftBottomDuringStreamingRef.current = false
+      followSuspendedRef.current = false
       return
     }
 
-    // 如果刚开始流式输出，重置手动离开标志
     if (justStartedStreaming) {
       userManuallyLeftBottomDuringStreamingRef.current = false
+      followSuspendedRef.current = false
     }
 
-    // 在流式输出过程中需要保持滚动到底部
-    if (isStreaming && isAutoScrollEnabled && !userManuallyLeftBottomDuringStreamingRef.current) {
-      // 对于流式内容，使用更短的防抖延迟来实现更流畅的跟随
+    // While streaming the frame loop owns the scroll position
+    if (isStreaming) return
+
+    if (isAutoScrollEnabled && !isUserScrolling) {
       if (scrollDebounceRef.current) {
         clearTimeout(scrollDebounceRef.current)
       }
 
+      // Give the DOM time to render before scrolling
       scrollDebounceRef.current = setTimeout(() => {
-        // 在执行滚动前再次确认用户没有手动离开底部
-        if (!userManuallyLeftBottomDuringStreamingRef.current) {
-          scrollToBottom(false) // 使用instant滚动，避免smooth动画与流式内容冲突
-        }
-      }, 50) // 增加延迟，给用户滚动操作更多时间
-    }
-    // 如果内容高度发生变化但不是在流式输出，仍然需要调整滚动位置
-    else if (!isStreaming && isAutoScrollEnabled && !isUserScrolling) {
-      // 使用更长的延迟，让DOM渲染完成
-      if (scrollDebounceRef.current) {
-        clearTimeout(scrollDebounceRef.current)
-      }
-
-      scrollDebounceRef.current = setTimeout(() => {
-        scrollToBottom(true) // 非流式状态使用smooth滚动
-      }, 50) // 给DOM更多时间渲染
+        scrollToBottom(true)
+      }, 50)
     }
   }, [...dependencies, isAutoScrollEnabled, isUserScrolling, isStreaming])
 
-  // 处理强制滚动触发器（会话切换时立即跳转）
+  // Force trigger: jump to the bottom immediately (session switch)
   useEffect(() => {
     if (forceScrollTrigger !== undefined) {
-      // 强制启用自动滚动并立即滚动到底部
-      setIsAutoScrollEnabled(true)
+      setAutoScrollEnabled(true)
       setIsUserScrolling(false)
       setShowScrollToTop(false)
 
-      // 重置手动离开标志
       userManuallyLeftBottomDuringStreamingRef.current = false
+      followSuspendedRef.current = false
+      cancelPinLoop()
 
-      // 清除之前记录的滚动位置，进入自动跟随模式
-      lastScrollTopRef.current = 0
-
-      // 立即滚动到底部，不使用防抖和动画
       const container = containerRef.current
       if (container) {
-        // 直接设置scrollTop，实现立即跳转
-        container.scrollTop = container.scrollHeight
+        const target = Math.max(0, container.scrollHeight - container.clientHeight)
+        programmaticTopRef.current = target
+        lastScrollTopRef.current = target
+        container.scrollTop = target
       }
     }
-  }, [forceScrollTrigger, containerRef])
+  }, [forceScrollTrigger, containerRef, setAutoScrollEnabled, cancelPinLoop])
 
-  // 处理平滑滚动触发器（用户发送消息时）
+  // Smooth trigger: user sent a message
   useEffect(() => {
     if (scrollToBottomTrigger !== undefined && scrollToBottomTrigger > 0) {
-      // 强制启用自动滚动并平滑滚动到底部
-      setIsAutoScrollEnabled(true)
+      setAutoScrollEnabled(true)
       setIsUserScrolling(false)
       setShowScrollToBottom(false)
       setShowScrollToTop(false)
 
-      // 重置手动离开标志
       userManuallyLeftBottomDuringStreamingRef.current = false
+      followSuspendedRef.current = false
+      cancelPinLoop()
 
-      // 清除之前记录的滚动位置，进入自动跟随模式
-      lastScrollTopRef.current = 0
-
-      // 平滑滚动到底部
       const container = containerRef.current
       if (container) {
+        const target = Math.max(0, container.scrollHeight - container.clientHeight)
+        programmaticTopRef.current = target
         container.scrollTo({
-          top: container.scrollHeight,
+          top: target,
           behavior: 'smooth'
         })
       }
     }
-  }, [scrollToBottomTrigger, containerRef])
+  }, [scrollToBottomTrigger, containerRef, setAutoScrollEnabled, cancelPinLoop])
 
-  // 初始化时滚动到底部
+  // Start at the bottom
   useEffect(() => {
     const container = containerRef.current
     if (container) {
-      // 初始时直接滚动到底部，不使用动画
-      container.scrollTop = container.scrollHeight
+      const target = Math.max(0, container.scrollHeight - container.clientHeight)
+      programmaticTopRef.current = target
+      lastScrollTopRef.current = target
+      container.scrollTop = target
       setShowScrollToBottom(false)
       setShowScrollToTop(false)
     }
@@ -317,9 +420,10 @@ export function useSmartScroll({
     showScrollToBottom,
     showScrollToTop,
     scrollToBottom: () => {
-      setIsAutoScrollEnabled(true)
+      setAutoScrollEnabled(true)
       setShowScrollToBottom(false)
-      userManuallyLeftBottomDuringStreamingRef.current = false // 重置手动离开标志
+      userManuallyLeftBottomDuringStreamingRef.current = false
+      followSuspendedRef.current = false
       scrollToBottom(true)
     },
     scrollToTop: () => {
@@ -329,12 +433,15 @@ export function useSmartScroll({
     forceScrollToBottom: () => {
       const container = containerRef.current
       if (container) {
-        setIsAutoScrollEnabled(true)
+        setAutoScrollEnabled(true)
         setShowScrollToBottom(false)
-        userManuallyLeftBottomDuringStreamingRef.current = false // 重置手动离开标志
+        userManuallyLeftBottomDuringStreamingRef.current = false
+        followSuspendedRef.current = false
         isScrollingToBottomRef.current = true
+        const target = Math.max(0, container.scrollHeight - container.clientHeight)
+        programmaticTopRef.current = target
         container.scrollTo({
-          top: container.scrollHeight,
+          top: target,
           behavior: 'smooth'
         })
         setTimeout(() => {

@@ -1,9 +1,10 @@
-import { Agent, Tool, ChatSession, AvailableModel, Authorization, Message, AgentMessage, ToolCallExecution } from '@/types'
+import { Agent, Tool, ChatSession, AvailableModel, Authorization, Message, AgentMessage, ToolCallExecution, MCPServer, Skill, SkillFileRecord } from '@/types'
 import { ProviderCustomConfig } from '../providers'
 import { devLog } from '@/lib/dev-utils'
+import { normalizeMCPServer } from '@/lib/mcp/client'
 
 const DB_NAME = 'agent-playground'
-const DB_VERSION = 6
+const DB_VERSION = 8
 
 // Store names
 const AGENTS_STORE = 'agents'
@@ -12,6 +13,9 @@ const SESSIONS_STORE = 'sessions'
 const PROVIDER_CONFIGS_STORE = 'provider-configs'
 const AVAILABLE_MODELS_STORE = 'available-models'
 const AUTHORIZATIONS_STORE = 'authorizations'
+const MCP_SERVERS_STORE = 'mcp-servers'
+const SKILLS_STORE = 'skills'
+const SKILL_FILES_STORE = 'skill-files'
 
 export class IndexedDBManager {
   private static instance: IndexedDBManager
@@ -93,6 +97,26 @@ export class IndexedDBManager {
           authorizationsStore.createIndex('tag', 'tag', { unique: false })
           authorizationsStore.createIndex('createdAt', 'createdAt', { unique: false })
         }
+
+        // Create MCP servers store
+        if (!db.objectStoreNames.contains(MCP_SERVERS_STORE)) {
+          const mcpServersStore = db.createObjectStore(MCP_SERVERS_STORE, { keyPath: 'id' })
+          mcpServersStore.createIndex('name', 'name', { unique: false })
+          mcpServersStore.createIndex('createdAt', 'createdAt', { unique: false })
+        }
+
+        // Create skills store
+        if (!db.objectStoreNames.contains(SKILLS_STORE)) {
+          const skillsStore = db.createObjectStore(SKILLS_STORE, { keyPath: 'id' })
+          skillsStore.createIndex('name', 'name', { unique: false })
+          skillsStore.createIndex('createdAt', 'createdAt', { unique: false })
+        }
+
+        // Create skill files store: one record per file, keyed `${skillId}:${path}`
+        if (!db.objectStoreNames.contains(SKILL_FILES_STORE)) {
+          const skillFilesStore = db.createObjectStore(SKILL_FILES_STORE, { keyPath: 'id' })
+          skillFilesStore.createIndex('skillId', 'skillId', { unique: false })
+        }
       }
     })
 
@@ -171,6 +195,41 @@ export class IndexedDBManager {
         resolve(request.result || [])
       }
       request.onerror = () => reject(request.error)
+    })
+  }
+
+  private async getAllByIndex<T>(storeName: string, indexName: string, value: IDBValidKey): Promise<T[]> {
+    const db = await this.ensureDB()
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([storeName], 'readonly')
+      const index = transaction.objectStore(storeName).index(indexName)
+      const request = index.getAll(value)
+
+      request.onsuccess = () => {
+        resolve(request.result || [])
+      }
+      request.onerror = () => reject(request.error)
+    })
+  }
+
+  private async deleteAllByIndex(storeName: string, indexName: string, value: IDBValidKey): Promise<void> {
+    const db = await this.ensureDB()
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([storeName], 'readwrite')
+      const store = transaction.objectStore(storeName)
+      const request = store.index(indexName).openKeyCursor(IDBKeyRange.only(value))
+
+      request.onsuccess = () => {
+        const cursor = request.result
+        if (cursor) {
+          store.delete(cursor.primaryKey)
+          cursor.continue()
+        }
+      }
+      request.onerror = () => reject(request.error)
+
+      transaction.oncomplete = () => resolve()
+      transaction.onerror = () => reject(transaction.error)
     })
   }
 
@@ -294,6 +353,7 @@ export class IndexedDBManager {
       updatedAt: session.updatedAt || Date.now(),
       agentId: session.agentId,
       toolIds: session.toolIds,
+      skillIds: session.skillIds,
       systemPrompt: session.systemPrompt
     }
 
@@ -311,7 +371,8 @@ export class IndexedDBManager {
       tool_call_id: message.tool_call_id,
       name: message.name,
       error: message.error,
-      canRetry: message.canRetry
+      canRetry: message.canRetry,
+      skillInvocation: message.skillInvocation
     }
 
     // Check if this is an assistant message that might be an AgentMessage
@@ -346,10 +407,15 @@ export class IndexedDBManager {
     return {
       id: execution.id || this.generateId(),
       toolCall: execution.toolCall,
+      toolId: execution.toolId,
       status: execution.status || 'completed',
       result: execution.result,
       error: execution.error,
-      timestamp: execution.timestamp || Date.now()
+      timestamp: execution.timestamp || Date.now(),
+      // Rich MCP output must survive a reload, otherwise the tool card degrades to plain text.
+      // `progress` is deliberately not restored: it only describes a call that is still running.
+      mcpContent: execution.mcpContent,
+      structuredContent: execution.structuredContent
     }
   }
 
@@ -408,7 +474,10 @@ export class IndexedDBManager {
   async clearAllData(): Promise<void> {
     const db = await this.ensureDB()
     return new Promise((resolve, reject) => {
-      const transaction = db.transaction([AGENTS_STORE, TOOLS_STORE, SESSIONS_STORE, PROVIDER_CONFIGS_STORE, AUTHORIZATIONS_STORE], 'readwrite')
+      const transaction = db.transaction([AGENTS_STORE, TOOLS_STORE, SESSIONS_STORE, PROVIDER_CONFIGS_STORE, AUTHORIZATIONS_STORE, MCP_SERVERS_STORE, SKILLS_STORE, SKILL_FILES_STORE], 'readwrite')
+      const mcpServersStore = transaction.objectStore(MCP_SERVERS_STORE)
+      const skillsStore = transaction.objectStore(SKILLS_STORE)
+      const skillFilesStore = transaction.objectStore(SKILL_FILES_STORE)
 
       const agentsStore = transaction.objectStore(AGENTS_STORE)
       const toolsStore = transaction.objectStore(TOOLS_STORE)
@@ -417,6 +486,11 @@ export class IndexedDBManager {
       const authorizationsStore = transaction.objectStore(AUTHORIZATIONS_STORE)
 
       Promise.all([
+        new Promise<void>((res, rej) => {
+          const req = mcpServersStore.clear()
+          req.onsuccess = () => res()
+          req.onerror = () => rej(req.error)
+        }),
         new Promise<void>((res, rej) => {
           const req = agentsStore.clear()
           req.onsuccess = () => res()
@@ -439,6 +513,16 @@ export class IndexedDBManager {
         }),
         new Promise<void>((res, rej) => {
           const req = authorizationsStore.clear()
+          req.onsuccess = () => res()
+          req.onerror = () => rej(req.error)
+        }),
+        new Promise<void>((res, rej) => {
+          const req = skillsStore.clear()
+          req.onsuccess = () => res()
+          req.onerror = () => rej(req.error)
+        }),
+        new Promise<void>((res, rej) => {
+          const req = skillFilesStore.clear()
           req.onsuccess = () => res()
           req.onerror = () => rej(req.error)
         })
@@ -578,6 +662,136 @@ export class IndexedDBManager {
     } catch (error) {
       devLog.error('Failed to get global default authorization:', error)
       return null
+    }
+  }
+
+  // MCP server operations
+  async saveMCPServer(server: MCPServer): Promise<void> {
+    try {
+      await this.update(MCP_SERVERS_STORE, server)
+    } catch (error) {
+      devLog.error('Failed to save MCP server:', error)
+      throw error
+    }
+  }
+
+  async getMCPServer(id: string): Promise<MCPServer | null> {
+    try {
+      // Heal records written by older versions of the store before handing them out
+      const server = await this.get<MCPServer>(MCP_SERVERS_STORE, id)
+      return server ? normalizeMCPServer(server) : server
+    } catch (error) {
+      devLog.error('Failed to get MCP server:', error)
+      return null
+    }
+  }
+
+  async getAllMCPServers(): Promise<MCPServer[]> {
+    try {
+      const servers = await this.getAll<MCPServer>(MCP_SERVERS_STORE)
+      // Heal records written by older versions of the store before handing them out
+      return servers.map((server) => normalizeMCPServer(server)).sort((a, b) => a.createdAt - b.createdAt)
+    } catch (error) {
+      devLog.error('Failed to get MCP servers:', error)
+      return []
+    }
+  }
+
+  async deleteMCPServer(id: string): Promise<void> {
+    try {
+      await this.delete(MCP_SERVERS_STORE, id)
+    } catch (error) {
+      devLog.error('Failed to delete MCP server:', error)
+      throw error
+    }
+  }
+
+  // Skill operations
+  async saveSkill(skill: Skill): Promise<void> {
+    try {
+      await this.update(SKILLS_STORE, skill)
+    } catch (error) {
+      devLog.error('Failed to save skill:', error)
+      throw error
+    }
+  }
+
+  async getSkill(id: string): Promise<Skill | null> {
+    try {
+      return await this.get<Skill>(SKILLS_STORE, id)
+    } catch (error) {
+      devLog.error('Failed to get skill:', error)
+      return null
+    }
+  }
+
+  async getAllSkills(): Promise<Skill[]> {
+    try {
+      const skills = await this.getAll<Skill>(SKILLS_STORE)
+      return skills.sort((a, b) => a.createdAt - b.createdAt)
+    } catch (error) {
+      devLog.error('Failed to get skills:', error)
+      return []
+    }
+  }
+
+  /** Delete a skill together with every file that belongs to it. */
+  async deleteSkill(id: string): Promise<void> {
+    try {
+      await this.deleteAllByIndex(SKILL_FILES_STORE, 'skillId', id)
+      await this.delete(SKILLS_STORE, id)
+    } catch (error) {
+      devLog.error('Failed to delete skill:', error)
+      throw error
+    }
+  }
+
+  /** Write a whole file set in one transaction so an import never lands half-way. */
+  async saveSkillFiles(records: SkillFileRecord[]): Promise<void> {
+    if (records.length === 0) return
+
+    try {
+      const db = await this.ensureDB()
+      await new Promise<void>((resolve, reject) => {
+        const transaction = db.transaction([SKILL_FILES_STORE], 'readwrite')
+        const store = transaction.objectStore(SKILL_FILES_STORE)
+        records.forEach((record) => store.put(record))
+
+        transaction.oncomplete = () => resolve()
+        transaction.onerror = () => reject(transaction.error)
+        transaction.onabort = () => reject(transaction.error)
+      })
+    } catch (error) {
+      devLog.error('Failed to save skill files:', error)
+      throw error
+    }
+  }
+
+  async getSkillFile(skillId: string, path: string): Promise<SkillFileRecord | null> {
+    try {
+      return await this.get<SkillFileRecord>(SKILL_FILES_STORE, skillId + ':' + path)
+    } catch (error) {
+      devLog.error('Failed to get skill file:', error)
+      return null
+    }
+  }
+
+  async getSkillFiles(skillId: string): Promise<SkillFileRecord[]> {
+    try {
+      const files = await this.getAllByIndex<SkillFileRecord>(SKILL_FILES_STORE, 'skillId', skillId)
+      return files.sort((a, b) => a.path.localeCompare(b.path))
+    } catch (error) {
+      devLog.error('Failed to get skill files:', error)
+      return []
+    }
+  }
+
+  async deleteSkillFiles(skillId: string): Promise<void> {
+    try {
+      await this.deleteAllByIndex(SKILL_FILES_STORE, 'skillId', skillId)
+    } catch (error) {
+      devLog.error('Failed to delete skill files:', error)
+      throw error
     }
   }
 }

@@ -1,21 +1,26 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Agent, Tool } from '@/types'
-import { X, Upload, Bot, Wrench, AlertTriangle } from 'lucide-react'
+import { Agent, Tool, Skill, SkillFileRecord } from '@/types'
+import { X, Upload, Bot, Wrench, AlertTriangle, BookOpen } from 'lucide-react'
+import { SerializedSkillFile, deserializeSkillFiles } from '@/lib/skills'
 import { useToast } from '@/components/ui/toast'
 
 interface ImportData {
   agents: Agent[]
   tools: Tool[]
+  // Optional: exports written before skills existed simply have nothing to import
+  skills?: Skill[]
+  skillFiles?: SerializedSkillFile[]
 }
 
 interface ImportModalProps {
   isOpen: boolean
   onClose: () => void
-  onImport: (agents: Agent[], tools: Tool[]) => void
+  onImport: (agents: Agent[], tools: Tool[], skills: Skill[], skillFiles: SkillFileRecord[]) => void
   existingAgents: Agent[]
   existingTools: Tool[]
+  existingSkills: Skill[]
 }
 
 // Helper function to merge headers, preserving existing values
@@ -31,11 +36,12 @@ const mergeHeaders = (existingHeaders: { key: string; value: string }[], importH
   return mergedHeaders
 }
 
-export function ImportModal({ isOpen, onClose, onImport, existingAgents, existingTools }: ImportModalProps) {
+export function ImportModal({ isOpen, onClose, onImport, existingAgents, existingTools, existingSkills }: ImportModalProps) {
   const { showToast, ToastContainer } = useToast()
   const [importData, setImportData] = useState<ImportData | null>(null)
   const [selectedAgents, setSelectedAgents] = useState<Set<string>>(new Set())
   const [selectedTools, setSelectedTools] = useState<Set<string>>(new Set())
+  const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set())
 
   // Reset state when modal opens
   useEffect(() => {
@@ -43,6 +49,7 @@ export function ImportModal({ isOpen, onClose, onImport, existingAgents, existin
       setImportData(null)
       setSelectedAgents(new Set())
       setSelectedTools(new Set())
+      setSelectedSkills(new Set())
     }
   }, [isOpen])
 
@@ -51,6 +58,7 @@ export function ImportModal({ isOpen, onClose, onImport, existingAgents, existin
     if (importData) {
       setSelectedAgents(new Set(importData.agents.map(a => a.id)))
       setSelectedTools(new Set(importData.tools.map(t => t.id)))
+      setSelectedSkills(new Set((importData.skills || []).map(skill => skill.id)))
     }
   }, [importData])
 
@@ -84,6 +92,12 @@ export function ImportModal({ isOpen, onClose, onImport, existingAgents, existin
         const data = JSON.parse(content) as ImportData
         
         // Validate the data structure
+        if (data && Array.isArray(data.agents) && Array.isArray(data.tools) && !data.skills) {
+          data.skills = []
+        }
+        if (data && data.skills && !data.skillFiles) {
+          data.skillFiles = []
+        }
         if (!data.agents || !data.tools || !Array.isArray(data.agents) || !Array.isArray(data.tools)) {
           showToast('Invalid file format. Expected agents and tools arrays.', 'error')
           return
@@ -141,6 +155,23 @@ export function ImportModal({ isOpen, onClose, onImport, existingAgents, existin
     })
   }
 
+  const handleSkillToggle = (skillId: string) => {
+    setSelectedSkills(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(skillId)) {
+        newSet.delete(skillId)
+      } else {
+        newSet.add(skillId)
+      }
+      return newSet
+    })
+  }
+
+  // Skills collide by name, not by id: importing "pdf-processing" replaces the installed one
+  const isSkillConflict = (skill: Skill) => {
+    return existingSkills.some(existing => existing.name === skill.name)
+  }
+
   const isAgentConflict = (agentId: string) => {
     return existingAgents.some(a => a.id === agentId)
   }
@@ -173,7 +204,13 @@ export function ImportModal({ isOpen, onClose, onImport, existingAgents, existin
         return importTool
       })
 
-    onImport(agentsToImport, toolsToImport)
+    const skillsToImport = (importData.skills || []).filter(skill => selectedSkills.has(skill.id))
+    const skillIds = skillsToImport.map(skill => skill.id)
+    const skillFilesToImport = deserializeSkillFiles(
+      (importData.skillFiles || []).filter(file => skillIds.indexOf(file.skillId) !== -1)
+    )
+
+    onImport(agentsToImport, toolsToImport, skillsToImport, skillFilesToImport)
     onClose()
   }
 
@@ -295,6 +332,47 @@ export function ImportModal({ isOpen, onClose, onImport, existingAgents, existin
                   })}
                 </div>
               </div>
+
+              {/* Skills Section */}
+              {importData.skills && importData.skills.length > 0 && (
+                <div>
+                  <h3 className="text-lg font-medium mb-3 flex items-center gap-2">
+                    <BookOpen className="w-4 h-4" />
+                    Skills ({importData.skills.length})
+                  </h3>
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {importData.skills.map(skill => {
+                      const hasConflict = isSkillConflict(skill)
+                      const fileCount = (importData.skillFiles || []).filter(file => file.skillId === skill.id).length
+                      return (
+                        <label key={skill.id} className="flex items-center gap-3 p-2 hover:bg-muted/60 rounded cursor-pointer border border-border bg-card">
+                          <input
+                            type="checkbox"
+                            checked={selectedSkills.has(skill.id)}
+                            onChange={() => handleSkillToggle(skill.id)}
+                            className="apg-checkbox"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-foreground flex items-center gap-2">
+                              {skill.name}
+                              {hasConflict && (
+                                <span className="inline-flex items-center gap-1 px-2 py-1 bg-orange-50 dark:bg-orange-950/20 text-orange-700 dark:text-orange-400 text-xs rounded">
+                                  <AlertTriangle className="w-3 h-3" />
+                                  Will replace
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-sm text-muted-foreground line-clamp-2">{skill.description}</div>
+                            <div className="text-xs text-muted-foreground mt-1">
+                              {fileCount} file{fileCount !== 1 ? 's' : ''}
+                            </div>
+                          </div>
+                        </label>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -302,7 +380,7 @@ export function ImportModal({ isOpen, onClose, onImport, existingAgents, existin
         {importData && (
           <div className="flex items-center justify-between p-6 border-t border-border bg-muted">
             <div className="text-sm text-muted-foreground">
-              Selected: {selectedAgents.size} agent{selectedAgents.size !== 1 ? 's' : ''}, {selectedTools.size} tool{selectedTools.size !== 1 ? 's' : ''}
+              Selected: {selectedAgents.size} agent{selectedAgents.size !== 1 ? 's' : ''}, {selectedTools.size} tool{selectedTools.size !== 1 ? 's' : ''}, {selectedSkills.size} skill{selectedSkills.size !== 1 ? 's' : ''}
             </div>
             <div className="flex gap-3">
               <button
@@ -313,7 +391,7 @@ export function ImportModal({ isOpen, onClose, onImport, existingAgents, existin
               </button>
               <button
                 onClick={handleImport}
-                disabled={selectedAgents.size === 0 && selectedTools.size === 0}
+                disabled={selectedAgents.size === 0 && selectedTools.size === 0 && selectedSkills.size === 0}
                 className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
               >
                 <Upload className="w-4 h-4" />

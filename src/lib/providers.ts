@@ -91,6 +91,16 @@ export const MODEL_PROVIDERS: Provider[] = [
     client: 'openrouter'
   },
   {
+    name: 'PPIO',
+    endpoint: 'https://api.ppio.com/openai/v1/chat/completions',
+    models: ['deepseek/deepseek-v4-pro', 'deepseek/deepseek-v4-flash', 'deepseek/deepseek-v3.2', 'qwen/qwen3.8-max', 'qwen/qwen3.8-flash', 'qwen/qwen3-coder-next', 'moonshotai/kimi-k3', 'moonshotai/kimi-k2.7-code', 'zai-org/glm-5.3', 'zai-org/glm-5.3-flash', 'minimax/minimax-m3', 'xiaomimimo/mimo-v2.5-pro'],
+    defaultModel: 'deepseek/deepseek-v4-flash',
+    requiresApiKey: true,
+    docsLink: 'https://ppio.com/docs/model/llm',
+    icon: 'llm-ppio',
+    client: 'openai'
+  },
+  {
     name: 'Ollama (Local)',
     endpoint: 'http://localhost:11434/v1/chat/completions',
     models: ['qwen3:8b', 'deepseek-r1:8b', 'llama2', 'llama2:13b', 'llama2:70b', 'codellama', 'mistral', 'mixtral', 'neural-chat', 'starling-lm'],

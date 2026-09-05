@@ -11,7 +11,9 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Slider } from '@/components/ui/slider'
 import { StatusIndicator } from './status-indicator'
-import { Settings, Eye, EyeOff, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react'
+import { FetchModelsDialog } from './fetch-models-dialog'
+import { fetchProviderModels } from '@/lib/model-list'
+import { Settings, Eye, EyeOff, ExternalLink, ChevronDown, ChevronUp, DownloadCloud } from 'lucide-react'
 
 interface APIConfigProps {
   config: APIConfig
@@ -25,6 +27,7 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
   const [dbManager] = useState(() => IndexedDBManager.getInstance())
   const [providerConfigs, setProviderConfigs] = useState<ProviderCustomConfig[]>([])
   const [showModelSettings, setShowModelSettings] = useState(false)
+  const [showFetchModels, setShowFetchModels] = useState(false)
   const [editingModels, setEditingModels] = useState('')
   const [selectedModels, setSelectedModels] = useState<string[]>([])
   const [availableModels, setAvailableModels] = useState<AvailableModel[]>([])
@@ -359,42 +362,90 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
     setShowModelSettings(true)
   }
 
+  /**
+   * Replace the provider's model list with `newModels`.
+   * Models that disappeared are removed from the enabled (available) models,
+   * and every model in `modelsToEnable` is enabled for chat.
+   */
+  const applyModelList = async (newModels: string[], modelsToEnable: string[] = []) => {
+    const oldModels = getCurrentModels()
+
+    // Find models that were removed
+    const removedModels = oldModels.filter(oldModel => !newModels.includes(oldModel))
+
+    // Remove deleted models from available models and selected models
+    for (const removedModel of removedModels) {
+      const modelId = `${selectedProvider.name}-${removedModel}`
+      try {
+        await dbManager.deleteAvailableModel(modelId)
+      } catch (error) {
+        console.error('Failed to delete available model:', error)
+      }
+    }
+
+    // Enable requested models (e.g. newly fetched ones)
+    for (const model of modelsToEnable) {
+      if (!newModels.includes(model)) continue
+      const availableModel: AvailableModel = {
+        id: `${selectedProvider.name}-${model}`,
+        provider: selectedProvider.name,
+        model,
+        displayName: `${selectedProvider.name} - ${model}`
+      }
+      try {
+        await dbManager.saveAvailableModel(availableModel)
+      } catch (error) {
+        console.error('Failed to save available model:', error)
+      }
+    }
+
+    // Update selected models to only include models that still exist
+    const updatedSelectedModels = Array.from(new Set([
+      ...selectedModels.filter(model => newModels.includes(model)),
+      ...modelsToEnable.filter(model => newModels.includes(model))
+    ]))
+    setSelectedModels(updatedSelectedModels)
+
+    // Save the new models list
+    await saveProviderConfig({ models: newModels })
+
+    // Reload available models to reflect changes
+    await loadAvailableModels()
+
+    // Notify other parts of the app to refresh available models
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('agent-playground-available-models-changed'))
+    }
+  }
+
   const handleModelSettingsSave = async () => {
     try {
       const newModels = editingModels.split('\n').map(m => m.trim()).filter(m => m)
-      const oldModels = getCurrentModels()
-
-      // Find models that were removed
-      const removedModels = oldModels.filter(oldModel => !newModels.includes(oldModel))
-
-      // Remove deleted models from available models and selected models
-      for (const removedModel of removedModels) {
-        const modelId = `${selectedProvider.name}-${removedModel}`
-        try {
-          await dbManager.deleteAvailableModel(modelId)
-        } catch (error) {
-          console.error('Failed to delete available model:', error)
-        }
-      }
-
-      // Update selected models to only include models that still exist
-      const updatedSelectedModels = selectedModels.filter(model => newModels.includes(model))
-      setSelectedModels(updatedSelectedModels)
-
-      // Save the new models list
-      await saveProviderConfig({ models: newModels })
+      await applyModelList(newModels)
       setShowModelSettings(false)
-
-      // Reload available models to reflect changes
-      await loadAvailableModels()
-
-      // Notify other parts of the app to refresh available models
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new Event('agent-playground-available-models-changed'))
-      }
     } catch (error) {
       console.error('Failed to save models:', error)
     }
+  }
+
+  const handleFetchModels = async () => {
+    const result = await fetchProviderModels(selectedProvider.name, config)
+    return result.models
+  }
+
+  /**
+   * Merge the user's picks from the fetch dialog into the provider's model list:
+   * - fetched models that are checked are kept / added
+   * - fetched models that are unchecked are dropped
+   * - models not returned by the API (added by hand) are preserved
+   */
+  const handleFetchModelsApply = async (fetchedModels: string[], checkedModels: string[]) => {
+    const currentModels = getCurrentModels()
+    const fetchedSet = new Set(fetchedModels)
+    const manualModels = currentModels.filter(m => !fetchedSet.has(m))
+    const newModels = Array.from(new Set([...manualModels, ...checkedModels]))
+    const newlyAdded = checkedModels.filter(m => !currentModels.includes(m))
+    await applyModelList(newModels, newlyAdded)
   }
 
   return (
@@ -496,14 +547,28 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
             <Label htmlFor="models">
               {selectedProvider.name === 'Azure OpenAI' ? 'Available Deployments' : 'Available Models'}
             </Label>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-auto p-1"
-              onClick={handleModelSettingsOpen}
-            >
-              <Settings className="w-3 h-3" />
-            </Button>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-auto p-1 text-xs"
+                onClick={() => setShowFetchModels(true)}
+                disabled={!config.endpoint.trim()}
+                title="Fetch model list from the provider's /models API"
+              >
+                <DownloadCloud className="w-3 h-3 mr-1" />
+                Fetch
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-auto p-1"
+                onClick={handleModelSettingsOpen}
+                title="Edit model list manually"
+              >
+                <Settings className="w-3 h-3" />
+              </Button>
+            </div>
           </div>
           <div className="border border-border rounded-md p-3 max-h-40 overflow-y-auto">
             {getCurrentModels().map((model) => (
@@ -635,6 +700,16 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
             </div>
         </div>
       </div>
+
+      {/* Fetch Models Dialog */}
+      <FetchModelsDialog
+        isOpen={showFetchModels}
+        providerName={selectedProvider.name}
+        currentModels={getCurrentModels()}
+        onFetch={handleFetchModels}
+        onApply={handleFetchModelsApply}
+        onClose={() => setShowFetchModels(false)}
+      />
 
       {/* Model Settings Modal */}
       {showModelSettings && (

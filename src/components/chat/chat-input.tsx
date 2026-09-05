@@ -7,9 +7,14 @@ import { ModelSelector } from '@/components/ui/model-selector'
 import { ToolSelector } from '@/components/ui/tool-selector'
 import { AutoSwitch } from '@/components/ui/auto-switch'
 import { Send, Square } from 'lucide-react'
+import { useSkillAutocomplete } from './skill-autocomplete'
+import { ToolCountBadges } from './tool-count-badges'
+
+// Stable identity so the autocomplete memo does not recompute on every render
+const EMPTY_SKILLS: Skill[] = []
 import { useDraftMessage } from '@/hooks/use-draft-message'
 import { useAvailableModels } from '@/hooks/use-available-models'
-import { Tool } from '@/types'
+import { Tool, Skill } from '@/types'
 
 interface ChatInputProps {
   onSendMessage: (content: string, selectedToolIds?: string[]) => void
@@ -21,6 +26,9 @@ interface ChatInputProps {
   tools?: Tool[]
   selectedToolIds?: string[]
   onToolsChange?: (toolIds: string[]) => void
+  mcpToolCount?: number
+  skillCount?: number
+  skills?: Skill[]
   autoMode?: boolean
   onAutoModeChange?: (enabled: boolean) => void
 }
@@ -39,6 +47,9 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(function ChatI
   tools = [],
   selectedToolIds = [],
   onToolsChange,
+  mcpToolCount = 0,
+  skillCount = 0,
+  skills = EMPTY_SKILLS,
   autoMode = false,
   onAutoModeChange
 }, ref) {
@@ -54,7 +65,12 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(function ChatI
     }
   }
 
+  const skillAutocomplete = useSkillAutocomplete({ value: input, skills, onComplete: setInput })
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    // The popover owns Enter/Tab/arrows while it is open, so completing never sends
+    if (skillAutocomplete.handleKeyDown(e)) return
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleSubmit(e)
@@ -94,7 +110,8 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(function ChatI
   return (
     <div className="border-t border-border bg-card p-4">
       <form onSubmit={handleSubmit} className="space-y-3">
-        <div className="flex-1">
+        <div className="flex-1 relative">
+          {skillAutocomplete.popover}
           <Textarea
             ref={textareaRef}
             value={input}
@@ -111,29 +128,30 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(function ChatI
             rows={1}
           />
         </div>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center flex-wrap gap-x-4 gap-y-2 min-w-0">
             <ModelSelector 
               autoMode={autoMode}
               onAutoModeChange={onAutoModeChange}
               showAutoSwitch={!!currentAgent} // Only show auto switch in Agent mode
             />
             {!currentAgent && tools.length > 0 && onToolsChange && (
-              <>
-                <ToolSelector
-                  tools={tools}
-                  selectedToolIds={selectedToolIds}
-                  onToolsChange={onToolsChange}
-                />
-                {/* Auto switch in Non-Agent mode - place after tool selector */}
-                {onAutoModeChange && (
-                  <AutoSwitch
-                    autoMode={autoMode}
-                    onAutoModeChange={onAutoModeChange}
-                  />
-                )}
-              </>
+              <ToolSelector
+                tools={tools}
+                selectedToolIds={selectedToolIds}
+                onToolsChange={onToolsChange}
+              />
             )}
+            {/* Auto switch in Non-Agent mode: offered whenever anything is callable, local
+                tools or not, since MCP and skill tools do not need a tool selection */}
+            {!currentAgent && onAutoModeChange && (tools.length > 0 || mcpToolCount > 0 || skillCount > 0) && (
+              <AutoSwitch
+                autoMode={autoMode}
+                onAutoModeChange={onAutoModeChange}
+              />
+            )}
+            {/* Counts go last, after the auto switch */}
+            <ToolCountBadges mcpToolCount={mcpToolCount} skillCount={skillCount} />
           </div>
           <div className="flex gap-2">
             {isLoading ? (

@@ -1,7 +1,9 @@
 'use client'
 
 import React, { useEffect, useRef, useState } from 'react'
-import { Message as MessageType, AgentMessage, ToolCall, Agent, Tool, Authorization } from '@/types'
+import { Message as MessageType, AgentMessage, ToolCall, Agent, Tool, Authorization, TokenUsage, ToolCallExecution } from '@/types'
+import { addUsage, emptyUsage, normalizeUsage } from '@/lib/usage'
+import { UsageDisplay } from './usage-display'
 import { formatTimestamp } from '@/lib/utils'
 import { Message } from './message'
 import { ToolCallDisplay } from '@/components/tools'
@@ -24,11 +26,7 @@ interface MergedMessage {
   content: string
   timestamp: number
   messages: AgentMessage[]
-  totalUsage: {
-    prompt_tokens: number
-    completion_tokens: number
-    total_tokens: number
-  }
+  totalUsage: TokenUsage
   provider?: string
   model?: string
   isMerged: true
@@ -48,6 +46,7 @@ interface ChatMessagesProps {
   formatReasoningDuration?: (durationMs: number) => string
   currentAgent?: AgentWithTools | null
   tools?: Tool[]
+  resolveToolForExecution?: (execution?: ToolCallExecution, toolCall?: ToolCall) => Tool | undefined
   authorizations?: Authorization[]
   scrollToBottomTrigger?: number // Add trigger to force scroll to bottom
   scrollToTopTrigger?: number // Add trigger to force scroll to top
@@ -58,6 +57,8 @@ interface ChatMessagesProps {
   onScrollToTopClick?: () => void // Callback for scroll to top button click
   onProvideToolResult?: (toolCallId: string, result: string) => void
   onMarkToolFailed?: (toolCallId: string, error: string) => void
+  onExecuteMCPTool?: (toolCall: ToolCall, tool: Tool) => Promise<void>
+  onExecuteBuiltinTool?: (toolCall: ToolCall, tool: Tool) => Promise<void>
   onRetryMessage?: (messageId: string) => void
   onDeleteMessage?: (messageId: string) => void
   onEditMessage?: (messageId: string, newContent: string) => void
@@ -81,12 +82,15 @@ export function ChatMessages({
   formatReasoningDuration,
   currentAgent,
   tools = [],
+  resolveToolForExecution,
   authorizations = [],
   scrollToBottomTrigger,
   scrollToTopTrigger,
   forceScrollTrigger,
   onProvideToolResult,
   onMarkToolFailed,
+  onExecuteMCPTool,
+  onExecuteBuiltinTool,
   onRetryMessage,
   onDeleteMessage,
   onEditMessage,
@@ -212,11 +216,7 @@ export function ChatMessages({
             content: '',
             timestamp: agentMessage.timestamp,
             messages: [agentMessage],
-            totalUsage: {
-              prompt_tokens: agentMessage.usage?.prompt_tokens || 0,
-              completion_tokens: agentMessage.usage?.completion_tokens || 0,
-              total_tokens: agentMessage.usage?.total_tokens || 0
-            },
+            totalUsage: addUsage(emptyUsage(), normalizeUsage(agentMessage.usage)),
             provider: agentMessage.provider,
             model: agentMessage.model,
             isMerged: true
@@ -231,9 +231,7 @@ export function ChatMessages({
             
             // Accumulate token usage
             if (nextAgentMessage.usage) {
-              mergedGroup.totalUsage.prompt_tokens += nextAgentMessage.usage.prompt_tokens || 0
-              mergedGroup.totalUsage.completion_tokens += nextAgentMessage.usage.completion_tokens || 0
-              mergedGroup.totalUsage.total_tokens += nextAgentMessage.usage.total_tokens || 0
+              mergedGroup.totalUsage = addUsage(mergedGroup.totalUsage, normalizeUsage(nextAgentMessage.usage))
             }
             
             i++
@@ -258,7 +256,14 @@ export function ChatMessages({
   const displayMessages = getDisplayMessages()
 
   return (
-    <div ref={containerRef} className="flex-1 overflow-y-auto p-4 space-y-4 min-w-0">
+    // overflowAnchor is disabled because browser scroll anchoring would move scrollTop on its
+    // own when the streaming block is replaced by the persisted message (collapsing the
+    // reasoning shrinks the content). useSmartScroll owns the scroll position instead.
+    <div
+      ref={containerRef}
+      className="flex-1 overflow-y-auto p-4 space-y-4 min-w-0"
+      style={{ overflowAnchor: 'none' }}
+    >
       {displayMessages.length === 0 ? (
         <div className="flex items-center justify-center h-full text-center">
           <div className="space-y-4">
@@ -300,6 +305,7 @@ export function ChatMessages({
                   key={message.id}
                   mergedMessage={mergedMessage}
                   tools={tools}
+                  resolveToolForExecution={resolveToolForExecution}
                   agent={currentAgent ? { ...currentAgent, tools: currentAgent.tools.map(t => t.id) } : undefined}
                   authorizations={authorizations}
                   expandedReasoningMessages={expandedReasoningMessages}
@@ -308,6 +314,8 @@ export function ChatMessages({
                   formatReasoningDuration={formatReasoningDuration}
                   onProvideToolResult={onProvideToolResult}
                   onMarkToolFailed={onMarkToolFailed}
+                  onExecuteMCPTool={onExecuteMCPTool}
+                  onExecuteBuiltinTool={onExecuteBuiltinTool}
                   onRetryMessage={onRetryMessage}
                   onDeleteMessage={onDeleteMessage}
                   onEditMessage={onEditMessage}
@@ -330,6 +338,7 @@ export function ChatMessages({
                   key={message.id}
                   message={message}
                   tools={tools}
+                  resolveToolForExecution={resolveToolForExecution}
                   agent={currentAgent ? { ...currentAgent, tools: currentAgent.tools.map(t => t.id) } : undefined}
                   authorizations={authorizations}
                   isReasoningExpanded={expandedReasoningMessages.has(message.id)}
@@ -338,6 +347,8 @@ export function ChatMessages({
                   formatReasoningDuration={formatReasoningDuration}
                   onProvideToolResult={onProvideToolResult}
                   onMarkToolFailed={onMarkToolFailed}
+                  onExecuteMCPTool={onExecuteMCPTool}
+                  onExecuteBuiltinTool={onExecuteBuiltinTool}
                   onRetryMessage={onRetryMessage}
                   onDeleteMessage={onDeleteMessage}
                   onEditMessage={onEditMessage}
@@ -457,6 +468,7 @@ export function ChatMessages({
 interface MergedMessageDisplayProps {
   mergedMessage: MergedMessage
   tools: Tool[]
+  resolveToolForExecution?: (execution?: ToolCallExecution, toolCall?: ToolCall) => Tool | undefined
   agent?: Agent
   authorizations: Authorization[]
   expandedReasoningMessages: Set<string>
@@ -465,6 +477,8 @@ interface MergedMessageDisplayProps {
   formatReasoningDuration?: (durationMs: number) => string
   onProvideToolResult?: (toolCallId: string, result: string) => void
   onMarkToolFailed?: (toolCallId: string, error: string) => void
+  onExecuteMCPTool?: (toolCall: ToolCall, tool: Tool) => Promise<void>
+  onExecuteBuiltinTool?: (toolCall: ToolCall, tool: Tool) => Promise<void>
   onRetryMessage?: (messageId: string) => void
   onDeleteMessage?: (messageId: string) => void
   onEditMessage?: (messageId: string, newContent: string) => void
@@ -484,6 +498,7 @@ interface MergedMessageDisplayProps {
 function MergedMessageDisplay({ 
   mergedMessage, 
   tools, 
+  resolveToolForExecution,
   agent, 
   authorizations,
   expandedReasoningMessages,
@@ -492,6 +507,8 @@ function MergedMessageDisplay({
   formatReasoningDuration,
   onProvideToolResult,
   onMarkToolFailed,
+  onExecuteMCPTool,
+  onExecuteBuiltinTool,
   onRetryMessage,
   onDeleteMessage,
   onEditMessage,
@@ -671,7 +688,10 @@ function MergedMessageDisplay({
                       }
                     }
 
-                    const tool = tools.find(t => t.name === toolCall.function.name)
+                    // Bound tool for this call; see message.tsx for why the name is not used
+                    const tool = resolveToolForExecution
+                      ? resolveToolForExecution(execution, toolCall)
+                      : undefined
 
                     // Check if this tool call is currently streaming (for merged display)
                     // Use stable reference to prevent unnecessary re-renders
@@ -688,6 +708,8 @@ function MergedMessageDisplay({
                         authorizations={authorizations}
                         onProvideResult={onProvideToolResult || (() => {})}
                         onMarkFailed={onMarkToolFailed || (() => {})}
+                        onExecuteMCPTool={onExecuteMCPTool}
+                        onExecuteBuiltinTool={onExecuteBuiltinTool}
                         onScrollToBottom={onScrollToBottom}
                         autoMode={autoMode}
                         isCollapsed={autoMode}
@@ -802,9 +824,7 @@ function MergedMessageDisplay({
         {/* Combined token usage */}
         {mergedMessage.totalUsage && (
           <div className="mt-3 text-xs text-muted-foreground flex items-center gap-2">
-            <span>
-              {mergedMessage.totalUsage.prompt_tokens} prompt + {mergedMessage.totalUsage.completion_tokens} completion = {mergedMessage.totalUsage.total_tokens} tokens
-            </span>
+            <UsageDisplay usage={mergedMessage.totalUsage} />
             <Tooltip content={getModelTooltip(mergedMessage.provider, mergedMessage.model)}>
               <div className="flex items-center justify-center w-4 h-4 text-gray-400 hover:text-gray-600 transition-colors">
                 {getModelIcon(mergedMessage.provider)}

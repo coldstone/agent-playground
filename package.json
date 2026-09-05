@@ -1,6 +1,6 @@
 {
   "name": "agent-playground",
-  "version": "0.2.15",
+  "version": "0.3.0",
   "description": "A comprehensive playground for testing AI agents and models with support for multiple LLM providers",
   "main": "dist/index.js",
   "bin": {
@@ -39,9 +39,11 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
+    "@modelcontextprotocol/client": "^2.0.0",
     "@radix-ui/react-select": "^2.2.5",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.0.0",
+    "fflate": "^0.8.3",
     "lucide-react": "^0.294.0",
     "next": "14.0.4",
     "react": "^18",
@@ -52,7 +54,8 @@
     "rehype-highlight": "^7.0.2",
     "rehype-katex": "^7.0.1",
     "remark-gfm": "^4.0.1",
-    "remark-math": "^6.0.0"
+    "remark-math": "^6.0.0",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@types/node": "^20",

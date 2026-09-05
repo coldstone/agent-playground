@@ -1,0 +1,25 @@
+Document summary template
+=========================
+
+Title:        {title}
+Author:       {author}
+Pages:        {page_count}
+Type:         {digital text | scanned | form}
+
+Overview
+--------
+{two or three sentences on what the document is and who it is for}
+
+Key points
+----------
+- {point} (p. {page})
+- {point} (p. {page})
+- {point} (p. {page})
+
+Tables and figures
+------------------
+{table or figure caption} - p. {page}
+
+Not read
+--------
+{pages skipped, and why}

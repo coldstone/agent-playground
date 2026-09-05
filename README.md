@@ -4,19 +4,75 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![npm](https://img.shields.io/npm/v/agent-playground.svg)](https://www.npmjs.com/package/agent-playground)
 
-A comprehensive development and debugging platform for AI Agents and Tools. Agent Playground helps developers create, test, and debug AI agents powered by various Large Language Models (LLMs) with custom tools and API integrations.
+A development and debugging platform for AI agents. Agent Playground lets you build, run and inspect
+agents that reach the outside world through three kinds of tools — your own **local HTTP tools**,
+**MCP servers** over Streamable HTTP, and **Agent Skills** written as `SKILL.md` — against any of a
+dozen LLM providers. Everything runs in the browser: agents, tools, skills and conversations are
+stored locally in IndexedDB, and API keys never leave your machine.
 
 ![Screenshot of Agent Playground](screenshot-0-agent-playground.png)
 
 ![Screenshot of Agent Playground](screenshot-agent-playground.png)
 
+> **New in 0.3.0:** MCP servers (Streamable HTTP, dual-era) and Agent Skills (`SKILL.md`), both usable in every conversation.
+
 ## ✨ Key Features
 
-### 🤖 Multi-Agent Development
-- **Agent Management**: Create and configure multiple AI agents with custom instructions
-- **Agent Templates**: Pre-built agent templates for common use cases
-- **AI-Powered Generation**: Generate agent instructions using AI assistance
-- **Multi-Language Support**: Generate instructions in user's preferred language
+### 🔗 MCP Servers (Streamable HTTP)
+Connect any Streamable HTTP MCP server and its tools become available to the model in every conversation.
+
+- **Add by JSON**: Paste a standard `mcpServers` config in the **MCP Servers** panel:
+  ```json
+  {
+    "mcpServers": {
+      "my-server": {
+        "url": "https://example.com/mcp",
+        "headers": { "Authorization": "Bearer <token>" }
+      }
+    }
+  }
+  ```
+- **Add by form**: Or fill in the URL and any static headers by hand — several servers can be pasted at once
+- **Dual-era protocol**: Speaks the stateless `2026-07-28` protocol and falls back to the legacy `initialize` handshake (2025-11-25 and earlier) automatically; the negotiated version is shown on the server card
+- **Server-side proxy**: All MCP traffic goes through Next.js API routes under `/api/mcp`, so there is no CORS to fight and your credentials only travel on the browser→server hop of your own instance
+- **Per-tool control**: Enable or disable individual tools per server; the chat bar shows how many MCP tools the model can currently see
+- **Auto and manual execution**: Turn Auto on to let the model run tools by itself, or leave it off and press **Call** on each tool card to review the arguments first
+- **Progress and logs**: `notifications/progress` updates and server log messages are relayed into the tool card while a long call runs
+- **Elicitation**: Servers that ask the user for input mid-call render a prompt in the chat — both `form` mode (a generated form from the requested schema) and `url` mode (an authorization link)
+- **Rich results**: Structured content and image results are rendered, not flattened to text
+- **Live tool lists**: `tools/list_changed` notifications refresh the tool list without reconnecting
+- **Resources and prompts**: Browse what a server exposes and preview a resource or prompt straight from the panel
+- **Safe naming**: An MCP tool whose name collides with a local tool is offered under a server-prefixed name, and every call is bound to the exact tool that was offered — see [How tool calls are resolved](#-how-tool-calls-are-resolved)
+- **Limitations**: stdio servers are not supported (HTTP only), and OAuth is not implemented — static headers only
+
+### 📚 Agent Skills
+A skill is a folder of instructions the model loads only when a task calls for it, following the open
+[Agent Skills specification](https://agentskills.io/specification).
+
+- **The format**: a required `SKILL.md` with YAML frontmatter plus optional `references/`, `scripts/`, `assets/`:
+  ```markdown
+  ---
+  name: pdf-processing
+  description: Extract text, tables and metadata from PDFs. Use when the user uploads a PDF or asks about its contents.
+  ---
+
+  # PDF processing
+
+  Read [references/REFERENCE.md](references/REFERENCE.md) for the details of each document class.
+  ```
+- **Three ways to import**: pick a skill folder (a folder holding several skill directories imports all of them), upload a `.zip`, or paste a single `SKILL.md`
+- **Bundled sample**: the empty Skills panel offers a one-click import of the `pdf-processing` sample so you can try the whole flow immediately
+- **Per-skill enable**: toggle each skill on or off; the chat bar shows how many skills are active
+- **Progressive disclosure**: enabled skills appear in the system prompt as a name + description catalog only (~50-100 tokens each); the full instructions are pulled in on demand
+- **Four built-in tools**, executed in the page against the local copy, never over the network:
+  - `load_skill` — load a skill's full instructions and the list of files it ships
+  - `read_skill_file` — read one bundled text file, paged for long references
+  - `list_skill_files` — browse the skill's files with their sizes
+  - `search_skill_files` — grep the skill's text files and get `path:line` matches
+- **Explicit invocation**: type `/skill-name your request` to inject a skill directly — a `/` autocomplete lists the enabled skills, and the sent message shows a compact **Skill** chip instead of the injected block
+- **In-app viewer**: browse the file tree, read Markdown rendered like chat content, follow relative links between a skill's files inside the viewer, edit any text file in place (editing `SKILL.md` re-validates it), and download the skill as a zip
+- **Export and manage**: skills travel with the app-data export (text inline, binaries base64) and can be removed one by one or through the batch-delete dialog
+- **Limitation**: bundled scripts are **never executed** — the model reads them and reproduces the logic, or asks you to run them
 
 ### 🛠️ Advanced Tool System
 - **Custom Tool Creation**: Build tools with JSON schema definitions
@@ -25,6 +81,12 @@ A comprehensive development and debugging platform for AI Agents and Tools. Agen
 - **Manual Testing**: Test tools manually before agent integration
 - **Tool Templates**: Quick-start templates for common tool patterns
 
+### 🤖 Multi-Agent Development
+- **Agent Management**: Create and configure multiple AI agents with custom instructions
+- **Agent Templates**: Pre-built agent templates for common use cases
+- **AI-Powered Generation**: Generate agent instructions using AI assistance
+- **Multi-Language Support**: Generate instructions in user's preferred language
+
 ### 🔌 Multi-LLM Provider Support
 - **OpenAI**: GPT-4.1, GPT-4o, GPT-o1 and other OpenAI models
 - **Deepseek**: Deepseek-chat and reasoning models
@@ -32,8 +94,10 @@ A comprehensive development and debugging platform for AI Agents and Tools. Agen
 - **Doubao**: ByteDance's AI models
 - **Qianfan**: Baidu's AI platform
 - **XunfeiXinhuo**: iFlytek's AI models
+- **OpenRouter / PPIO**: Aggregated access to many models via OpenAI-compatible APIs
 - **Ollama**: Local model deployment
 - **Custom Providers**: Any OpenAI-compatible API endpoint
+- **Model Discovery**: Fetch the provider's model list via the `/models` API and pick the ones you want
 
 ### 💬 Interactive Chat Interface
 - **Real-time Streaming**: Live response streaming from LLMs
@@ -45,7 +109,7 @@ A comprehensive development and debugging platform for AI Agents and Tools. Agen
 
 ### 🔧 Developer-Friendly Features
 - **Local Storage**: All data stored locally in browser (IndexedDB)
-- **Import/Export**: Backup and share agent/tool configurations
+- **Import/Export**: Backup and share agents, tools and skills
 - **Hot Reload**: Instant updates during development
 - **Error Handling**: Comprehensive error messages and debugging info
 - **Responsive Design**: Works on desktop and mobile devices
@@ -186,6 +250,29 @@ npm start
 4. Monitor token usage and API costs
 5. Iterate and improve your agent configuration
 
+### 5. Connect an MCP Server
+1. Open the **MCP Servers** panel on the right and click **+**
+2. Paste an `mcpServers` JSON config, or enter the server URL and any auth headers
+3. The server connects immediately; expand its card to see the negotiated protocol, tools, resources and prompts
+4. Switch individual tools off if you only want part of the server, and use the card toggle to take the whole server offline
+5. Start a conversation — the chat bar shows the MCP tool count, and calls appear as cards you can run manually or let Auto mode execute
+
+### 6. Add a Skill
+1. Open the **Skills** panel and click **+** (or **Import sample skill** on the empty state)
+2. Import a skill folder, a `.zip`, or paste a `SKILL.md`
+3. Warnings from lenient validation are shown on the card — a missing `description` is the only fatal one
+4. Keep the skill enabled so its name and description reach the model's catalog
+5. Ask a question the skill's description matches, and watch the model call `load_skill` and then read the files it needs
+6. Or invoke it yourself: type `/` in the chat box, pick the skill and add your request
+
+## 🧭 How Tool Calls Are Resolved
+Local tools, MCP tools and built-in skill tools share one function namespace, so two of them can end up
+with the same name. Agent Playground binds every tool call to a concrete tool **at the moment the model
+makes it**, resolved only against the tools that were sent in that request, and executes it through that
+binding — a local tool can never run in place of the MCP tool the model actually called. Colliding MCP
+tools are additionally offered under a server-prefixed name, so the model never sees two tools with one
+name.
+
 ## 🏗️ Building and Deployment
 
 ### Development Build
@@ -216,10 +303,11 @@ npx tsc --noEmit
 
 ```
 agent-playground/
-├── public/                  # Static assets and icons
+├── public/                  # Static assets, icons and the bundled sample skill
 ├── src/
 │   ├── app/                 # Next.js app directory
 │   │   ├── api/             # API routes
+│   │   │   └── mcp/         # MCP proxy routes (connect, tools, resources, prompts, elicitation)
 │   │   ├── debug/           # Debug pages
 │   │   └── markdown-test/   # Markdown testing page
 │   ├── components/          # React components
@@ -235,6 +323,8 @@ agent-playground/
 │   ├── lib/                 # Utility libraries and services
 │   │   ├── clients/         # API client implementations
 │   │   ├── generators/      # AI-powered generators
+│   │   ├── mcp/             # MCP client and Streamable HTTP transport
+│   │   ├── skills/          # Agent Skills: parsing, import/export, prompt, built-in tools
 │   │   └── storage/         # Data persistence layer
 │   ├── styles/              # CSS and styling files
 │   └── types/               # TypeScript type definitions

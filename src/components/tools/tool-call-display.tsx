@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { formatTimestamp } from '@/lib/utils'
 import { getMergedHeaders, getEffectiveAuthorization, migrateAgentTools } from '@/lib/authorization'
-import { Wrench as ToolIcon, Play, Check, X, Clock, AlertCircle, Globe, Send, Copy, ChevronDown, ChevronUp, Settings2 } from 'lucide-react'
+import { Wrench as ToolIcon, Play, Check, X, Clock, AlertCircle, Globe, Send, Copy, ChevronDown, ChevronUp, Settings2, Plug, Lock, ShieldAlert, BookOpen } from 'lucide-react'
 import { useToast } from '@/components/ui/toast'
 
 interface ToolCallDisplayProps {
@@ -19,6 +19,8 @@ interface ToolCallDisplayProps {
   authorizations?: Authorization[]
   onProvideResult: (toolCallId: string, result: string) => void
   onMarkFailed: (toolCallId: string, error: string) => void
+  onExecuteMCPTool?: (toolCall: ToolCall, tool: Tool) => Promise<void>
+  onExecuteBuiltinTool?: (toolCall: ToolCall, tool: Tool) => Promise<void>
   isStreaming?: boolean
   onScrollToBottom?: () => void
   autoMode?: boolean
@@ -74,6 +76,8 @@ export function ToolCallDisplay({
   authorizations = [],
   onProvideResult,
   onMarkFailed,
+  onExecuteMCPTool,
+  onExecuteBuiltinTool,
   isStreaming = false,
   onScrollToBottom,
   autoMode = false,
@@ -86,6 +90,8 @@ export function ToolCallDisplay({
   const [isProvidingResult, setIsProvidingResult] = useState(false)
   const [isProvidingError, setIsProvidingError] = useState(false)
   const [isRequestingHttp, setIsRequestingHttp] = useState(false)
+  const [isCallingMCP, setIsCallingMCP] = useState(false)
+  const [isCallingBuiltin, setIsCallingBuiltin] = useState(false)
   const [httpHeaders, setHttpHeaders] = useState<{ key: string; value: string }[]>([])
   const [httpUrl, setHttpUrl] = useState('')
   const [isManuallyExpanded, setIsManuallyExpanded] = useState(false)
@@ -93,6 +99,18 @@ export function ToolCallDisplay({
   const [displayedAiDescription, setDisplayedAiDescription] = useState('')
   const [lastAiDescriptionLength, setLastAiDescriptionLength] = useState(0)
   const typewriterTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Skill name carried by a built-in skill tool call, shown next to the tool kind
+  const skillArgumentName = useMemo(() => {
+    if (!tool?.builtin) return ''
+    try {
+      const args = JSON.parse(toolCall.function.arguments || '{}')
+      const value = tool.builtin.kind === 'load_skill' ? args.name : args.skill
+      return typeof value === 'string' ? value : ''
+    } catch {
+      return ''
+    }
+  }, [tool, toolCall.function.arguments])
 
   // Initialize HTTP configuration when tool or authorization changes
   const { mergedHeaders, httpRequestUrl } = useMemo(() => {
@@ -146,6 +164,32 @@ export function ToolCallDisplay({
     setIsProvidingResult(false)
     setIsProvidingError(false)
     setIsRequestingHttp(false)
+  }
+
+  const handleMCPCall = async () => {
+    if (!tool?.mcp || !onExecuteMCPTool) return
+    setIsCallingMCP(true)
+    try {
+      await onExecuteMCPTool(toolCall, tool)
+      onScrollToBottom?.()
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'MCP tool call failed', 'error')
+    } finally {
+      setIsCallingMCP(false)
+    }
+  }
+
+  const handleBuiltinCall = async () => {
+    if (!tool?.builtin || !onExecuteBuiltinTool) return
+    setIsCallingBuiltin(true)
+    try {
+      await onExecuteBuiltinTool(toolCall, tool)
+      onScrollToBottom?.()
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Skill tool call failed', 'error')
+    } finally {
+      setIsCallingBuiltin(false)
+    }
   }
 
   const handleHttpRequest = async () => {
@@ -646,6 +690,117 @@ export function ToolCallDisplay({
                     </div>
                   )}
                 </div>
+              </div>
+            )}
+
+            {tool?.builtin && (
+              <div className="border border-border border-amber-100 dark:border-amber-900/50 rounded">
+                <div className="bg-amber-50 dark:bg-amber-950/50 px-3 py-2 rounded-t border-b border-border border-amber-100 dark:border-amber-900/50 flex items-center gap-2">
+                  <BookOpen className="w-4 h-4 text-amber-600" />
+                  <span className="text-sm font-medium text-amber-600">Skill</span>
+                  <span className="text-xs text-muted-foreground truncate">
+                    {tool.builtin.kind}
+                    {skillArgumentName ? ' · ' + skillArgumentName : ''}
+                  </span>
+                  <div className="ml-auto flex-shrink-0">
+                    {!isStreaming && execution?.status === 'pending' && !autoMode && onExecuteBuiltinTool && (
+                      !isCallingBuiltin ? (
+                        <Button
+                          size="xs"
+                          onClick={handleBuiltinCall}
+                          className="flex items-center gap-1 px-2 py-3 text-xs"
+                          disabled={isProvidingResult || isProvidingError}
+                        >
+                          <Play className="w-3 h-3" />
+                          Run
+                        </Button>
+                      ) : (
+                        <div className="flex items-center gap-1 text-xs text-amber-600">
+                          <div className="w-3 h-3 border border-amber-600 border-t-transparent rounded-full animate-spin" />
+                          Running...
+                        </div>
+                      )
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {tool?.mcp && (
+              <div className="border border-border border-violet-100 dark:border-violet-900/50 rounded">
+                <div className="bg-violet-50 dark:bg-violet-950/50 px-3 py-2 rounded-t border-b border-border border-violet-100 dark:border-violet-900/50 flex items-center gap-2">
+                  <Plug className="w-4 h-4 text-violet-600" />
+                  <span className="text-sm font-medium text-violet-600">MCP Tool</span>
+                  <span className="text-xs text-muted-foreground truncate">
+                    {tool.mcp.serverName} · {tool.mcp.toolName}
+                  </span>
+                  {tool.mcp.annotations?.readOnlyHint && (
+                    <span className="inline-flex items-center gap-0.5 text-[10px] px-1 rounded bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300">
+                      <Lock className="w-2.5 h-2.5" /> read-only
+                    </span>
+                  )}
+                  {tool.mcp.annotations?.destructiveHint && !tool.mcp.annotations?.readOnlyHint && (
+                    <span className="inline-flex items-center gap-0.5 text-[10px] px-1 rounded bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">
+                      <ShieldAlert className="w-2.5 h-2.5" /> destructive
+                    </span>
+                  )}
+                  <div className="ml-auto flex-shrink-0">
+                    {!isStreaming && execution?.status === 'pending' && !autoMode && onExecuteMCPTool && (
+                      !isCallingMCP ? (
+                        <Button
+                          size="xs"
+                          onClick={handleMCPCall}
+                          className="flex items-center gap-1 px-2 py-3 text-xs"
+                          disabled={isProvidingResult || isProvidingError}
+                        >
+                          <Send className="w-3 h-3" />
+                          Call
+                        </Button>
+                      ) : (
+                        <div className="flex items-center gap-1 text-xs text-violet-600">
+                          <div className="w-3 h-3 border border-violet-600 border-t-transparent rounded-full animate-spin" />
+                          Calling...
+                        </div>
+                      )
+                    )}
+                  </div>
+                </div>
+                {execution?.status === 'pending' && execution.progress && (
+                  <div className="bg-card px-3 py-2 rounded-b space-y-1">
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span className="truncate">{execution.progress.message || 'In progress...'}</span>
+                      <span className="flex-shrink-0 ml-2">
+                        {execution.progress.total
+                          ? `${Math.min(100, Math.round((execution.progress.progress / execution.progress.total) * 100))}%`
+                          : execution.progress.progress}
+                      </span>
+                    </div>
+                    {execution.progress.total ? (
+                      <div className="h-1.5 w-full bg-muted rounded overflow-hidden">
+                        <div
+                          className="h-full bg-violet-600 transition-all"
+                          style={{ width: `${Math.min(100, (execution.progress.progress / execution.progress.total) * 100)}%` }}
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {execution?.mcpContent && execution.mcpContent.some((b) => b.type === 'image' && typeof b.data === 'string') && (
+              <div className="flex flex-wrap gap-2">
+                {execution.mcpContent
+                  .filter((b) => b.type === 'image' && typeof b.data === 'string')
+                  .map((b, i) => (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      key={i}
+                      src={`data:${b.mimeType || 'image/png'};base64,${b.data}`}
+                      alt={`MCP image result ${i + 1}`}
+                      className="max-h-64 rounded border border-border"
+                    />
+                  ))}
               </div>
             )}
 

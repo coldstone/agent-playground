@@ -1,0 +1,9 @@
+{
+  "name": "pdf-processing",
+  "files": [
+    "SKILL.md",
+    "references/REFERENCE.md",
+    "scripts/extract.py",
+    "assets/template.txt"
+  ]
+}

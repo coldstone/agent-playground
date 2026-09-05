@@ -61,3 +61,6 @@ scripts/
 !.next/server/
 !.next/static/
 !.next/standalone/
+
+# Development docs are not needed in the npm package
+docs/

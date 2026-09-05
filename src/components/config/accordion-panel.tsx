@@ -1,14 +1,16 @@
 'use client'
 
 import React, { useState, useRef } from 'react'
-import { APIConfig, Tool, Agent, Authorization, ChatSession } from '@/types'
+import { APIConfig, Tool, Agent, Authorization, ChatSession, MCPServer, Skill, SkillFileRecord } from '@/types'
 import { APIConfigPanel } from './api-config'
 import { SystemModelSelector } from '@/components/ui/system-model-selector'
 import { AgentsPanel } from './agents-panel'
 import { ToolsPanel, ToolsPanelRef } from './tools-panel'
 import { AuthorizationsPanel, AuthorizationsPanelRef } from './authorizations-panel'
+import { MCPPanel, MCPPanelRef } from './mcp-panel'
+import { SkillsPanel, SkillsPanelRef } from './skills-panel'
 import { useSystemModel } from '@/hooks/use-system-model'
-import { Settings, Wrench, ChevronDown, ChevronUp, Sparkles, Plus, Download, Upload, Bot, AlertTriangle, Key, BrainCircuit, Trash2, Sun, Moon, Monitor } from 'lucide-react'
+import { Settings, Wrench, ChevronDown, ChevronUp, Sparkles, Plus, Download, Upload, Bot, AlertTriangle, Key, BrainCircuit, Trash2, Sun, Moon, Monitor, Plug, BookOpen } from 'lucide-react'
 
 
 interface AccordionPanelProps {
@@ -16,6 +18,8 @@ interface AccordionPanelProps {
   agents: Agent[]
   tools: Tool[]
   authorizations: Authorization[]
+  mcpServers: MCPServer[]
+  skills: Skill[]
   sessions: ChatSession[]
   currentAgentId?: string | null
   onConfigChange: (config: APIConfig) => void
@@ -30,17 +34,28 @@ interface AccordionPanelProps {
   onAuthorizationCreate: (authorization: Authorization) => Promise<string>
   onAuthorizationUpdate: (authorization: Authorization) => Promise<void>
   onAuthorizationDelete: (authorizationId: string) => Promise<void>
+  onMCPServerCreate: (server: MCPServer) => Promise<void>
+  onMCPServerUpdate: (server: MCPServer) => Promise<void>
+  onMCPServerDelete: (serverId: string) => Promise<void>
+  onMCPServerConnect: (serverId: string, refresh?: boolean) => Promise<void>
+  onSkillCreate: (skill: Skill, files: SkillFileRecord[]) => Promise<void>
+  onSkillUpdate: (skill: Skill) => Promise<void>
+  onSkillDelete: (skillId: string) => Promise<void>
+  onSkillFilesGet: (skillId: string) => Promise<SkillFileRecord[]>
+  onSkillFileSave: (skillId: string, path: string, text: string) => Promise<void>
   onExport: () => void
   onImport: () => void
   onBatchDelete: () => void
 }
-type PanelType = 'agents' | 'tools' | 'authorizations' | 'llm' | 'settings' | null
+type PanelType = 'agents' | 'tools' | 'authorizations' | 'mcp' | 'skills' | 'llm' | 'settings' | null
 
 export function AccordionPanel({
   config,
   agents,
   tools,
   authorizations,
+  mcpServers,
+  skills,
   sessions,
   currentAgentId,
   onConfigChange,
@@ -55,6 +70,15 @@ export function AccordionPanel({
   onAuthorizationCreate,
   onAuthorizationUpdate,
   onAuthorizationDelete,
+  onMCPServerCreate,
+  onMCPServerUpdate,
+  onMCPServerDelete,
+  onMCPServerConnect,
+  onSkillCreate,
+  onSkillUpdate,
+  onSkillDelete,
+  onSkillFilesGet,
+  onSkillFileSave,
   onExport,
   onImport,
   onBatchDelete
@@ -71,7 +95,7 @@ export function AccordionPanel({
       
       // Priority 2: If LLM is configured, check for remembered panel
       const rememberedPanel = localStorage.getItem('agent-playground-active-panel') as PanelType
-      if (rememberedPanel && ['agents', 'tools', 'authorizations', 'llm', 'settings'].includes(rememberedPanel)) {
+      if (rememberedPanel && ['agents', 'tools', 'authorizations', 'mcp', 'skills', 'llm', 'settings'].includes(rememberedPanel)) {
         return rememberedPanel
       }
       
@@ -84,6 +108,8 @@ export function AccordionPanel({
   const [activePanel, setActivePanel] = useState<PanelType>(getInitialPanel())
   const toolsPanelRef = useRef<ToolsPanelRef>(null)
   const authorizationsPanelRef = useRef<AuthorizationsPanelRef>(null)
+  const mcpPanelRef = useRef<MCPPanelRef>(null)
+  const skillsPanelRef = useRef<SkillsPanelRef>(null)
   const { hasSystemModel } = useSystemModel()
 
   // Theme mode: 'light' | 'dark' | 'system'
@@ -317,6 +343,111 @@ export function AccordionPanel({
                   onAuthorizationCreate={onAuthorizationCreate}
                   onAuthorizationUpdate={onAuthorizationUpdate}
                   onAuthorizationDelete={onAuthorizationDelete}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* MCP Servers Panel */}
+      <div className={`border-b border-border ${activePanel === 'mcp' ? 'flex-1 flex flex-col min-h-0' : ''}`}>
+        <div
+          onClick={() => togglePanel('mcp')}
+          className="w-full p-4 flex items-center justify-between text-left hover:bg-muted/50 transition-colors cursor-pointer flex-shrink-0"
+        >
+          <div className="flex items-center gap-2">
+            <Plug className="w-4 h-4" />
+            <span className="text-sm font-semibold">MCP Servers</span>
+            <span className="text-sm text-muted-foreground">({mcpServers.length})</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                if (activePanel !== 'mcp') {
+                  togglePanel('mcp')
+                }
+                setTimeout(() => {
+                  mcpPanelRef.current?.openCreateModal()
+                }, 0)
+              }}
+              className="h-5 w-5 flex items-center justify-center hover:bg-muted rounded transition-colors"
+              title="Add MCP Server"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+            {activePanel === 'mcp' ? (
+              <ChevronUp className="w-4 h-4" />
+            ) : (
+              <ChevronDown className="w-4 h-4" />
+            )}
+          </div>
+        </div>
+        {activePanel === 'mcp' && (
+          <div className="border-t border-border flex-1 min-h-0 overflow-hidden">
+            <div className="h-full overflow-y-auto">
+              <div className="p-4">
+                <MCPPanel
+                  ref={mcpPanelRef}
+                  servers={mcpServers}
+                  onServerCreate={onMCPServerCreate}
+                  onServerUpdate={onMCPServerUpdate}
+                  onServerDelete={onMCPServerDelete}
+                  onServerConnect={onMCPServerConnect}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Skills Panel */}
+      <div className={`border-b border-border ${activePanel === 'skills' ? 'flex-1 flex flex-col min-h-0' : ''}`}>
+        <div
+          onClick={() => togglePanel('skills')}
+          className="w-full p-4 flex items-center justify-between text-left hover:bg-muted/50 transition-colors cursor-pointer flex-shrink-0"
+        >
+          <div className="flex items-center gap-2">
+            <BookOpen className="w-4 h-4" />
+            <span className="text-sm font-semibold">Skills</span>
+            <span className="text-sm text-muted-foreground">({skills.length})</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                if (activePanel !== 'skills') {
+                  togglePanel('skills')
+                }
+                setTimeout(() => {
+                  skillsPanelRef.current?.openCreateModal()
+                }, 0)
+              }}
+              className="h-5 w-5 flex items-center justify-center hover:bg-muted rounded transition-colors"
+              title="Add Skill"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+            {activePanel === 'skills' ? (
+              <ChevronUp className="w-4 h-4" />
+            ) : (
+              <ChevronDown className="w-4 h-4" />
+            )}
+          </div>
+        </div>
+        {activePanel === 'skills' && (
+          <div className="border-t border-border flex-1 min-h-0 overflow-hidden">
+            <div className="h-full overflow-y-auto">
+              <div className="p-4">
+                <SkillsPanel
+                  ref={skillsPanelRef}
+                  skills={skills}
+                  onSkillCreate={onSkillCreate}
+                  onSkillUpdate={onSkillUpdate}
+                  onSkillDelete={onSkillDelete}
+                  getSkillFiles={onSkillFilesGet}
+                  onSkillFileSave={onSkillFileSave}
                 />
               </div>
             </div>

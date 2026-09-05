@@ -1,8 +1,8 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Agent, Tool, ChatSession } from '@/types'
-import { X, Trash2, Bot, Wrench, MessageSquare, AlertTriangle, Check, Square, Tag } from 'lucide-react'
+import { Agent, Tool, ChatSession, Skill } from '@/types'
+import { X, Trash2, Bot, Wrench, MessageSquare, AlertTriangle, Check, Square, Tag, BookOpen } from 'lucide-react'
 
 interface BatchDeleteModalProps {
   isOpen: boolean
@@ -10,7 +10,8 @@ interface BatchDeleteModalProps {
   agents: Agent[]
   tools: Tool[]
   sessions: ChatSession[]
-  onDelete: (selectedAgents: string[], selectedTools: string[], selectedSessions: string[]) => void
+  skills: Skill[]
+  onDelete: (selectedAgents: string[], selectedTools: string[], selectedSessions: string[], selectedSkills: string[]) => void
 }
 
 export function BatchDeleteModal({ 
@@ -19,12 +20,14 @@ export function BatchDeleteModal({
   agents, 
   tools, 
   sessions, 
+  skills,
   onDelete 
 }: BatchDeleteModalProps) {
   const [selectedAgents, setSelectedAgents] = useState<Set<string>>(new Set())
   const [selectedTools, setSelectedTools] = useState<Set<string>>(new Set())
   const [selectedSessions, setSelectedSessions] = useState<Set<string>>(new Set())
-  const [activeCategory, setActiveCategory] = useState<'agents' | 'tools' | 'conversations' | string>('agents')
+  const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set())
+  const [activeCategory, setActiveCategory] = useState<'agents' | 'tools' | 'conversations' | 'skills' | string>('agents')
 
   // Reset selections when modal opens
   useEffect(() => {
@@ -32,6 +35,7 @@ export function BatchDeleteModal({
       setSelectedAgents(new Set())
       setSelectedTools(new Set())
       setSelectedSessions(new Set())
+      setSelectedSkills(new Set())
       setActiveCategory('agents')
     }
   }, [isOpen])
@@ -96,12 +100,32 @@ export function BatchDeleteModal({
     }
   }
 
+  const handleSkillToggle = (skillId: string) => {
+    setSelectedSkills(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(skillId)) {
+        newSet.delete(skillId)
+      } else {
+        newSet.add(skillId)
+      }
+      return newSet
+    })
+  }
+
+  const handleSelectAllSkills = () => {
+    if (selectedSkills.size === skills.length) {
+      setSelectedSkills(new Set())
+    } else {
+      setSelectedSkills(new Set(skills.map(skill => skill.id)))
+    }
+  }
+
   const handleDelete = () => {
-    onDelete(Array.from(selectedAgents), Array.from(selectedTools), Array.from(selectedSessions))
+    onDelete(Array.from(selectedAgents), Array.from(selectedTools), Array.from(selectedSessions), Array.from(selectedSkills))
     onClose()
   }
 
-  const totalSelected = selectedAgents.size + selectedTools.size + selectedSessions.size
+  const totalSelected = selectedAgents.size + selectedTools.size + selectedSessions.size + selectedSkills.size
 
   if (!isOpen) return null
 
@@ -223,6 +247,22 @@ export function BatchDeleteModal({
                     </span>
                   )}
                 </button>
+                <button
+                  onClick={() => setActiveCategory('skills')}
+                  className={`w-full text-left px-3 py-2 rounded text-sm transition-colors flex items-center gap-2 border ${
+                    activeCategory === 'skills'
+                      ? 'bg-red-100 text-red-700 dark:bg-red-950/20 dark:text-red-400 border-red-200 dark:border-red-800'
+                      : 'text-muted-foreground hover:bg-muted border-transparent'
+                  }`}
+                >
+                  <BookOpen className="w-4 h-4" />
+                  Skills ({skills.length})
+                  {selectedSkills.size > 0 && (
+                    <span className="ml-auto text-xs bg-red-200 text-red-800 px-1.5 py-0.5 rounded-full">
+                      {selectedSkills.size}
+                    </span>
+                  )}
+                </button>
               </div>
             </div>
           </div>
@@ -238,7 +278,7 @@ export function BatchDeleteModal({
                       Select Agents to Delete
                     </>
                   )}
-                  {(activeCategory === 'tools' || activeCategory === 'untagged' || (!['agents', 'tools', 'conversations'].includes(activeCategory))) && (
+                  {(activeCategory === 'tools' || activeCategory === 'untagged' || (!['agents', 'tools', 'conversations', 'skills'].includes(activeCategory))) && (
                     <>
                       <Wrench className="w-4 h-4" />
                       Select Tools to Delete
@@ -253,6 +293,12 @@ export function BatchDeleteModal({
                       Select Conversations to Delete
                     </>
                   )}
+                  {activeCategory === 'skills' && (
+                    <>
+                      <BookOpen className="w-4 h-4" />
+                      Select Skills to Delete
+                    </>
+                  )}
                 </h3>
                 
                 {/* Select All Button */}
@@ -262,6 +308,8 @@ export function BatchDeleteModal({
                       handleSelectAllAgents()
                     } else if (activeCategory === 'conversations') {
                       handleSelectAllSessions()
+                    } else if (activeCategory === 'skills') {
+                      handleSelectAllSkills()
                     } else {
                       // For tools categories
                       const filteredTools = tools.filter(tool => {
@@ -292,6 +340,8 @@ export function BatchDeleteModal({
                       allSelected = selectedAgents.size === agents.length && agents.length > 0
                     } else if (activeCategory === 'conversations') {
                       allSelected = selectedSessions.size === sessions.length && sessions.length > 0
+                    } else if (activeCategory === 'skills') {
+                      allSelected = selectedSkills.size === skills.length && skills.length > 0
                     } else {
                       // For tools categories
                       const filteredTools = tools.filter(tool => {
@@ -340,7 +390,7 @@ export function BatchDeleteModal({
               )}
 
               {/* Tools Content */}
-              {(activeCategory === 'tools' || activeCategory === 'untagged' || (!['agents', 'tools', 'conversations'].includes(activeCategory))) && (
+              {(activeCategory === 'tools' || activeCategory === 'untagged' || (!['agents', 'tools', 'conversations', 'skills'].includes(activeCategory))) && (
                 <div className="space-y-3">
                   {(() => {
                     // Filter tools based on active category
@@ -415,6 +465,33 @@ export function BatchDeleteModal({
                   )}
                 </div>
               )}
+
+              {/* Skills Content */}
+              {activeCategory === 'skills' && (
+                <div className="space-y-3">
+                  {skills.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-8">No skills to delete</p>
+                  ) : (
+                    skills.map(skill => (
+                      <label key={skill.id} className="flex items-start gap-3 p-3 hover:bg-red-50 dark:hover:bg-red-950/20 rounded border border-border bg-card cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedSkills.has(skill.id)}
+                          onChange={() => handleSkillToggle(skill.id)}
+                          className="apg-checkbox mt-1"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-foreground">{skill.name}</div>
+                          <div className="text-sm text-muted-foreground mt-1 line-clamp-2">{skill.description}</div>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            {(skill.files || []).length} file{(skill.files || []).length !== 1 ? 's' : ''} · {skill.enabled ? 'enabled' : 'disabled'}
+                          </div>
+                        </div>
+                      </label>
+                    ))
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -423,7 +500,7 @@ export function BatchDeleteModal({
         <div className="flex items-center justify-between p-6 border-t border-border bg-muted flex-shrink-0">
           <div className="text-sm text-muted-foreground">
             Selected: {totalSelected} item{totalSelected !== 1 ? 's' : ''} 
-            ({selectedAgents.size} agent{selectedAgents.size !== 1 ? 's' : ''}, {selectedTools.size} tool{selectedTools.size !== 1 ? 's' : ''}, {selectedSessions.size} conversation{selectedSessions.size !== 1 ? 's' : ''})
+            ({selectedAgents.size} agent{selectedAgents.size !== 1 ? 's' : ''}, {selectedTools.size} tool{selectedTools.size !== 1 ? 's' : ''}, {selectedSessions.size} conversation{selectedSessions.size !== 1 ? 's' : ''}, {selectedSkills.size} skill{selectedSkills.size !== 1 ? 's' : ''})
           </div>
           <div className="flex gap-3">
             <button

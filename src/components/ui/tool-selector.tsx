@@ -38,13 +38,8 @@ export function ToolSelector({ tools, selectedToolIds, onToolsChange }: ToolSele
   }
 
   const getDisplayText = () => {
-    if (selectedToolIds.length === 0) {
-      return 'Select Tools'
-    } else if (selectedToolIds.length === 1) {
-      return '1 tool selected'
-    } else {
-      return `${selectedToolIds.length} tools selected`
-    }
+    // Kept short so the MCP and skill count badges next to the trigger have room
+    return selectedToolIds.length === 0 ? 'Tools' : `Tools (${selectedToolIds.length})`
   }
 
   // Group tools by tag and sort within each group
@@ -71,9 +66,9 @@ export function ToolSelector({ tools, selectedToolIds, onToolsChange }: ToolSele
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-3 py-1.5 border border-border bg-muted hover:bg-muted/80 transition-colors min-w-[120px] rounded-full"
+        className="flex items-center gap-2 px-3 py-1.5 border border-border bg-muted hover:bg-muted/80 transition-colors rounded-full whitespace-nowrap"
       >
-        <span className="flex-1 text-left truncate text-xs text-muted-foreground">{getDisplayText()}</span>
+        <span className="text-left text-xs text-muted-foreground">{getDisplayText()}</span>
         <ChevronDown className="w-3 h-3 text-muted-foreground" />
       </button>
 

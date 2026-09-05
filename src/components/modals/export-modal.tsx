@@ -1,20 +1,25 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Agent, Tool } from '@/types'
-import { X, Download, Bot, Wrench, Tag, Globe, Search } from 'lucide-react'
+import { Agent, Tool, Skill, SkillFileRecord } from '@/types'
+import { X, Download, Bot, Wrench, Tag, Globe, Search, BookOpen } from 'lucide-react'
+import { serializeSkillFiles } from '@/lib/skills'
 
 interface ExportModalProps {
   isOpen: boolean
   onClose: () => void
   agents: Agent[]
   tools: Tool[]
+  skills: Skill[]
+  getSkillFiles: (skillId: string) => Promise<SkillFileRecord[]>
 }
 
-export function ExportModal({ isOpen, onClose, agents, tools }: ExportModalProps) {
+export function ExportModal({ isOpen, onClose, agents, tools, skills, getSkillFiles }: ExportModalProps) {
   const [selectedAgents, setSelectedAgents] = useState<Set<string>>(new Set())
   const [selectedTools, setSelectedTools] = useState<Set<string>>(new Set())
-  const [activeCategory, setActiveCategory] = useState<'agents' | 'tools' | string>('agents')
+  const [activeCategory, setActiveCategory] = useState<'agents' | 'tools' | 'skills' | string>('agents')
+  const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set())
+  const [isExporting, setIsExporting] = useState(false)
   const [agentSearchQuery, setAgentSearchQuery] = useState('')
   const [toolSearchQuery, setToolSearchQuery] = useState('')
 
@@ -82,7 +87,9 @@ export function ExportModal({ isOpen, onClose, agents, tools }: ExportModalProps
     })
   }
 
-  const handleExport = () => {
+  const handleExport = async () => {
+    setIsExporting(true)
+    try {
     // Process tools to only export header keys, not values
     const processedTools = tools
       .filter(tool => selectedTools.has(tool.id))
@@ -102,9 +109,20 @@ export function ExportModal({ isOpen, onClose, agents, tools }: ExportModalProps
         return tool
       })
 
+    // Skills travel with their files: text inline, binaries base64
+    const exportSkills = skills.filter(skill => selectedSkills.has(skill.id))
+    const exportSkillFiles = []
+    for (let i = 0; i < exportSkills.length; i++) {
+      const files = await getSkillFiles(exportSkills[i].id)
+      const serialized = await serializeSkillFiles(files)
+      for (let f = 0; f < serialized.length; f++) exportSkillFiles.push(serialized[f])
+    }
+
     const exportData = {
       agents: agents.filter(agent => selectedAgents.has(agent.id)),
-      tools: processedTools
+      tools: processedTools,
+      skills: exportSkills,
+      skillFiles: exportSkillFiles
     }
 
     const blob = new Blob([JSON.stringify(exportData, null, 2)], {
@@ -119,8 +137,23 @@ export function ExportModal({ isOpen, onClose, agents, tools }: ExportModalProps
     a.click()
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
-    
-    onClose()
+
+      onClose()
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
+  const handleSkillToggle = (skillId: string) => {
+    setSelectedSkills(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(skillId)) {
+        newSet.delete(skillId)
+      } else {
+        newSet.add(skillId)
+      }
+      return newSet
+    })
   }
 
   if (!isOpen) return null
@@ -207,6 +240,18 @@ export function ExportModal({ isOpen, onClose, agents, tools }: ExportModalProps
                     })
                   })()}
                 </div>
+
+                <button
+                  onClick={() => setActiveCategory('skills')}
+                  className={`w-full text-left px-3 py-2 rounded text-sm transition-colors flex items-center gap-2 border ${
+                    activeCategory === 'skills'
+                      ? 'bg-primary/10 text-primary border-primary/40'
+                      : 'text-muted-foreground hover:bg-muted border-transparent'
+                  }`}
+                >
+                  <BookOpen className="w-4 h-4" />
+                  Skills ({skills.length})
+                </button>
               </div>
             </div>
           </div>
@@ -222,7 +267,13 @@ export function ExportModal({ isOpen, onClose, agents, tools }: ExportModalProps
                       Select Agents
                     </>
                   )}
-                  {(activeCategory === 'tools' || activeCategory === 'untagged' || (!['agents', 'tools'].includes(activeCategory))) && (
+                  {activeCategory === 'skills' && (
+                    <>
+                      <BookOpen className="w-4 h-4" />
+                      Select Skills
+                    </>
+                  )}
+                  {(activeCategory === 'tools' || activeCategory === 'untagged' || (!['agents', 'tools', 'skills'].includes(activeCategory))) && (
                     <>
                       <Wrench className="w-4 h-4" />
                       Select Tools
@@ -247,7 +298,7 @@ export function ExportModal({ isOpen, onClose, agents, tools }: ExportModalProps
                   </div>
                 )}
                 
-                {(activeCategory === 'tools' || activeCategory === 'untagged' || (!['agents', 'tools'].includes(activeCategory))) && (
+                {(activeCategory === 'tools' || activeCategory === 'untagged' || (!['agents', 'tools', 'skills'].includes(activeCategory))) && (
                   <div className="relative">
                     <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
                     <input
@@ -298,7 +349,7 @@ export function ExportModal({ isOpen, onClose, agents, tools }: ExportModalProps
               )}
 
               {/* Tools Content */}
-              {(activeCategory === 'tools' || activeCategory === 'untagged' || (!['agents', 'tools'].includes(activeCategory))) && (
+              {(activeCategory === 'tools' || activeCategory === 'untagged' || (!['agents', 'tools', 'skills'].includes(activeCategory))) && (
                 <div className="space-y-3">
                   {(() => {
                     // Filter tools based on active category and search query
@@ -360,6 +411,32 @@ export function ExportModal({ isOpen, onClose, agents, tools }: ExportModalProps
                 </div>
               )}
 
+              {/* Skills Content */}
+              {activeCategory === 'skills' && (
+                <div className="space-y-3">
+                  {skills.length === 0 && (
+                    <div className="text-sm text-muted-foreground">No skills to export.</div>
+                  )}
+                  {skills.map(skill => (
+                    <label key={skill.id} className="flex items-start gap-3 p-3 hover:bg-muted/60 rounded border border-border bg-card cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedSkills.has(skill.id)}
+                        onChange={() => handleSkillToggle(skill.id)}
+                        className="apg-checkbox mt-1"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-foreground">{skill.name}</div>
+                        <div className="text-sm text-muted-foreground mt-1 line-clamp-2">{skill.description}</div>
+                        <div className="text-xs text-muted-foreground mt-2">
+                          {(skill.files || []).length} file{(skill.files || []).length !== 1 ? 's' : ''} · {skill.enabled ? 'enabled' : 'disabled'}
+                        </div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              )}
+
             </div>
           </div>
         </div>
@@ -367,7 +444,7 @@ export function ExportModal({ isOpen, onClose, agents, tools }: ExportModalProps
         {/* Fixed Footer */}
         <div className="flex items-center justify-between p-6 border-t border-border bg-muted flex-shrink-0">
           <div className="text-sm text-muted-foreground">
-            Selected: {selectedAgents.size} agent{selectedAgents.size !== 1 ? 's' : ''}, {selectedTools.size} tool{selectedTools.size !== 1 ? 's' : ''}
+            Selected: {selectedAgents.size} agent{selectedAgents.size !== 1 ? 's' : ''}, {selectedTools.size} tool{selectedTools.size !== 1 ? 's' : ''}, {selectedSkills.size} skill{selectedSkills.size !== 1 ? 's' : ''}
           </div>
           <div className="flex gap-3">
             <button
@@ -378,11 +455,11 @@ export function ExportModal({ isOpen, onClose, agents, tools }: ExportModalProps
             </button>
             <button
               onClick={handleExport}
-              disabled={selectedAgents.size === 0 && selectedTools.size === 0}
+              disabled={isExporting || (selectedAgents.size === 0 && selectedTools.size === 0 && selectedSkills.size === 0)}
               className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
             >
               <Download className="w-4 h-4" />
-              Export
+              {isExporting ? 'Exporting...' : 'Export'}
             </button>
           </div>
         </div>

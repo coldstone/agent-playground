@@ -1,15 +1,16 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Message as MessageType, AgentMessage, Tool, Agent, Authorization, ToolCallExecution } from '@/types'
+import { Message as MessageType, AgentMessage, Tool, Agent, Authorization, ToolCallExecution, ToolCall } from '@/types'
 import { formatTimestamp } from '@/lib/utils'
 import { ToolCallDisplay } from '@/components/tools'
 import { MessageContent } from '@/components/markdown'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Tooltip } from '@/components/ui/tooltip'
+import { UsageDisplay } from './usage-display'
 import { MODEL_PROVIDERS } from '@/lib/providers'
-import { User, Bot, Settings, Wrench, RefreshCw, Trash2, Edit2, Check, X, Atom, Brain, Cpu, Zap, Text, Code, Copy, ChevronDown, ChevronUp } from 'lucide-react'
+import { User, Bot, Settings, Wrench, RefreshCw, Trash2, Edit2, Check, X, Atom, Brain, Cpu, Zap, Text, Code, Copy, ChevronDown, ChevronUp, BookOpen } from 'lucide-react'
 import { devLog } from '@/lib/dev-utils'
 
 // Code block component for displaying tool results
@@ -97,6 +98,7 @@ function CodeBlock({ content, language = 'json' }: { content: string; language?:
 interface MessageProps {
   message: MessageType | AgentMessage
   tools?: Tool[]
+  resolveToolForExecution?: (execution?: ToolCallExecution, toolCall?: ToolCall) => Tool | undefined
   agent?: Agent
   authorizations?: Authorization[]
   isReasoningExpanded?: boolean
@@ -105,6 +107,8 @@ interface MessageProps {
   formatReasoningDuration?: (durationMs: number) => string
   onProvideToolResult?: (toolCallId: string, result: string) => void
   onMarkToolFailed?: (toolCallId: string, error: string) => void
+  onExecuteMCPTool?: (toolCall: ToolCall, tool: Tool) => Promise<void>
+  onExecuteBuiltinTool?: (toolCall: ToolCall, tool: Tool) => Promise<void>
   onRetryMessage?: (messageId: string) => void
   onDeleteMessage?: (messageId: string) => void
   onEditMessage?: (messageId: string, newContent: string) => void
@@ -116,6 +120,7 @@ interface MessageProps {
 export function Message({
   message,
   tools = [],
+  resolveToolForExecution,
   agent,
   authorizations = [],
   isReasoningExpanded = false,
@@ -124,6 +129,8 @@ export function Message({
   formatReasoningDuration,
   onProvideToolResult,
   onMarkToolFailed,
+  onExecuteMCPTool,
+  onExecuteBuiltinTool,
   onRetryMessage,
   onDeleteMessage,
   onEditMessage,
@@ -133,6 +140,7 @@ export function Message({
 }: MessageProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [editContent, setEditContent] = useState(message.content)
+  const [showInjectedSkillContent, setShowInjectedSkillContent] = useState(false)
   const [showMarkdown, setShowMarkdown] = useState(true)
   const [isCopied, setIsCopied] = useState(false)
 
@@ -426,8 +434,34 @@ export function Message({
               </div>
             )}
 
-            {/* Tool Result messages use code block display */}
-            {isTool ? (
+            {/* A "/skill-name" message: show a chip and the actual request, not the injected block */}
+            {message.skillInvocation ? (
+              <div className="space-y-2 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400">
+                    <BookOpen className="w-3 h-3" />
+                    Skill: {message.skillInvocation.name}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowInjectedSkillContent(!showInjectedSkillContent)}
+                    className="text-[11px] text-muted-foreground hover:text-foreground underline"
+                  >
+                    {showInjectedSkillContent ? 'hide injected content' : 'show injected content'}
+                  </button>
+                </div>
+                {message.skillInvocation.rest ? (
+                  <MessageContent content={message.skillInvocation.rest} className="min-w-0" showToggle={false} />
+                ) : (
+                  <div className="text-sm text-muted-foreground">(no additional request)</div>
+                )}
+                {showInjectedSkillContent && (
+                  <pre className="whitespace-pre-wrap break-all text-[11px] text-muted-foreground bg-muted/60 rounded p-2 max-h-72 overflow-y-auto">
+                    {message.content}
+                  </pre>
+                )}
+              </div>
+            ) : isTool ? (
               <CodeBlock content={message.content} language="json" />
             ) : showMarkdown ? (
               <MessageContent
@@ -481,7 +515,11 @@ export function Message({
                   }
                 }
                 
-                const tool = tools.find(t => t.name === toolCall.function.name)
+                // Bound tool for this call; undefined when it cannot be resolved, so the card
+                // falls back to Provide Result / Mark as Failed instead of offering the wrong tool
+                const tool = resolveToolForExecution
+                  ? resolveToolForExecution(execution, toolCall)
+                  : undefined
 
                 return (
                   <ToolCallDisplay
@@ -493,6 +531,8 @@ export function Message({
                     authorizations={authorizations}
                     onProvideResult={onProvideToolResult || (() => {})}
                     onMarkFailed={onMarkToolFailed || (() => {})}
+                    onExecuteMCPTool={onExecuteMCPTool}
+                    onExecuteBuiltinTool={onExecuteBuiltinTool}
                     onScrollToBottom={onScrollToBottom}
                     autoMode={autoMode}
                     isCollapsed={autoMode}
@@ -505,9 +545,7 @@ export function Message({
         {/* Token Usage - only show for assistant messages with usage data */}
         {message.role === 'assistant' && agentMessage.usage && (
           <div className="mt-3 text-xs text-muted-foreground flex items-center gap-2">
-            <span>
-              {agentMessage.usage.prompt_tokens} prompt + {agentMessage.usage.completion_tokens} completion = {agentMessage.usage.total_tokens} tokens
-            </span>
+            <UsageDisplay usage={agentMessage.usage} />
             <Tooltip content={getModelTooltip(agentMessage.provider, agentMessage.model)}>
               <div className="flex items-center justify-center w-4 h-4 text-gray-400 hover:text-gray-600 transition-colors">
                 {getModelIcon(agentMessage.provider)}
