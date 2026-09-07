@@ -15,7 +15,7 @@ import { Client, StreamableHTTPClientTransport, SSEClientTransport } from '@mode
 import type { Transport } from '@modelcontextprotocol/client'
 import { deepRepairMojibake } from './text'
 
-const CLIENT_INFO = { name: 'agent-playground', version: '0.3.0' }
+const CLIENT_INFO = { name: 'agent-playground', version: '0.3.1' }
 const IDLE_TTL_MS = 15 * 60 * 1000
 const ELICITATION_TIMEOUT_MS = 10 * 60 * 1000
 const CALL_TIMEOUT_MS = 2 * 60 * 1000

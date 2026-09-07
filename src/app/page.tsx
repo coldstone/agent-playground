@@ -6,6 +6,9 @@ import { DEFAULT_CONFIG, MODEL_PROVIDERS, generateId } from '@/lib'
 import { normalizeUsage } from '@/lib/usage'
 import { buildMCPTools, connectMCPServer as apiConnectMCPServer, disconnectMCPServer, callMCPTool, respondMCPElicitation, formatMCPToolResult } from '@/lib/mcp'
 import { buildSkillTools, appendSkillsPrompt, executeSkillTool, parseSkillInvocation, buildSkillInvocationMessage } from '@/lib/skills'
+import { buildWebFetchTools, executeWebFetchTool } from '@/lib/web-fetch'
+import { buildWebSearchTools, executeWebSearchTool } from '@/lib/web-search'
+import { loadBuiltinToolSettings, saveBuiltinToolSettings, BuiltinToolSettings, DEFAULT_BUILTIN_TOOL_SETTINGS } from '@/lib/builtin-tools'
 import { MCPElicitationModal } from '@/components/tools/mcp-elicitation-modal'
 import { createClient } from '@/lib/client-factory'
 import { bindToolCallToOfferedTool, resolveBoundTool, excludeShadowedTools } from '@/lib/tool-binding'
@@ -48,6 +51,10 @@ export default function HomePage() {
   const mcpServersRef = useRef<MCPServer[]>([])
   const [skills, setSkills] = useState<Skill[]>([])
   const skillsRef = useRef<Skill[]>([])
+  const [builtinToolSettings, setBuiltinToolSettings] = useState<BuiltinToolSettings>(DEFAULT_BUILTIN_TOOL_SETTINGS)
+  // Read inside async callbacks, where the state value would be the one captured at send time
+  const skillToolsEnabledRef = useRef(DEFAULT_BUILTIN_TOOL_SETTINGS.skills.enabled)
+  const builtinToolSettingsRef = useRef<BuiltinToolSettings>(DEFAULT_BUILTIN_TOOL_SETTINGS)
   const [elicitation, setElicitation] = useState<MCPElicitationRequest | null>(null)
   const [elicitationServerName, setElicitationServerName] = useState<string | undefined>(undefined)
   const [dbManager] = useState(() => IndexedDBManager.getInstance())
@@ -56,24 +63,46 @@ export default function HomePage() {
     mcpServersRef.current = mcpServers
   }, [mcpServers])
 
+  useEffect(() => {
+    skillToolsEnabledRef.current = builtinToolSettings.skills.enabled
+    builtinToolSettingsRef.current = builtinToolSettings
+  }, [builtinToolSettings])
+
+  // The skill tools are one group, governed by a single switch in the Built-in Tools panel. When
+  // it is off, nothing skill-related reaches the model: no tools, no catalog in the system prompt,
+  // no badge, no "/" autocomplete, and a typed "/skill-name ..." is sent as ordinary text.
+  const skillToolsEnabled = builtinToolSettings.skills.enabled
+  const skillsForModel = useMemo(
+    () => (skillToolsEnabled ? skills : []),
+    [skillToolsEnabled, skills]
+  )
   // Tools contributed by enabled MCP servers; always offered alongside local tools
-  const enabledSkills = useMemo(() => skills.filter(skill => skill.enabled), [skills])
-  const skillTools = useMemo(() => buildSkillTools(skills), [skills])
-  // Built-in skill tool names are fixed, so they win: a local tool with the same name is not
+  const enabledSkills = useMemo(() => skillsForModel.filter(skill => skill.enabled), [skillsForModel])
+  const skillTools = useMemo(() => buildSkillTools(skillsForModel), [skillsForModel])
+  const webFetchTools = useMemo(() => buildWebFetchTools(builtinToolSettings), [builtinToolSettings])
+  const webSearchTools = useMemo(() => buildWebSearchTools(builtinToolSettings), [builtinToolSettings])
+  // Everything that runs inside the page: skill access, web fetch and web search
+  const builtinTools = useMemo(
+    () => [...skillTools, ...webFetchTools, ...webSearchTools],
+    [skillTools, webFetchTools, webSearchTools]
+  )
+  // Web search needs a key as well as the switch, so the badge follows what is actually offered
+  const webSearchOffered = webSearchTools.length > 0
+  // Built-in tool names are fixed, so they win: a local tool with the same name is not
   // offered to the model at all rather than being silently shadowed.
   const offerableTools = useMemo(
-    () => excludeShadowedTools(tools, skillTools, tool =>
-      devLog.warn(`Local tool "${tool.name}" is not offered: the name is taken by a built-in skill tool`)
+    () => excludeShadowedTools(tools, builtinTools, tool =>
+      devLog.warn(`Local tool "${tool.name}" is not offered: the name is taken by a built-in tool`)
     ),
-    [tools, skillTools]
+    [tools, builtinTools]
   )
   // MCP tools are renamed when they would collide with a local or built-in name
   const mcpTools = useMemo(
-    () => buildMCPTools(mcpServers, offerableTools.map(tool => tool.name).concat(skillTools.map(tool => tool.name))),
-    [mcpServers, offerableTools, skillTools]
+    () => buildMCPTools(mcpServers, offerableTools.map(tool => tool.name).concat(builtinTools.map(tool => tool.name))),
+    [mcpServers, offerableTools, builtinTools]
   )
   // Every tool the app knows about, used only to look a bound tool up by id
-  const chatTools = useMemo(() => [...tools, ...mcpTools, ...skillTools], [tools, mcpTools, skillTools])
+  const chatTools = useMemo(() => [...tools, ...mcpTools, ...builtinTools], [tools, mcpTools, builtinTools])
   /**
    * Bind each tool call to the concrete tool that was offered for that request. Resolving by name
    * later is unsafe: local tools that were never offered can share a name with an MCP tool, and
@@ -320,6 +349,9 @@ export default function HomePage() {
 
     const loadData = async () => {
       try {
+        // Built-in tool settings live in localStorage, so they are available before IndexedDB is
+        setBuiltinToolSettings(loadBuiltinToolSettings())
+
         // Initialize IndexedDB first
         await dbManager.init()
 
@@ -556,7 +588,7 @@ export default function HomePage() {
                     if (tool.mcp) {
                       await executeMCPToolCall(toolCall, tool)
                     } else if (tool.builtin) {
-                      await executeSkillToolCall(toolCall, tool)
+                      await executeBuiltinToolCall(toolCall, tool)
                     } else {
                       await autoExecuteHttpToolCall(toolCall, tool)
                     }
@@ -1135,9 +1167,9 @@ export default function HomePage() {
     }
   }
 
-  // Execute a built-in skill tool. Runs entirely in the page against the IndexedDB copy of the
-  // skill; used in both auto and manual mode, like the MCP path.
-  const executeSkillToolCall = async (toolCall: ToolCall, tool: Tool) => {
+  // Execute a built-in tool. Skill tools run entirely in the page against the IndexedDB copy of
+  // the skill; web_fetch goes through /api/fetch. Used in both auto and manual mode, like MCP.
+  const executeBuiltinToolCall = async (toolCall: ToolCall, tool: Tool) => {
     if (!tool.builtin) return
 
     let parsedArguments: Record<string, unknown> = {}
@@ -1152,19 +1184,41 @@ export default function HomePage() {
     const activated = getSkillActivations(currentSessionId || NEW_SESSION_ACTIVATION_KEY)
 
     try {
-      const result = await executeSkillTool(tool.builtin.kind, parsedArguments, {
-        skills: skillsRef.current,
-        getFiles: (skillId: string) => dbManager.getSkillFiles(skillId),
-        activated
-      })
+      const kind = tool.builtin.kind
+      const result =
+        kind === 'web_fetch'
+          ? await executeWebFetchTool(parsedArguments, {
+              acceptLanguage: typeof navigator !== 'undefined' ? navigator.language : undefined
+            })
+          : kind === 'web_search'
+          ? await executeWebSearchTool(parsedArguments, {
+              // Through the ref: the auto loop must see the key as it is now, not as it was
+              // when the request was sent.
+              apiKey: builtinToolSettingsRef.current.webSearch.apiKey
+            })
+          : await executeSkillTool(kind, parsedArguments, {
+              skills: skillsRef.current,
+              getFiles: (skillId: string) => dbManager.getSkillFiles(skillId),
+              activated
+            })
       if (result.isError) {
-        await handleMarkToolFailed(toolCall.id, result.text || 'The skill tool reported an error')
+        await handleMarkToolFailed(toolCall.id, result.text || 'The built-in tool reported an error')
       } else {
         await handleProvideToolResult(toolCall.id, result.text || '(empty result)')
       }
     } catch (error) {
-      await handleMarkToolFailed(toolCall.id, error instanceof Error ? error.message : 'Skill tool call failed')
+      await handleMarkToolFailed(toolCall.id, error instanceof Error ? error.message : 'Built-in tool call failed')
     }
+  }
+
+  // Skills as the model may see them right now. Mirrors skillsForModel for the async paths that
+  // read skillsRef instead of state.
+  const modelSkills = () => (skillToolsEnabledRef.current ? skillsRef.current : [])
+
+  // Built-in tool settings are a localStorage flag, so state and storage move together.
+  const handleBuiltinToolSettingsChange = (settings: BuiltinToolSettings) => {
+    setBuiltinToolSettings(settings)
+    saveBuiltinToolSettings(settings)
   }
 
   const handleElicitationResponse = async (result: MCPElicitResult) => {
@@ -1422,7 +1476,7 @@ export default function HomePage() {
 
       // Use agent system prompt if in agent mode, otherwise use config system prompt
       // When agent is selected, ONLY use agent's system prompt, ignore config system prompt
-      const systemPrompt = appendSkillsPrompt(currentAgent ? currentAgent.systemPrompt : config.systemPrompt, skillsRef.current)
+      const systemPrompt = appendSkillsPrompt(currentAgent ? currentAgent.systemPrompt : config.systemPrompt, modelSkills())
       const allMessages = systemPrompt.trim()
         ? [{ id: generateId(), role: 'system' as const, content: systemPrompt, timestamp: Date.now() }, ...messagesWithoutSystem]
         : messagesWithoutSystem
@@ -1706,7 +1760,7 @@ export default function HomePage() {
     // message so the model does not have to call load_skill first. The persisted content keeps
     // the injected block (retries and edits must resend exactly what the model saw); the chip
     // in the UI is driven by skillInvocation.
-    const invocation = parseSkillInvocation(content, skillsRef.current)
+    const invocation = parseSkillInvocation(content, modelSkills())
     let outgoingContent = content
     let skillInvocationInfo: { name: string; rest: string } | undefined
 
@@ -1828,8 +1882,8 @@ export default function HomePage() {
         availableTools = offerableTools.filter(tool => sessionToolIds.includes(tool.id))
       }
 
-      // MCP tools and skill tools are always available, in both agent and no-agent mode
-      availableTools = [...availableTools, ...mcpTools, ...skillTools]
+      // MCP tools and built-in tools are always available, in both agent and no-agent mode
+      availableTools = [...availableTools, ...mcpTools, ...builtinTools]
 
       // Get complete config for current model (includes correct endpoint and API key)
       const currentConfig = await getCurrentModelConfig()
@@ -1842,7 +1896,7 @@ export default function HomePage() {
       // Use session system prompt, agent system prompt, or config system prompt
       const systemPrompt = appendSkillsPrompt(
         updatedSessionData.systemPrompt || (currentAgent ? currentAgent.systemPrompt : config.systemPrompt),
-        skillsRef.current
+        modelSkills()
       )
 
 
@@ -2355,7 +2409,7 @@ export default function HomePage() {
           const messagesWithoutSystem = updatedSession.messages.filter(m => m.role !== 'system')
 
           // Use agent system prompt if in agent mode, otherwise use config system prompt
-          const systemPrompt = appendSkillsPrompt(currentAgent ? currentAgent.systemPrompt : config.systemPrompt, skillsRef.current)
+          const systemPrompt = appendSkillsPrompt(currentAgent ? currentAgent.systemPrompt : config.systemPrompt, modelSkills())
           const allMessages = systemPrompt.trim()
             ? [{ id: generateId(), role: 'system' as const, content: systemPrompt, timestamp: Date.now() }, ...messagesWithoutSystem]
             : messagesWithoutSystem
@@ -2831,12 +2885,12 @@ export default function HomePage() {
     }
   }
 
-  // Tools offered to the model: local selection plus every enabled MCP tool
-  // Offered to the model: local selection (minus names shadowed by skill tools) plus MCP and skills
+  // Offered to the model: local selection (minus names shadowed by built-in tools), plus MCP and
+  // the built-in tools (skills and web fetch)
   const getCurrentTools = () => [
     ...getCurrentLocalTools().filter(tool => offerableTools.some(offerable => offerable.id === tool.id)),
     ...mcpTools,
-    ...skillTools
+    ...builtinTools
   ]
 
   // Get current model from localStorage
@@ -3075,7 +3129,7 @@ export default function HomePage() {
       const messagesWithoutSystem = [...messagesBeforeEdit, userMessage].filter(m => m.role !== 'system')
 
       // Use agent system prompt if in agent mode, otherwise use config system prompt
-      const systemPrompt = appendSkillsPrompt(currentAgent ? currentAgent.systemPrompt : config.systemPrompt, skillsRef.current)
+      const systemPrompt = appendSkillsPrompt(currentAgent ? currentAgent.systemPrompt : config.systemPrompt, modelSkills())
       const allMessages = systemPrompt.trim()
         ? [{ id: generateId(), role: 'system' as const, content: systemPrompt, timestamp: Date.now() }, ...messagesWithoutSystem]
         : messagesWithoutSystem
@@ -3373,6 +3427,8 @@ export default function HomePage() {
             onAutoModeChange={setAutoMode}
             mcpToolCount={mcpTools.length}
             skillCount={enabledSkills.length}
+            webFetchEnabled={builtinToolSettings.webFetch.enabled}
+            webSearchEnabled={webSearchOffered}
             skills={enabledSkills}
           />
         ) : (
@@ -3415,7 +3471,7 @@ export default function HomePage() {
               onProvideToolResult={handleProvideToolResult}
               onMarkToolFailed={handleMarkToolFailed}
               onExecuteMCPTool={executeMCPToolCall}
-              onExecuteBuiltinTool={executeSkillToolCall}
+              onExecuteBuiltinTool={executeBuiltinToolCall}
               onRetryMessage={handleRetryMessage}
               onDeleteMessage={handleDeleteMessage}
               onEditMessage={handleEditMessage}
@@ -3443,6 +3499,8 @@ export default function HomePage() {
               onToolsChange={handleToolsChange}
               mcpToolCount={mcpTools.length}
               skillCount={enabledSkills.length}
+              webFetchEnabled={builtinToolSettings.webFetch.enabled}
+              webSearchEnabled={webSearchOffered}
               skills={enabledSkills}
               autoMode={autoMode}
               onAutoModeChange={setAutoMode}
@@ -3453,6 +3511,10 @@ export default function HomePage() {
 
       {/* Accordion Panel */}
       <AccordionPanel
+        builtinToolSettings={builtinToolSettings}
+        onBuiltinToolSettingsChange={handleBuiltinToolSettingsChange}
+        builtinToolCount={builtinTools.length}
+        enabledSkillCount={enabledSkills.length}
         config={config}
         agents={agents}
         tools={tools}

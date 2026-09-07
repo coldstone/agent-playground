@@ -7,19 +7,21 @@
  * inventing names.
  */
 import { Skill, Tool } from '@/types'
-import { SkillToolBinding } from '@/types'
+import { BuiltinToolBinding } from '@/types'
 import { getEnabledSkills } from './prompt'
 
-export type SkillToolKind = SkillToolBinding['kind']
+export type SkillToolKind = Exclude<BuiltinToolBinding['kind'], 'web_fetch' | 'web_search'>
 
-export const SKILL_TOOL_ID_PREFIX = 'builtin:'
+export const BUILTIN_TOOL_ID_PREFIX = 'builtin:'
+export const SKILL_TOOL_ID_PREFIX = BUILTIN_TOOL_ID_PREFIX
 
 export function skillToolId(kind: SkillToolKind): string {
   return SKILL_TOOL_ID_PREFIX + kind
 }
 
-export function isSkillTool(tool: Tool | undefined | null): tool is Tool & { builtin: SkillToolBinding } {
-  return !!tool && !!tool.builtin
+export function isSkillTool(tool: Tool | undefined | null): tool is Tool & { builtin: BuiltinToolBinding } {
+  if (!tool || !tool.builtin) return false
+  return tool.builtin.kind !== 'web_fetch' && tool.builtin.kind !== 'web_search'
 }
 
 function makeTool(

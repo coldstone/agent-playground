@@ -2,6 +2,7 @@
 
 import React, { useState, useRef } from 'react'
 import { APIConfig, Tool, Agent, Authorization, ChatSession, MCPServer, Skill, SkillFileRecord } from '@/types'
+import { BuiltinToolSettings } from '@/lib/builtin-tools'
 import { APIConfigPanel } from './api-config'
 import { SystemModelSelector } from '@/components/ui/system-model-selector'
 import { AgentsPanel } from './agents-panel'
@@ -9,8 +10,9 @@ import { ToolsPanel, ToolsPanelRef } from './tools-panel'
 import { AuthorizationsPanel, AuthorizationsPanelRef } from './authorizations-panel'
 import { MCPPanel, MCPPanelRef } from './mcp-panel'
 import { SkillsPanel, SkillsPanelRef } from './skills-panel'
+import { BuiltinToolsPanel } from './builtin-tools-panel'
 import { useSystemModel } from '@/hooks/use-system-model'
-import { Settings, Wrench, ChevronDown, ChevronUp, Sparkles, Plus, Download, Upload, Bot, AlertTriangle, Key, BrainCircuit, Trash2, Sun, Moon, Monitor, Plug, BookOpen } from 'lucide-react'
+import { Settings, Wrench, ChevronDown, ChevronUp, Sparkles, Plus, Download, Upload, Bot, AlertTriangle, Key, BrainCircuit, Trash2, Sun, Moon, Monitor, Plug, BookOpen, Globe } from 'lucide-react'
 
 
 interface AccordionPanelProps {
@@ -43,11 +45,16 @@ interface AccordionPanelProps {
   onSkillDelete: (skillId: string) => Promise<void>
   onSkillFilesGet: (skillId: string) => Promise<SkillFileRecord[]>
   onSkillFileSave: (skillId: string, path: string, text: string) => Promise<void>
+  builtinToolSettings: BuiltinToolSettings
+  onBuiltinToolSettingsChange: (settings: BuiltinToolSettings) => void
+  /** Built-in tools actually offered right now, computed by the page. */
+  builtinToolCount: number
+  enabledSkillCount: number
   onExport: () => void
   onImport: () => void
   onBatchDelete: () => void
 }
-type PanelType = 'agents' | 'tools' | 'authorizations' | 'mcp' | 'skills' | 'llm' | 'settings' | null
+type PanelType = 'agents' | 'tools' | 'authorizations' | 'mcp' | 'skills' | 'builtin' | 'llm' | 'settings' | null
 
 export function AccordionPanel({
   config,
@@ -79,6 +86,10 @@ export function AccordionPanel({
   onSkillDelete,
   onSkillFilesGet,
   onSkillFileSave,
+  builtinToolSettings,
+  onBuiltinToolSettingsChange,
+  builtinToolCount,
+  enabledSkillCount,
   onExport,
   onImport,
   onBatchDelete
@@ -95,7 +106,7 @@ export function AccordionPanel({
       
       // Priority 2: If LLM is configured, check for remembered panel
       const rememberedPanel = localStorage.getItem('agent-playground-active-panel') as PanelType
-      if (rememberedPanel && ['agents', 'tools', 'authorizations', 'mcp', 'skills', 'llm', 'settings'].includes(rememberedPanel)) {
+      if (rememberedPanel && ['agents', 'tools', 'authorizations', 'mcp', 'skills', 'builtin', 'llm', 'settings'].includes(rememberedPanel)) {
         return rememberedPanel
       }
       
@@ -440,6 +451,12 @@ export function AccordionPanel({
           <div className="border-t border-border flex-1 min-h-0 overflow-hidden">
             <div className="h-full overflow-y-auto">
               <div className="p-4">
+                {!builtinToolSettings.skills.enabled && (
+                  <p className="mb-3 text-xs text-muted-foreground/70">
+                    Skill tools are turned off in Built-in Tools, so enabled skills are not offered
+                    to the model.
+                  </p>
+                )}
                 <SkillsPanel
                   ref={skillsPanelRef}
                   skills={skills}
@@ -448,6 +465,38 @@ export function AccordionPanel({
                   onSkillDelete={onSkillDelete}
                   getSkillFiles={onSkillFilesGet}
                   onSkillFileSave={onSkillFileSave}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Built-in Tools Panel */}
+      <div className={`border-b border-border ${activePanel === 'builtin' ? 'flex-1 flex flex-col min-h-0' : ''}`}>
+        <div
+          onClick={() => togglePanel('builtin')}
+          className="w-full p-4 flex items-center justify-between text-left hover:bg-muted/50 transition-colors cursor-pointer flex-shrink-0"
+        >
+          <div className="flex items-center gap-2">
+            <Globe className="w-4 h-4" />
+            <span className="text-sm font-semibold">Built-in Tools</span>
+            <span className="text-sm text-muted-foreground">({builtinToolCount})</span>
+          </div>
+          {activePanel === 'builtin' ? (
+            <ChevronUp className="w-4 h-4" />
+          ) : (
+            <ChevronDown className="w-4 h-4" />
+          )}
+        </div>
+        {activePanel === 'builtin' && (
+          <div className="border-t border-border flex-1 min-h-0 overflow-hidden">
+            <div className="h-full overflow-y-auto">
+              <div className="p-4">
+                <BuiltinToolsPanel
+                  settings={builtinToolSettings}
+                  onChange={onBuiltinToolSettingsChange}
+                  enabledSkillCount={enabledSkillCount}
                 />
               </div>
             </div>

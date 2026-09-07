@@ -140,7 +140,7 @@ export interface Tool {
   schema: ToolSchema;
   httpRequest?: HTTPRequestConfig;
   mcp?: MCPToolBinding; // Present when the tool is provided by an MCP server
-  builtin?: SkillToolBinding; // Present when the tool is executed in the page (skill access)
+  builtin?: BuiltinToolBinding; // Present when the tool is executed in the page (skills, web fetch)
   tag?: string; // 工具分类标签
   createdAt: number;
   updatedAt: number;
@@ -361,9 +361,9 @@ export interface MCPElicitResult {
 // Agent Skills
 // ---------------------------------------------------------------------------
 
-/** Built-in tools that run inside the page and give the model access to skills. */
-export interface SkillToolBinding {
-  kind: 'load_skill' | 'read_skill_file' | 'list_skill_files' | 'search_skill_files';
+/** Built-in tools that run inside the page: skill access and web fetch. */
+export interface BuiltinToolBinding {
+  kind: 'load_skill' | 'read_skill_file' | 'list_skill_files' | 'search_skill_files' | 'web_fetch' | 'web_search';
 }
 
 /** Index entry for one file bundled with a skill. Contents live in the skill-files store. */

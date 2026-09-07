@@ -5,9 +5,9 @@
 [![npm](https://img.shields.io/npm/v/agent-playground.svg)](https://www.npmjs.com/package/agent-playground)
 
 A development and debugging platform for AI agents. Agent Playground lets you build, run and inspect
-agents that reach the outside world through three kinds of tools — your own **local HTTP tools**,
-**MCP servers** over Streamable HTTP, and **Agent Skills** written as `SKILL.md` — against any of a
-dozen LLM providers. Everything runs in the browser: agents, tools, skills and conversations are
+agents that reach the outside world through four kinds of tools — your own **local HTTP tools**,
+**MCP servers** over Streamable HTTP, **Agent Skills** written as `SKILL.md`, and a built-in
+**Web Fetch** that reads any public URL — against any of a dozen LLM providers. Everything runs in the browser: agents, tools, skills and conversations are
 stored locally in IndexedDB, and API keys never leave your machine.
 
 ![Screenshot of Agent Playground](screenshot-0-agent-playground.png)
@@ -15,6 +15,8 @@ stored locally in IndexedDB, and API keys never leave your machine.
 ![Screenshot of Agent Playground](screenshot-agent-playground.png)
 
 > **New in 0.3.0:** MCP servers (Streamable HTTP, dual-era) and Agent Skills (`SKILL.md`), both usable in every conversation.
+>
+> **New in 0.3.1:** built-in **Web Fetch** and **Web Search** — give the model a URL and it reads the page as clean Markdown, or let it search the web and follow up on what it finds.
 
 ## ✨ Key Features
 
@@ -72,7 +74,46 @@ A skill is a folder of instructions the model loads only when a task calls for i
 - **Explicit invocation**: type `/skill-name your request` to inject a skill directly — a `/` autocomplete lists the enabled skills, and the sent message shows a compact **Skill** chip instead of the injected block
 - **In-app viewer**: browse the file tree, read Markdown rendered like chat content, follow relative links between a skill's files inside the viewer, edit any text file in place (editing `SKILL.md` re-validates it), and download the skill as a zip
 - **Export and manage**: skills travel with the app-data export (text inline, binaries base64) and can be removed one by one or through the batch-delete dialog
+- **Master switch**: the four tools are governed as one group by **Skill tools** in the **Built-in Tools** panel — turn it off and no tools, no skill catalog and no `/` autocomplete reach the model, whatever is enabled here
 - **Limitation**: bundled scripts are **never executed** — the model reads them and reproduces the logic, or asks you to run them
+
+### 🌐 Built-in Tools · Web Fetch and Web Search
+A built-in tool that lets the model read a URL. The page is fetched **on the server**, so there is no
+CORS wall, and it is reduced to the part worth spending tokens on before the model ever sees it.
+
+- **Three modes**: `article` (default) keeps the main content only, `full` keeps the whole page for
+  index and listing pages where the main content is the list, `raw` skips HTML conversion entirely.
+  Article mode falls back to the full page on its own when it cannot find a real article.
+- **Clean Markdown**: Mozilla Readability picks the content, [`@mdream/js`](https://www.npmjs.com/package/@mdream/js)
+  emits the Markdown. An MDN reference page drops from 57k characters of HTML to 35k of Markdown; a blog
+  post drops from 26k to 6k.
+- **JSON and text pass through**: JSON is pretty-printed, `text/*` is returned as-is. Pages in GB18030,
+  GBK or Big5 are decoded from the declared charset instead of being mangled as UTF-8.
+- **Chunked reading**: long pages come back 20,000 characters at a time, and the result tells the model
+  the `start_index` to ask for next. Chunks are served from a 15-minute cache, so continuing a page
+  never re-fetches it.
+- **Deploying on a public server?** Start it with `WEB_FETCH_BLOCK_PRIVATE=true`. The hostname is then
+  resolved and loopback, private, link-local and cloud-metadata addresses are refused — on the initial
+  URL and on every redirect hop. It is off by default because Agent Playground normally runs on your own
+  machine; the Docker Compose file turns it on.
+- **Off by default**: turn it on in the **Built-in Tools** panel — the same place that holds the master
+  switch for the skill tools; a **Web fetch** badge then appears on the chat bar and the tool is offered in
+  every conversation.
+
+**Web Search** turns the playground into something that can answer questions about the present. It is backed by
+[Tavily](https://app.tavily.com/home), a search API built for LLMs, and pairs with Web Fetch: search for the page,
+then read it.
+
+- **Your own key, your own quota**: paste a Tavily key in the **Built-in Tools** panel. The free tier gives 1,000
+  credits a month with no card; a basic search costs 1 credit, an advanced one 2. The key is stored in this
+  browser and passed straight through to Tavily — it is never written to a log or kept on the server.
+- **What the model gets**: a short answer plus the top results as title, URL, snippet and, for the `news` topic,
+  a published date. The tool description tells it to call `web_fetch` on a result URL when it needs the full page.
+- **Parameters it can steer**: `max_results` (1-10), `topic` (general / news / finance), `time_range`
+  (day / week / month / year), `search_depth` (basic or advanced) and `include_domains` to stay inside a site.
+- **Repeat queries are free**: identical searches are answered from a 10-minute cache, so a model retrying itself
+  in Auto mode does not burn your credits.
+- **Off by default**, and offered only once a key is present.
 
 ### 🛠️ Advanced Tool System
 - **Custom Tool Creation**: Build tools with JSON schema definitions
@@ -264,6 +305,21 @@ npm start
 4. Keep the skill enabled so its name and description reach the model's catalog
 5. Ask a question the skill's description matches, and watch the model call `load_skill` and then read the files it needs
 6. Or invoke it yourself: type `/` in the chat box, pick the skill and add your request
+
+### 7. Enable Web Fetch
+1. Open the **Built-in Tools** panel on the right and switch **Web Fetch** on
+2. The chat bar shows a **Web fetch** badge, and `web_fetch` is offered in every conversation
+3. Paste a URL and ask for a summary — the tool call card shows the URL being read
+4. If the model needs the rest of a long page it calls `web_fetch` again with `start_index`
+5. Running this on a public server? Start it with `WEB_FETCH_BLOCK_PRIVATE=true` so the model cannot
+   reach localhost, your LAN or the cloud metadata endpoint
+
+### 8. Enable Web Search
+1. Get a free key at [app.tavily.com/home](https://app.tavily.com/home) (1,000 credits a month, no card)
+2. Open the **Built-in Tools** panel, switch **Web Search** on and paste the key — the eye button reveals it
+3. Until a key is present the tool is not offered, and the panel says so
+4. A **Web search** badge appears on the chat bar; ask something current and the model searches, then usually
+   calls `web_fetch` on the result it wants to read in full
 
 ## 🧭 How Tool Calls Are Resolved
 Local tools, MCP tools and built-in skill tools share one function namespace, so two of them can end up

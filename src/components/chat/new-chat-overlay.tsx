@@ -11,7 +11,7 @@ import { ToolCountBadges } from './tool-count-badges'
 
 // Stable identity so the autocomplete memo does not recompute on every render
 const EMPTY_SKILLS: Skill[] = []
-import { Plus, Send } from 'lucide-react'
+import { Plus, ArrowUp } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useDraftMessage } from '@/hooks/use-draft-message'
 import { useAvailableModels } from '@/hooks/use-available-models'
@@ -28,6 +28,8 @@ interface NewChatOverlayProps {
   onAutoModeChange?: (enabled: boolean) => void
   mcpToolCount?: number
   skillCount?: number
+  webFetchEnabled?: boolean
+  webSearchEnabled?: boolean
   skills?: Skill[]
 }
 
@@ -43,6 +45,8 @@ export function NewChatOverlay({
   onAutoModeChange,
   mcpToolCount = 0,
   skillCount = 0,
+  webFetchEnabled = false,
+  webSearchEnabled = false,
   skills = EMPTY_SKILLS
 }: NewChatOverlayProps) {
   const { message, setMessage, clearDraft } = useDraftMessage()
@@ -146,36 +150,32 @@ export function NewChatOverlay({
         </div>
       </div>
 
-      {/* Chat Input - the textarea and the toolbar share this container so their edges align */}
+      {/* Chat Input - one container holds the textarea and the toolbar, matching chat-input.tsx.
+          The textarea is borderless and the focus ring lives on the wrapper via focus-within, so
+          the whole box lights up as one control. */}
       <div className="w-full max-w-3xl">
-        <div className="space-y-3">
-          <div className="relative">
-            {skillAutocomplete.popover}
-            <textarea
-              ref={textareaRef}
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              placeholder={!hasAvailableModels ? "Please configure LLM first..." : !hasValidCurrentModel ? "Please select a model..." : "Type your message..."}
-              disabled={!hasValidCurrentModel}
-              className="w-full min-h-[100px] p-3 border border-border rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed bg-card text-foreground placeholder:text-muted-foreground"
-              onKeyDown={(e) => {
-                // The popover owns Enter/Tab/arrows while it is open, so completing never sends
-                if (skillAutocomplete.handleKeyDown(e)) return
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault()
-                  handleSend()
-                }
-              }}
-              autoFocus
-            />
-          </div>
-          <div className="flex justify-between items-center gap-2">
-            <div className="flex items-center flex-wrap gap-x-4 gap-y-2 min-w-0">
-              <ModelSelector 
-                autoMode={autoMode}
-                onAutoModeChange={onAutoModeChange}
-                showAutoSwitch={!!currentAgentId} // Only show auto switch in Agent mode
-              />
+        <div className="relative rounded-2xl border border-border bg-background shadow-sm transition-colors focus-within:border-primary focus-within:ring-1 focus-within:ring-primary">
+          {/* Anchored to the container so the "/" popover still opens above the whole box */}
+          {skillAutocomplete.popover}
+          <textarea
+            ref={textareaRef}
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            placeholder={!hasAvailableModels ? "Please configure LLM first..." : !hasValidCurrentModel ? "Please select a model..." : "Type your message..."}
+            disabled={!hasValidCurrentModel}
+            className="w-full min-h-[100px] px-4 pt-3 bg-transparent border-0 resize-none focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed text-foreground placeholder:text-muted-foreground"
+            onKeyDown={(e) => {
+              // The popover owns Enter/Tab/arrows while it is open, so completing never sends
+              if (skillAutocomplete.handleKeyDown(e)) return
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                handleSend()
+              }
+            }}
+            autoFocus
+          />
+          <div className="flex items-center gap-2 px-3 pb-2.5">
+            <div className="flex items-center flex-wrap gap-x-3 gap-y-2 min-w-0">
               {!currentAgentId && tools.length > 0 && (
                 <ToolSelector
                   tools={tools}
@@ -183,27 +183,44 @@ export function NewChatOverlay({
                   onToolsChange={setSelectedToolIds}
                 />
               )}
-              {/* Auto switch in Non-Agent mode: offered whenever anything is callable, local
-                  tools or not, since MCP and skill tools do not need a tool selection */}
-              {!currentAgentId && onAutoModeChange && (tools.length > 0 || mcpToolCount > 0 || skillCount > 0) && (
+              {/* Auto switch lives in the left cluster in both modes. The model selector can
+                  render one of its own, but it sits in the right cluster, so letting it do so in
+                  agent mode made the switch jump sides the moment an agent was picked.
+                  Agent mode: always offered, an agent always carries tools. No-agent mode:
+                  offered whenever anything is callable, local tools or not, since MCP, skill and
+                  built-in tools do not need a tool selection. */}
+              {onAutoModeChange && (currentAgentId || tools.length > 0 || mcpToolCount > 0 || skillCount > 0 || webFetchEnabled || webSearchEnabled) && (
                 <AutoSwitch
                   autoMode={autoMode}
                   onAutoModeChange={onAutoModeChange}
                 />
               )}
               {/* Counts go last, after the auto switch */}
-              <ToolCountBadges mcpToolCount={mcpToolCount} skillCount={skillCount} />
+              <ToolCountBadges
+                mcpToolCount={mcpToolCount}
+                skillCount={skillCount}
+                webFetchEnabled={webFetchEnabled}
+                webSearchEnabled={webSearchEnabled}
+              />
             </div>
-            <Button
-              onClick={handleSend}
-              disabled={!message.trim() || !hasValidCurrentModel}
-              size="sm"
-              className="h-8 w-28 flex-shrink-0"
-              rounded={true}
-            >
-              <Send className="w-4 h-4 mr-2" />
-              Send
-            </Button>
+            <div className="ml-auto flex items-center gap-2 flex-shrink-0">
+              <ModelSelector
+                autoMode={autoMode}
+                onAutoModeChange={onAutoModeChange}
+                showAutoSwitch={false} // The left cluster owns it in both modes
+              />
+              <Button
+                onClick={handleSend}
+                disabled={!message.trim() || !hasValidCurrentModel}
+                size="sm"
+                aria-label="Send"
+                title="Send (Enter)"
+                className="h-9 w-9 p-0 rounded-full flex-shrink-0 flex items-center justify-center"
+                rounded={true}
+              >
+                <ArrowUp className="w-[22px] h-[22px] shrink-0" strokeWidth={2} />
+              </Button>
+            </div>
           </div>
         </div>
       </div>

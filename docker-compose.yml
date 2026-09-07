@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: agent-playground:0.3.0
+    image: agent-playground:0.3.1
     ports:
       - "3001:3001"
     environment:
@@ -11,6 +11,9 @@ services:
       - PORT=3001
       - HOSTNAME=0.0.0.0
       - NEXT_TELEMETRY_DISABLED=1
+      # A container can end up on a real server, so web_fetch refuses localhost, private and
+      # cloud-metadata addresses here. Drop this line to let it reach services on your own network.
+      - WEB_FETCH_BLOCK_PRIVATE=true
     env_file:
       - .env.docker
     restart: unless-stopped

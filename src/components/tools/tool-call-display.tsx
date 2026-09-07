@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { formatTimestamp } from '@/lib/utils'
 import { getMergedHeaders, getEffectiveAuthorization, migrateAgentTools } from '@/lib/authorization'
-import { Wrench as ToolIcon, Play, Check, X, Clock, AlertCircle, Globe, Send, Copy, ChevronDown, ChevronUp, Settings2, Plug, Lock, ShieldAlert, BookOpen } from 'lucide-react'
+import { Wrench as ToolIcon, Play, Check, X, Clock, AlertCircle, Globe, Send, Copy, ChevronDown, ChevronUp, Settings2, Plug, Lock, ShieldAlert, BookOpen, Search } from 'lucide-react'
 import { useToast } from '@/components/ui/toast'
 
 interface ToolCallDisplayProps {
@@ -100,17 +100,31 @@ export function ToolCallDisplay({
   const [lastAiDescriptionLength, setLastAiDescriptionLength] = useState(0)
   const typewriterTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Skill name carried by a built-in skill tool call, shown next to the tool kind
+  // One-line summary of a built-in tool call, shown next to the tool kind: the skill a skill tool
+  // acts on, or the URL web_fetch is reading.
   const skillArgumentName = useMemo(() => {
     if (!tool?.builtin) return ''
     try {
       const args = JSON.parse(toolCall.function.arguments || '{}')
-      const value = tool.builtin.kind === 'load_skill' ? args.name : args.skill
+      const kind = tool.builtin.kind
+      const value =
+        kind === 'web_fetch'
+          ? args.url
+          : kind === 'web_search'
+          ? args.query
+          : kind === 'load_skill'
+          ? args.name
+          : args.skill
       return typeof value === 'string' ? value : ''
     } catch {
       return ''
     }
   }, [tool, toolCall.function.arguments])
+
+  const isWebFetchCall = tool?.builtin?.kind === 'web_fetch'
+  const isWebSearchCall = tool?.builtin?.kind === 'web_search'
+  // Each built-in group gets its own colour so a long conversation stays scannable.
+  const builtinAccent = isWebFetchCall ? 'sky' : isWebSearchCall ? 'emerald' : 'amber'
 
   // Initialize HTTP configuration when tool or authorization changes
   const { mergedHeaders, httpRequestUrl } = useMemo(() => {
@@ -694,13 +708,40 @@ export function ToolCallDisplay({
             )}
 
             {tool?.builtin && (
-              <div className="border border-border border-amber-100 dark:border-amber-900/50 rounded">
-                <div className="bg-amber-50 dark:bg-amber-950/50 px-3 py-2 rounded-t border-b border-border border-amber-100 dark:border-amber-900/50 flex items-center gap-2">
-                  <BookOpen className="w-4 h-4 text-amber-600" />
-                  <span className="text-sm font-medium text-amber-600">Skill</span>
+              <div className={`border rounded ${
+                builtinAccent === 'sky'
+                  ? 'border-sky-100 dark:border-sky-900/50'
+                  : builtinAccent === 'emerald'
+                  ? 'border-emerald-100 dark:border-emerald-900/50'
+                  : 'border-amber-100 dark:border-amber-900/50'
+              }`}>
+                <div className={`px-3 py-2 rounded-t border-b flex items-center gap-2 ${
+                  builtinAccent === 'sky'
+                    ? 'bg-sky-50 dark:bg-sky-950/50 border-sky-100 dark:border-sky-900/50'
+                    : builtinAccent === 'emerald'
+                    ? 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-100 dark:border-emerald-900/50'
+                    : 'bg-amber-50 dark:bg-amber-950/50 border-amber-100 dark:border-amber-900/50'
+                }`}>
+                  {isWebFetchCall ? (
+                    <Globe className="w-4 h-4 text-sky-600" />
+                  ) : isWebSearchCall ? (
+                    <Search className="w-4 h-4 text-emerald-600" />
+                  ) : (
+                    <BookOpen className="w-4 h-4 text-amber-600" />
+                  )}
+                  <span className={`text-sm font-medium ${
+                    builtinAccent === 'sky'
+                      ? 'text-sky-600'
+                      : builtinAccent === 'emerald'
+                      ? 'text-emerald-600'
+                      : 'text-amber-600'
+                  }`}>
+                    {isWebFetchCall ? 'Web Fetch' : isWebSearchCall ? 'Web Search' : 'Skill'}
+                  </span>
                   <span className="text-xs text-muted-foreground truncate">
-                    {tool.builtin.kind}
-                    {skillArgumentName ? ' · ' + skillArgumentName : ''}
+                    {isWebFetchCall || isWebSearchCall
+                      ? skillArgumentName
+                      : tool.builtin.kind + (skillArgumentName ? ' · ' + skillArgumentName : '')}
                   </span>
                   <div className="ml-auto flex-shrink-0">
                     {!isStreaming && execution?.status === 'pending' && !autoMode && onExecuteBuiltinTool && (
